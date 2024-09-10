@@ -1,0 +1,22 @@
+type GetBalanceRequest = record { ids : vec principal };
+type GetBalanceResponse = record { entries : vec nat };
+type GetTotalsResponse = record {
+  total_tcycles_supply : nat;
+  total_burners : nat64;
+  total_tcycles_burned : nat;
+  pos_start_key : opt principal;
+  your_share_tcycles : nat;
+  total_burn_token_minted : nat;
+  current_burn_token_reward : nat;
+  your_unclaimed_reward_e8s : nat;
+  current_pos_round : nat64;
+};
+type Result = variant { Ok : nat; Err : text };
+service : () -> {
+  claim_reward : () -> (Result);
+  get_balance : (GetBalanceRequest) -> (GetBalanceResponse) query;
+  get_totals : () -> (GetTotalsResponse) query;
+  stake : (nat64) -> ();
+  subaccount_of : (principal) -> (blob) query;
+  withdraw : (nat) -> ();
+}

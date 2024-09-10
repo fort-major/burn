@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "baseUrl": "./",
+    "downlevelIteration": true,
+    "lib": ["ESNext", "DOM"],
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
+    "types": ["node", "vite/client"],
+    "paths": {
+        "@dfinity/agent": ["./node_modules/@fort-major/agent-js-fork"],
+        "@components/*": ["./src/components/*"],
+        "@utils/*": ["./src/utils/*"],
+        "@store/*": ["./src/store/*"],
+        "@pages/*": ["./src/pages/*"],
+        "@/*": ["./src/*"],
+    }
+  }
+}

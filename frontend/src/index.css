@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: "Unique";
+  src: url("/fonts/Unique/Web-TT/Unique-Bold.eot"); /* IE9 Compat Modes */
+  src: url("/fonts/Unique/Web-TT/Unique-Bold.eot?#iefix")
+      format("embedded-opentype"),
+    /* IE6-IE8 */ url("/fonts/Unique/Web-TT/Unique-Bold.woff") format("woff"),
+    /* Modern Browsers */ url("/fonts/Unique/Web-TT/Unique-Bold.woff2")
+      format("woff2"),
+    /* Modern Browsers */ url("/fonts/Unique/Web-TT/Unique-Bold.ttf")
+      format("truetype"); /* Safari, Android, iOS */
+  font-style: normal;
+  font-weight: bold;
+  text-rendering: optimizeLegibility;
+}
+
+@font-face {
+  font-family: "UniqueExtLt";
+  src: url("/fonts/Unique/Web-TT/Unique-ExtraLight.eot"); /* IE9 Compat Modes */
+  src: url("/fonts/Unique/Web-TT/Unique-ExtraLight.eot?#iefix")
+      format("embedded-opentype"),
+    /* IE6-IE8 */ url("/fonts/Unique/Web-TT/Unique-ExtraLight.woff")
+      format("woff"),
+    /* Modern Browsers */ url("/fonts/Unique/Web-TT/Unique-ExtraLight.woff2")
+      format("woff2"),
+    /* Modern Browsers */ url("/fonts/Unique/Web-TT/Unique-ExtraLight.ttf")
+      format("truetype"); /* Safari, Android, iOS */
+  font-style: normal;
+  font-weight: normal;
+  text-rendering: optimizeLegibility;
+}
+
+@font-face {
+  font-family: "UniqueLight";
+  src: url("/fonts/Unique/Web-TT/Unique-Light.eot"); /* IE9 Compat Modes */
+  src: url("/fonts/Unique/Web-TT/Unique-Light.eot?#iefix")
+      format("embedded-opentype"),
+    /* IE6-IE8 */ url("/fonts/Unique/Web-TT/Unique-Light.woff") format("woff"),
+    /* Modern Browsers */ url("/fonts/Unique/Web-TT/Unique-Light.woff2")
+      format("woff2"),
+    /* Modern Browsers */ url("/fonts/Unique/Web-TT/Unique-Light.ttf")
+      format("truetype"); /* Safari, Android, iOS */
+  font-style: normal;
+  font-weight: normal;
+  text-rendering: optimizeLegibility;
+}
+
+@font-face {
+  font-family: "UniqueMed";
+  src: url("/fonts/Unique/Web-TT/Unique-Medium.eot"); /* IE9 Compat Modes */
+  src: url("/fonts/Unique/Web-TT/Unique-Medium.eot?#iefix")
+      format("embedded-opentype"),
+    /* IE6-IE8 */ url("/fonts/Unique/Web-TT/Unique-Medium.woff") format("woff"),
+    /* Modern Browsers */ url("/fonts/Unique/Web-TT/Unique-Medium.woff2")
+      format("woff2"),
+    /* Modern Browsers */ url("/fonts/Unique/Web-TT/Unique-Medium.ttf")
+      format("truetype"); /* Safari, Android, iOS */
+  font-style: normal;
+  font-weight: normal;
+  text-rendering: optimizeLegibility;
+}
+
+@font-face {
+  font-family: "Unique";
+  src: url("/fonts/Unique/Web-TT/Unique-Regular.eot"); /* IE9 Compat Modes */
+  src: url("/fonts/Unique/Web-TT/Unique-Regular.eot?#iefix")
+      format("embedded-opentype"),
+    /* IE6-IE8 */ url("/fonts/Unique/Web-TT/Unique-Regular.woff") format("woff"),
+    /* Modern Browsers */ url("/fonts/Unique/Web-TT/Unique-Regular.woff2")
+      format("woff2"),
+    /* Modern Browsers */ url("/fonts/Unique/Web-TT/Unique-Regular.ttf")
+      format("truetype"); /* Safari, Android, iOS */
+  font-style: normal;
+  font-weight: normal;
+  text-rendering: optimizeLegibility;
+}
+
+@font-face {
+  font-family: "UniqueSemBd";
+  src: url("/fonts/Unique/Web-TT/Unique-SemiBold.eot"); /* IE9 Compat Modes */
+  src: url("/fonts/Unique/Web-TT/Unique-SemiBold.eot?#iefix")
+      format("embedded-opentype"),
+    /* IE6-IE8 */ url("/fonts/Unique/Web-TT/Unique-SemiBold.woff")
+      format("woff"),
+    /* Modern Browsers */ url("/fonts/Unique/Web-TT/Unique-SemiBold.woff2")
+      format("woff2"),
+    /* Modern Browsers */ url("/fonts/Unique/Web-TT/Unique-SemiBold.ttf")
+      format("truetype"); /* Safari, Android, iOS */
+  font-style: normal;
+  font-weight: normal;
+  text-rendering: optimizeLegibility;
+}
+
+@font-face {
+  font-family: "UniqueThin";
+  src: url("/fonts/Unique/Web-TT/Unique-Thin.eot"); /* IE9 Compat Modes */
+  src: url("/fonts/Unique/Web-TT/Unique-Thin.eot?#iefix")
+      format("embedded-opentype"),
+    /* IE6-IE8 */ url("/fonts/Unique/Web-TT/Unique-Thin.woff") format("woff"),
+    /* Modern Browsers */ url("/fonts/Unique/Web-TT/Unique-Thin.woff2")
+      format("woff2"),
+    /* Modern Browsers */ url("/fonts/Unique/Web-TT/Unique-Thin.ttf")
+      format("truetype"); /* Safari, Android, iOS */
+  font-style: normal;
+  font-weight: normal;
+  text-rendering: optimizeLegibility;
+}

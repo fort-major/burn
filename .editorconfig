@@ -1,0 +1,7 @@
+root = true
+
+[*.{js,jsx,ts,tsx,json}]
+max_line_length = 120
+indent_size = 2
+indent_style = space
+tab_width = 2

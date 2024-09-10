@@ -1,0 +1,22 @@
+[package]
+name = "shared"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+candid = { workspace = true }
+serde = { workspace = true }
+ic-cdk = { workspace = true }
+ic-cdk-timers = { workspace = true }
+icrc-ledger-types = { workspace = true }
+num-bigint = { workspace = true }
+lazy_static = { workspace = true }
+ic-e8s = { workspace = true }
+ic-stable-structures = { workspace = true }
+sha2 = { workspace = true }
+ic-ledger-types = { workspace = true }
+
+[build-dependencies]
+dotenv = "0.15"
