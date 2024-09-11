@@ -24,6 +24,7 @@
   "dependencies": {
     "@dfinity/candid": "^1.4.0",
     "@dfinity/identity": "^1.4.0",
+    "@dfinity/ledger-icp": "^2.5.0",
     "@dfinity/ledger-icrc": "^2.5.0",
     "@dfinity/principal": "^1.3.0",
     "@fort-major/agent-js-fork": "^1.3.1",

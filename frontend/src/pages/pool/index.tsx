@@ -7,6 +7,7 @@ import { EIconKind, Icon } from "@components/icon";
 import { Modal } from "@components/modal";
 import { Page } from "@components/page";
 import { TextInput } from "@components/text-input";
+import { AccountIdentifier, SubAccount } from "@dfinity/ledger-icp";
 import { Principal } from "@dfinity/principal";
 import { useNavigate } from "@solidjs/router";
 import { useAuth } from "@store/auth";
@@ -214,6 +215,14 @@ export const PoolPage = () => {
               />
               <div class="flex flex-col gap-1">
                 <p class="font-semibold text-gray-140 text-sm">Send ICP here to deposit (1 ICP minimum)</p>
+                <Copyable
+                  before="Account ID"
+                  text={AccountIdentifier.fromPrincipal({
+                    principal: Principal.fromText(import.meta.env.VITE_BURNER_CANISTER_ID),
+                    subAccount: SubAccount.fromBytes(mySubaccount()!) as SubAccount,
+                  }).toHex()}
+                />
+                <p class="text-xs">or</p>
                 <Copyable class="self-start" before="Principal ID" text={import.meta.env.VITE_BURNER_CANISTER_ID} />
                 <Copyable before="Subaccount" text={bytesToHex(mySubaccount()!)} />
               </div>
