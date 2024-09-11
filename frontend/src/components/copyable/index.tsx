@@ -1,9 +1,10 @@
 import { EIconKind, Icon } from "@components/icon";
 import { COLORS } from "@utils/colors";
 import { eventHandler } from "@utils/security";
+import { IClass } from "@utils/types";
 import { createSignal, onCleanup, Show } from "solid-js";
 
-export interface ICopyableProps {
+export interface ICopyableProps extends IClass {
   text: string;
   before?: string;
   after?: string;
@@ -32,10 +33,14 @@ export const Copyable = (props: ICopyableProps) => {
   });
 
   return (
-    <div class="flex rounded-md gap-2 px-2 py-1 bg-gray-115 items-center cursor-pointer" onClick={handleClick}>
+    <div
+      classList={{ [props.class!]: !!props.class }}
+      class="flex rounded-md gap-2 px-2 py-1 bg-gray-115 items-center justify-between cursor-pointer"
+      onClick={handleClick}
+    >
       <p class="font-normal text-xs text-gray-165">
         <Show when={props.before}>{props.before} </Show>
-        {props.text}
+        <span class="font-semibold">{props.text}</span>
         <Show when={props.after}> {props.after}</Show>
       </p>
       <Icon kind={state() === "idle" ? EIconKind.Copy : EIconKind.CheckCircle} color={COLORS.gray[165]} size={14} />

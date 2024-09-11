@@ -1,9 +1,5 @@
-import { bigIntToBytes, bytesToHex, debugStringify, numberToBytes, strToBytes } from "./encoding";
+import { debugStringify } from "./encoding";
 import { ErrorCode, err } from "./error";
-import { ONE_MIN_NS, ONE_SEC_NS } from "./types";
-import { fromCBOR, hexToBytes, Principal, toCBOR } from "@fort-major/msq-shared";
-import { Agent } from "@fort-major/agent-js-fork";
-import { ShopId } from "@store/shops";
 
 export function eventHandler<E extends Event>(fn: (e: E) => void | Promise<void>) {
   return (e: E) => {

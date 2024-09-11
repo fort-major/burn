@@ -10,10 +10,11 @@ use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
 use ic_stable_structures::{Cell, DefaultMemoryImpl, StableBTreeMap};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
-use shared::burner::api::{GetBalanceRequest, GetBalanceResponse, GetTotalsResponse};
+use shared::burner::api::{GetBurnersRequest, GetBurnersResponse, GetTotalsResponse};
 use shared::burner::state::BurnerState;
 use shared::burner::types::{
-    BurnerStateInfo, CMCClient, NotifyTopUpError, NotifyTopUpRequest, TCycles, POS_ROUND_DELAY_NS,
+    BurnerStateInfo, CMCClient, NotifyTopUpError, NotifyTopUpRequest, TCycles,
+    POS_ACCOUNTS_PER_BATCH,
 };
 use shared::icrc1::ICRC1CanisterClient;
 use shared::{
@@ -39,13 +40,10 @@ thread_local! {
     )
 }
 
-#[query]
-fn subaccount_of(id: Principal) -> Subaccount {
-    Subaccount::from(id)
-}
-
 #[update]
 async fn withdraw(qty_e8s: E8s, to: Principal) {
+    assert_running();
+
     let c = caller();
     let icp_can_id = Principal::from_text(ICP_CAN_ID).unwrap();
     let icp_can = ICRC1CanisterClient::new(icp_can_id);
@@ -70,6 +68,8 @@ async fn withdraw(qty_e8s: E8s, to: Principal) {
 
 #[update]
 async fn stake(qty_e8s_u64: u64) {
+    assert_running();
+
     if qty_e8s_u64 < MIN_ICP_STAKE_E8S_U64 {
         panic!("At least 0.5 ICP is required to fuel the furnace");
     }
@@ -82,9 +82,12 @@ async fn stake(qty_e8s_u64: u64) {
 
     let deposited_cycles: u128 = cycles.0.clone().try_into().unwrap();
 
-    let actual_burned_cycles = cycles_burn(deposited_cycles - CYCLES_BURNER_FEE);
+    set_timer(Duration::from_secs(120), move || {
+        // yes, you found it
+        cycles_burn(deposited_cycles - CYCLES_BURNER_FEE);
+    });
 
-    let shares_minted = TCycles::new(Nat::from(actual_burned_cycles).0);
+    let shares_minted = TCycles::new(Nat::from(deposited_cycles).0);
 
     STATE.with_borrow_mut(|s| {
         s.mint_share(shares_minted.clone(), caller());
@@ -98,6 +101,8 @@ async fn stake(qty_e8s_u64: u64) {
 
 #[update]
 async fn claim_reward(to: Principal) -> Result<Nat, String> {
+    assert_running();
+
     let c = caller();
 
     if let Some(unclaimed) = STATE.with_borrow_mut(|s| s.claim_reward(c)) {
@@ -137,9 +142,35 @@ async fn claim_reward(to: Principal) -> Result<Nat, String> {
     }
 }
 
+#[update]
+fn stop() {
+    STOPPED_FOR_UPDATE.with_borrow_mut(|(dev, is_stopped)| {
+        if caller() != *dev {
+            panic!("Access denied");
+        }
+
+        if !*is_stopped {
+            *is_stopped = true;
+        }
+    })
+}
+
+#[update]
+fn resume() {
+    STOPPED_FOR_UPDATE.with_borrow_mut(|(dev, is_stopped)| {
+        if caller() != *dev {
+            panic!("Access denied");
+        }
+
+        if *is_stopped {
+            *is_stopped = false;
+        }
+    })
+}
+
 #[query]
-fn get_balance(req: GetBalanceRequest) -> GetBalanceResponse {
-    STATE.with_borrow(|s| s.get_shares(req))
+fn get_burners(req: GetBurnersRequest) -> GetBurnersResponse {
+    STATE.with_borrow(|s| s.get_burners(req))
 }
 
 #[query]
@@ -147,14 +178,23 @@ fn get_totals() -> GetTotalsResponse {
     STATE.with_borrow(|s| s.get_totals(&caller()))
 }
 
+#[query]
+fn subaccount_of(id: Principal) -> Subaccount {
+    Subaccount::from(id)
+}
+
 #[init]
 fn init_hook() {
+    STOPPED_FOR_UPDATE.with_borrow_mut(|(dev, _)| *dev = caller());
+
     set_init_seed_one_timer();
     pos();
 }
 
 #[post_upgrade]
 fn post_upgrade_hook() {
+    STOPPED_FOR_UPDATE.with_borrow_mut(|(dev, _)| *dev = caller());
+
     pos();
 }
 
@@ -190,10 +230,11 @@ async fn deposit_cycles(qty_e8s_u64: u64) -> CallResult<(Result<Nat, NotifyTopUp
 }
 
 fn pos() {
-    let round_complete = STATE.with_borrow_mut(|s| s.pos_round_batch(300));
+    let round_complete =
+        STATE.with_borrow_mut(|s| s.pos_round_batch(POS_ACCOUNTS_PER_BATCH, is_stopped()));
 
     let delay = if round_complete {
-        POS_ROUND_DELAY_NS
+        STATE.with_borrow(|s| s.get_info().pos_round_delay_ns)
     } else {
         0
     };
@@ -211,6 +252,20 @@ fn init_seed() {
 
         STATE.with_borrow_mut(|s| s.init(rand));
     });
+}
+
+thread_local! {
+    static STOPPED_FOR_UPDATE: RefCell<(Principal, bool)> = RefCell::new((Principal::anonymous(), false));
+}
+
+fn is_stopped() -> bool {
+    STOPPED_FOR_UPDATE.with_borrow(|(_, is_stopped)| *is_stopped)
+}
+
+fn assert_running() {
+    if is_stopped() {
+        panic!("The canister is stopped and is awaiting for an update");
+    }
 }
 
 export_candid!();

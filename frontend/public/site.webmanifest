@@ -1,6 +1,6 @@
 {
-    "name": "MSQ.Pay - Cryptocurrency Payment Processor",
-    "short_name": "MSQ.Pay",
+    "name": "MSQ.Burn - ICP Burning PoS On-Chain Miner",
+    "short_name": "MSQ.Burn",
     "icons": [
         {
             "src": "/android-chrome-192x192.png",
@@ -13,8 +13,7 @@
             "type": "image/png"
         }
     ],
-    "theme_color": "#ffffff",
-    "background_color": "#ffffff",
-    "start_url": "https://pay.msq.tech",
+    "theme_color": "#161721",
+    "background_color": "#161721",
     "display": "standalone"
 }

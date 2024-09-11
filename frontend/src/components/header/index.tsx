@@ -6,6 +6,7 @@ import { ProfileMicro, ProfileMini } from "@components/profile/profile";
 import { A } from "@solidjs/router";
 import { useAuth } from "@store/auth";
 import { COLORS } from "@utils/colors";
+import { eventHandler } from "@utils/security";
 import { createSignal, Match, Show, Switch } from "solid-js";
 
 export interface IHeaderProps {
@@ -18,11 +19,13 @@ export function Header(props: IHeaderProps) {
 
   return (
     <header
-      class="fixed gap-20 z-50 top-0 left-0 right-0 w-full lg:h-[80px] bg-black flex px-5 py-3 lg:px-10 lg:py-5 lg:flex-row lg:justify-between lg:items-center lg:border-b lg:border-b-gray-120"
+      class="fixed gap-20 z-50 top-0 left-0 right-0 w-full lg:h-[80px] bg-black flex flex-col px-5 py-3 lg:px-10 lg:py-5 lg:flex-row lg:justify-between lg:items-center lg:border-b lg:border-b-gray-120"
       classList={{ [props.class!]: !!props.class }}
     >
       <div class="flex justify-between items-center lg:justify-start">
-        <Logo class="lg:h-[36px] lg:w-[160px] relative" />
+        <A href={ROOT.path}>
+          <Logo class="lg:h-[36px] lg:w-[160px] relative" />
+        </A>
 
         <Icon
           class="lg:hidden cursor-pointer"
@@ -36,18 +39,33 @@ export function Header(props: IHeaderProps) {
       <div
         class="lg:flex flex-grow items-center"
         classList={{
-          flex: expanded(),
+          "flex flex-col": expanded(),
           hidden: !expanded(),
           "justify-end": !isAuthorized(),
           "justify-between": isAuthorized(),
         }}
       >
+        <Show when={isAuthorized()}>
+          <nav class="flex items-center gap-10 font-semibold text-white">
+            <A
+              activeClass="underline"
+              class="hover:underline"
+              onClick={eventHandler(() => {
+                setExpanded(false);
+              })}
+              href={ROOT.$.pool.path}
+            >
+              Pool
+            </A>
+          </nav>
+        </Show>
+
         <Switch>
           <Match when={!isAuthorized()}>
             <Btn
               text="Sign In"
               icon={EIconKind.MetaMask}
-              class="rounded-full h-[50px]"
+              class="rounded-full h-[50px] self-stretch sm:self-start"
               onClick={authorize}
               bgColor={COLORS.chartreuse}
             />
@@ -55,6 +73,13 @@ export function Header(props: IHeaderProps) {
           <Match when={isAuthorized()}>
             <div class="gap-4 items-center hidden lg:flex pl-4 border-l border-l-gray-120">
               <ProfileMini onClick={deauthorize} avatarSize="md" />
+              <Icon
+                kind={EIconKind.Logout}
+                class="cursor-pointer"
+                color={COLORS.gray[140]}
+                hoverColor={COLORS.white}
+                onClick={deauthorize}
+              />
             </div>
           </Match>
         </Switch>

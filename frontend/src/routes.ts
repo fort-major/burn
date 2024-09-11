@@ -1,9 +1,7 @@
 import { Component } from "solid-js";
 import { useLocation } from "@solidjs/router";
 import { HomePage } from "@pages/home";
-import { ShopsPage } from "@pages/shops";
-import { MePage } from "@pages/me";
-import { RegisterShopPage } from "@pages/shops/register";
+import { PoolPage } from "@pages/pool";
 
 export interface IRoute {
   parent?: IRoute;
@@ -24,18 +22,8 @@ export const ROOT = route({
     "/": route({
       component: HomePage,
     }),
-    shops: route({
-      $: {
-        "/": route({
-          component: ShopsPage,
-        }),
-        register: route({
-          component: RegisterShopPage,
-        }),
-      },
-    }),
-    me: route({
-      component: MePage,
+    pool: route({
+      component: PoolPage,
     }),
   },
 });

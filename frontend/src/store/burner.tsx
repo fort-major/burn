@@ -1,21 +1,38 @@
-import { Accessor, createContext, createEffect, createSignal, on, useContext } from "solid-js";
-import { IChildren } from "../utils/types";
+import { Accessor, createContext, createEffect, createSignal, on, onCleanup, onMount, useContext } from "solid-js";
+import { IChildren, ONE_MIN_NS } from "../utils/types";
 import { ErrorCode, err, logErr, logInfo } from "../utils/error";
 import { createStore, Store } from "solid-js/store";
 import { useAuth } from "./auth";
 import { GetTotalsResponse } from "@/declarations/burner/burner.did";
-import { newBurnerActor } from "@utils/backend";
+import { newBurnerActor, optUnwrap } from "@utils/backend";
 import { DEFAULT_TOKENS, TPrincipalStr, useTokens } from "./tokens";
 import { E8s, EDs } from "@utils/math";
 import { Principal } from "@dfinity/principal";
 import { debugStringify } from "@utils/encoding";
 
-export interface IBurnerStoreContext {
-  totals: Store<Partial<GetTotalsResponse>>;
-  fetchTotals: () => Promise<void>;
+export interface ITotals {
+  totalSharesSupply: EDs;
+  totalTcyclesBurned: EDs;
+  totalBurnTokenMinted: E8s;
+  totalBurners: bigint;
+  currentBurnTokenReward: E8s;
+  posStartKey?: Principal;
+  currentPosRound: bigint;
+  currentBlockShareFee: EDs;
+  posRoundDelayNs: bigint;
+  yourShareTcycles: EDs;
+  yourUnclaimedReward: E8s;
+}
 
-  shares: Store<Partial<Record<TPrincipalStr, EDs>>>;
-  fetchShares: (ids: Principal[]) => Promise<void>;
+export interface IPoolMember {
+  id: Principal;
+  share: EDs;
+  unclaimedReward: E8s;
+}
+
+export interface IBurnerStoreContext {
+  totals: Store<{ data?: ITotals }>;
+  fetchTotals: () => Promise<void>;
 
   getMyDepositAccount: () => { owner: Principal; subaccount?: Uint8Array } | undefined;
 
@@ -27,6 +44,9 @@ export interface IBurnerStoreContext {
 
   canClaimReward: () => boolean;
   claimReward: (to: Principal) => Promise<void>;
+
+  poolMembers: () => IPoolMember[];
+  fetchPoolMembers: () => Promise<void>;
 }
 
 const BurnerContext = createContext<IBurnerStoreContext>();
@@ -42,11 +62,28 @@ export function useBurner(): IBurnerStoreContext {
 }
 
 export function BurnerStore(props: IChildren) {
-  const { assertReadyToFetch, assertAuthorized, anonymousAgent, isAuthorized, agent, identity } = useAuth();
+  const { assertReadyToFetch, assertAuthorized, anonymousAgent, isAuthorized, agent, identity, disable, enable } =
+    useAuth();
   const { subaccounts, fetchSubaccountOf, balanceOf, fetchBalanceOf } = useTokens();
 
   const [totals, setTotals] = createStore<IBurnerStoreContext["totals"]>();
-  const [shares, setShares] = createStore<IBurnerStoreContext["shares"]>();
+  const [poolMembers, setPoolMembers] = createSignal<IPoolMember[]>([]);
+  const [int, setInt] = createSignal<NodeJS.Timeout>();
+
+  onMount(() => {
+    const t = setInterval(() => {
+      fetchTotals();
+    }, 1000 * 60 * 2);
+
+    setInt(t);
+  });
+
+  onCleanup(() => {
+    const t = int();
+    if (!t) return;
+
+    clearInterval(t);
+  });
 
   createEffect(
     on(anonymousAgent, (a) => {
@@ -73,18 +110,51 @@ export function BurnerStore(props: IChildren) {
     const burner = newBurnerActor(ag);
     const resp = await burner.get_totals();
 
-    setTotals(resp);
+    const iTotals: ITotals = {
+      totalSharesSupply: EDs.new(resp.total_share_supply, 12),
+      totalTcyclesBurned: EDs.new(resp.total_tcycles_burned, 12),
+      totalBurnTokenMinted: E8s.new(resp.total_burn_token_minted),
+      totalBurners: resp.total_burners,
+      currentBurnTokenReward: E8s.new(resp.current_burn_token_reward),
+      posStartKey: optUnwrap(resp.pos_start_key),
+      posRoundDelayNs: resp.pos_round_delay_ns,
+      currentPosRound: resp.current_pos_round,
+      yourShareTcycles: EDs.new(resp.your_share_tcycles, 12),
+      yourUnclaimedReward: E8s.new(resp.your_unclaimed_reward_e8s),
+      currentBlockShareFee: EDs.new(resp.current_share_fee, 12),
+    };
+
+    setTotals({ data: iTotals });
   };
 
-  const fetchShares: IBurnerStoreContext["fetchShares"] = async (ids: Principal[]) => {
+  const fetchPoolMembers: IBurnerStoreContext["fetchPoolMembers"] = async () => {
     assertReadyToFetch();
 
-    const burner = newBurnerActor(anonymousAgent()!);
-    const { entries } = await burner.get_balance({ ids });
+    let start: [] | [Principal] = [];
+    const members = [];
 
-    for (let i = 0; i < ids.length; i++) {
-      setShares(ids[i].toText(), entries[i]);
+    const burner = newBurnerActor(anonymousAgent()!);
+
+    while (true) {
+      const { entries } = await burner.get_burners({ start, take: 1000 });
+
+      if (entries.length === 0) {
+        break;
+      }
+
+      for (let entry of entries) {
+        let iPoolMember: IPoolMember = {
+          id: entry[0],
+          share: EDs.new(entry[1], 12),
+          unclaimedReward: E8s.new(entry[2]),
+        };
+
+        members.push(iPoolMember);
+        start = [iPoolMember.id];
+      }
     }
+
+    setPoolMembers(members);
   };
 
   const getMyDepositAccount: IBurnerStoreContext["getMyDepositAccount"] = () => {
@@ -121,14 +191,18 @@ export function BurnerStore(props: IChildren) {
   const stake: IBurnerStoreContext["stake"] = async () => {
     assertAuthorized();
 
+    disable();
+
     const myDepositAccount = getMyDepositAccount()!;
-
     const b = balanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount)!;
+    const burner = newBurnerActor(agent()!);
+    await burner.stake(b - 10_000n);
 
-    const burner = newBurnerActor(anonymousAgent()!);
-    await burner.stake(b);
+    enable();
 
     fetchTotals();
+    fetchBalanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount);
+
     logInfo(`Successfully burned ${E8s.new(b).toString()} ICP`);
   };
 
@@ -141,8 +215,8 @@ export function BurnerStore(props: IChildren) {
     const b = balanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount);
     if (!b) return false;
 
-    // min withdraw amount is 0.01 ICP
-    if (E8s.new(b).le(E8s.new(100_0000n))) return false;
+    // min withdraw amount is 0.1 ICP
+    if (E8s.new(b).le(E8s.new(10_0000n))) return false;
 
     return true;
   };
@@ -150,37 +224,48 @@ export function BurnerStore(props: IChildren) {
   const withdraw: IBurnerStoreContext["withdraw"] = async (to) => {
     assertAuthorized();
 
+    disable();
+
     const myDepositAccount = getMyDepositAccount()!;
     const b = balanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount)!;
 
-    const burner = newBurnerActor(anonymousAgent()!);
-    await burner.withdraw(b, to);
+    const burner = newBurnerActor(agent()!);
+    await burner.withdraw(b - 10_000n, to);
+
+    enable();
 
     fetchTotals();
+    fetchBalanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount);
     logInfo(`Successfully withdrawn ${E8s.new(b).toString()} ICP`);
   };
 
   const canClaimReward: IBurnerStoreContext["canClaimReward"] = () => {
     if (!isAuthorized()) return false;
 
-    const r = totals.your_unclaimed_reward_e8s;
-    if (!r) return false;
+    if (!totals.data) return false;
 
-    return true;
+    return totals.data.yourUnclaimedReward.gt(E8s.zero());
   };
 
   const claimReward: IBurnerStoreContext["claimReward"] = async (to) => {
     assertAuthorized();
 
-    const burner = newBurnerActor(anonymousAgent()!);
+    disable();
+
+    const burner = newBurnerActor(agent()!);
     const result = await burner.claim_reward(to);
 
     if ("Err" in result) {
       logErr(ErrorCode.UNKNOWN, debugStringify(result.Err));
+      enable();
+
       return;
     }
 
-    logInfo(`Successfully claimed ${E8s.new(result.Ok).toString()} BURN!`);
+    enable();
+
+    fetchTotals();
+    logInfo(`Successfully claimed all BURN!`);
   };
 
   return (
@@ -188,8 +273,8 @@ export function BurnerStore(props: IChildren) {
       value={{
         totals,
         fetchTotals,
-        shares,
-        fetchShares,
+        poolMembers,
+        fetchPoolMembers,
         getMyDepositAccount,
         stake,
         canStake,

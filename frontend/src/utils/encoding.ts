@@ -1,10 +1,4 @@
-import { match } from "assert";
-import { SwapFrom, VotingId } from "../declarations/votings/votings.did";
 import { ErrorCode, err } from "./error";
-import { Principal } from "@dfinity/principal";
-import { IPair, TPairStr } from "../store/bank";
-import { SwapInto } from "../declarations/bank/bank.did";
-import { TVotingIdStr } from "@store/votings";
 
 export { Principal } from "@dfinity/principal";
 
@@ -29,8 +23,7 @@ export const strToBytes = (str: string): Uint8Array => textEncoder.encode(str);
  * @param bytes
  * @returns
  */
-export const bytesToStr = (bytes: Uint8Array): string =>
-  textDecoder.decode(bytes);
+export const bytesToStr = (bytes: Uint8Array): string => textDecoder.decode(bytes);
 
 /**
  * ## Encodes {@link Uint8Array} into hex-string
@@ -55,11 +48,7 @@ export const hexToBytes = (hexString: string): Uint8Array => {
   const matches = hexString.match(/[a-f0-9]{2}/g) ?? [];
   const result = Uint8Array.from(matches.map((byte) => parseInt(byte, 16)));
 
-  if (
-    matches === null ||
-    hexString.length % 2 !== 0 ||
-    result.length !== hexString.length / 2
-  )
+  if (matches === null || hexString.length % 2 !== 0 || result.length !== hexString.length / 2)
     throw new Error("Invalid hexstring");
 
   return result;
@@ -104,10 +93,7 @@ export const numberToBytes = (n: number, sizeBytes?: number): Uint8Array => {
     err(ErrorCode.UNREACHEABLE, "Invalid padding size");
   }
 
-  return new Uint8Array([
-    ...result,
-    ...Array(sizeBytes - result.length).fill(0),
-  ]);
+  return new Uint8Array([...result, ...Array(sizeBytes - result.length).fill(0)]);
 };
 
 /**
@@ -158,10 +144,7 @@ export function tokensToStr(
 
   // 1000000.0 -> 1'000'000.0
   if (insertQuotes) {
-    headFormatted = headFormatted.replace(
-      /\B(?<!\.\d*)(?=(\d{3})+(?!\d))/g,
-      "'"
-    );
+    headFormatted = headFormatted.replace(/\B(?<!\.\d*)(?=(\d{3})+(?!\d))/g, "'");
   }
 
   // 1,000.0 -> 1,000
@@ -256,24 +239,10 @@ export function debugStringify(obj: unknown): string {
   );
 }
 
-const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export function timestampToStr(timestamp: number | bigint) {
-  const timestampMs =
-    typeof timestamp === "bigint" ? Number(timestamp / 1000000n) : timestamp;
+  const timestampMs = typeof timestamp === "bigint" ? Number(timestamp / 1000000n) : timestamp;
 
   const date = new Date(timestampMs);
   const day = date.getDate().toString().padStart(2, "0");
@@ -287,8 +256,7 @@ export function timestampToStr(timestamp: number | bigint) {
 }
 
 export function timestampToDMStr(timestamp: number | bigint) {
-  const timestampMs =
-    typeof timestamp === "bigint" ? Number(timestamp / 1000000n) : timestamp;
+  const timestampMs = typeof timestamp === "bigint" ? Number(timestamp / 1000000n) : timestamp;
 
   const date = new Date(timestampMs);
   const day = date.getDate().toString().padStart(2, "0");
@@ -298,87 +266,10 @@ export function timestampToDMStr(timestamp: number | bigint) {
 }
 
 export function timestampToYearStr(timestamp: number | bigint) {
-  const timestampMs =
-    typeof timestamp === "bigint" ? Number(timestamp / 1000000n) : timestamp;
+  const timestampMs = typeof timestamp === "bigint" ? Number(timestamp / 1000000n) : timestamp;
 
   const date = new Date(timestampMs);
   const year = date.getFullYear().toString();
 
   return `${year}`;
-}
-
-const VOTING_ID_STR_DELIMITER = ":::";
-
-export function encodeVotingId(id: VotingId): string {
-  if ("HumansEmploy" in id) {
-    return `HumansEmploy${VOTING_ID_STR_DELIMITER}${id.HumansEmploy.toText()}`;
-  }
-  if ("HumansUnemploy" in id) {
-    return `HumansUnemploy${VOTING_ID_STR_DELIMITER}${id.HumansUnemploy.toText()}`;
-  }
-  if ("EvaluateTask" in id) {
-    return `EvaluateTask${VOTING_ID_STR_DELIMITER}${id.EvaluateTask.toString()}`;
-  }
-  if ("StartSolveTask" in id) {
-    return `StartSolveTask${VOTING_ID_STR_DELIMITER}${id.StartSolveTask.toString()}`;
-  }
-  if ("DeleteTask" in id) {
-    return `DeleteTask${VOTING_ID_STR_DELIMITER}${id.DeleteTask.toString()}`;
-  }
-  if ("BankSetExchangeRate" in id) {
-    const [swapFrom, swapInto] = id.BankSetExchangeRate;
-
-    const from = Object.keys(swapFrom)[0];
-    const into = Object.keys(swapInto)[0];
-
-    return `BankSetExchangeRate${VOTING_ID_STR_DELIMITER}${from}${VOTING_ID_STR_DELIMITER}${into}`;
-  }
-
-  err(ErrorCode.UNREACHEABLE, "Invalid voting id kind found");
-}
-
-export function decodeVotingId(idStr: string): VotingId {
-  const [kind, ...args] = idStr.split(VOTING_ID_STR_DELIMITER);
-
-  switch (kind) {
-    case "HumansEmploy":
-      return { HumansEmploy: Principal.fromText(args[0]) };
-    case "HumansUnemploy":
-      return { HumansUnemploy: Principal.fromText(args[0]) };
-    case "EvaluateTask":
-      return { EvaluateTask: BigInt(args[0]) };
-    case "StartSolveTask":
-      return { StartSolveTask: BigInt(args[0]) };
-    case "DeleteTask":
-      return { DeleteTask: BigInt(args[0]) };
-    case "BankSetExchangeRate":
-      return {
-        // @ts-expect-error - invalid SwapFrom and SwapInto keys will fail on backend
-        BankSetExchangeRate: [{ [args[0]]: null }, { [args[1]]: null }],
-      };
-    default:
-      err(ErrorCode.UNREACHEABLE, "Invalid input string");
-  }
-}
-
-export function pairToStr(pair: IPair): TPairStr {
-  return `${pair.from}:::${pair.into}`;
-}
-
-export function strToPair(s: TPairStr): IPair {
-  const [from, into] = s.split(":::");
-
-  return { from, into };
-}
-
-export function wrapPair(from: SwapFrom, into: SwapInto): IPair {
-  return {
-    from: Object.keys(from)[0],
-    into: Object.keys(into)[0],
-  };
-}
-
-export function unwrapPair(pair: IPair): [SwapFrom, SwapInto] {
-  // @ts-expect-error - invalid will be dropped on requests
-  return [{ [pair.from]: null }, { [pair.into]: null }];
 }
