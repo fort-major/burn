@@ -6,6 +6,7 @@ import { Copyable } from "@components/copyable";
 import { EIconKind, Icon } from "@components/icon";
 import { Modal } from "@components/modal";
 import { Page } from "@components/page";
+import { Spoiler } from "@components/spoiler";
 import { TextInput } from "@components/text-input";
 import { AccountIdentifier, SubAccount } from "@dfinity/ledger-icp";
 import { Principal } from "@dfinity/principal";
@@ -210,24 +211,39 @@ export const PoolPage = () => {
         <p class={headerClass}>Deposited ICP</p>
         <div class="flex justify-between gap-4">
           <Show when={mySubaccount()}>
-            <div class="flex flex-col gap-2">
+            <div class="flex flex-col gap-3">
               <BalanceOf
                 tokenId={DEFAULT_TOKENS.icp}
                 owner={Principal.fromText(import.meta.env.VITE_BURNER_CANISTER_ID)}
                 subaccount={mySubaccount()!}
               />
-              <div class="flex flex-col gap-1">
+              <div class="flex flex-col gap-2">
                 <p class="font-semibold text-gray-140 text-sm">Send ICP here to deposit (1 ICP minimum)</p>
-                <Copyable
-                  before="Account ID"
-                  text={AccountIdentifier.fromPrincipal({
-                    principal: Principal.fromText(import.meta.env.VITE_BURNER_CANISTER_ID),
-                    subAccount: SubAccount.fromBytes(mySubaccount()!) as SubAccount,
-                  }).toHex()}
-                />
-                <p class="text-xs">or</p>
-                <Copyable class="self-start" before="Principal ID" text={import.meta.env.VITE_BURNER_CANISTER_ID} />
-                <Copyable before="Subaccount" text={bytesToHex(mySubaccount()!)} />
+
+                <div class="flex flex-col gap-1">
+                  <p class="font-semibold text-md">Account ID</p>
+                  <Copyable
+                    text={AccountIdentifier.fromPrincipal({
+                      principal: Principal.fromText(import.meta.env.VITE_BURNER_CANISTER_ID),
+                      subAccount: SubAccount.fromBytes(mySubaccount()!) as SubAccount,
+                    }).toHex()}
+                  />
+                </div>
+
+                <Spoiler header="For ICRC-1 Wallets">
+                  <div class="flex flex-col gap-1">
+                    <p class="font-semibold text-xs text-errorRed">
+                      Only send here, if your wallet supports sending to Principal ID + Subaccount ID
+                    </p>
+                    <p class="font-semibold text-md">Principal ID</p>
+                    <Copyable class="self-start" text={import.meta.env.VITE_BURNER_CANISTER_ID} />
+                  </div>
+
+                  <div class="flex flex-col gap-1">
+                    <p class="font-semibold text-md">Subaccount</p>
+                    <Copyable text={bytesToHex(mySubaccount()!)} />
+                  </div>
+                </Spoiler>
               </div>
             </div>
           </Show>
@@ -318,14 +334,17 @@ export const PoolPage = () => {
             <p class="col-span-1">Pool Share</p>
           </div>
           <For each={poolMembers()} fallback={<p class="text-sm text-gray-140">Nothing here yet :(</p>}>
-            {(member) => (
+            {(member, idx) => (
               <div class="grid grid-cols-12 items-center gap-3">
-                <Avatar
-                  class="col-span-1"
-                  url={avatarSrcFromPrincipal(member.id)}
-                  size="sm"
-                  borderColor={COLORS.gray[140]}
-                />
+                <div class="flex items-center gap-1">
+                  <p class="text-xs font-semibold min-w-7">{idx() + 1}</p>
+                  <Avatar
+                    class="col-span-1"
+                    url={avatarSrcFromPrincipal(member.id)}
+                    size="sm"
+                    borderColor={COLORS.gray[140]}
+                  />
+                </div>
                 <Copyable class="col-span-7" text={member.id.toText()} />
                 <div class="col-span-3 flex justify-center">
                   <BalanceOf tokenId={DEFAULT_TOKENS.burn} balance={member.unclaimedReward.toBigIntRaw()} />

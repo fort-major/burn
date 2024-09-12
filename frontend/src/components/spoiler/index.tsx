@@ -19,7 +19,7 @@ export function Spoiler(props: ISpoilerProps) {
 
   return (
     <div class="flex flex-col self-stretch gap-5">
-      <div onClick={handleHeaderClick} class="flex justify-between self-stretch items-baseline cursor-pointer gap-5">
+      <div onClick={handleHeaderClick} class="flex justify-between self-stretch items-center cursor-pointer gap-5">
         <h4 class="flex-grow font-primary font-semibold text-white text-md">{props.header}</h4>
         <Icon class="min-w-6" color={COLORS.white} kind={expanded() ? EIconKind.ChevronUp : EIconKind.ChevronDown} />
       </div>
