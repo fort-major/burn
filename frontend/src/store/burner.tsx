@@ -1,7 +1,7 @@
 import { Accessor, createContext, createEffect, createSignal, on, onCleanup, onMount, useContext } from "solid-js";
 import { IChildren, ONE_MIN_NS } from "../utils/types";
 import { ErrorCode, err, logErr, logInfo } from "../utils/error";
-import { createStore, Store } from "solid-js/store";
+import { createStore, produce, Store } from "solid-js/store";
 import { useAuth } from "./auth";
 import { GetTotalsResponse } from "@/declarations/burner/burner.did";
 import { newBurnerActor, optUnwrap } from "@utils/backend";
@@ -154,7 +154,17 @@ export function BurnerStore(props: IChildren) {
       }
     }
 
-    setPoolMembers(members);
+    setPoolMembers(
+      members.sort((a, b) => {
+        if (a.share.gt(b.share)) {
+          return -1;
+        } else if (a.share.lt(b.share)) {
+          return 1;
+        } else {
+          return 0;
+        }
+      })
+    );
   };
 
   const getMyDepositAccount: IBurnerStoreContext["getMyDepositAccount"] = () => {

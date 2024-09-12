@@ -117,7 +117,7 @@ const Stat = (props: { title: string; data?: string }) => (
   </div>
 );
 
-const areWeOnMobile = () => window.innerWidth <= 640;
+export const areWeOnMobile = () => window.innerWidth <= 640;
 
 export function HomePage() {
   const { totals } = useBurner();
@@ -157,8 +157,8 @@ export function HomePage() {
           </Match>
         </Switch>
 
-        <div class="relative flex flex-col gap-12 px-5 lg:px-20 lg:flex-row lg:gap-5 sm:items-center sm:justify-center">
-          <div class="flex flex-col lg:self-auto pt-20 sm:pt-14 items-center justify-between sm:justify-center gap-14 sm:gap-10">
+        <div class="relative flex flex-col gap-12 sm:pt-20 pb-40 pt-10 px-5 lg:px-20 lg:flex-row lg:gap-5 sm:items-center sm:justify-center bg-gradient-to-b from-50% from-black">
+          <div class="flex flex-col lg:self-auto items-center justify-between sm:justify-center gap-14 sm:gap-10">
             <h2 class="font-primary font-semibold text-4xl leading-9 lg:text-[80px] lg:leading-[80px] tracking-tight text-center max-w-6xl">
               <span class="sm:text-nowrap">The Most Advanced</span> <span class="sm:text-nowrap">Memecoin Miner</span>{" "}
               <span class="sm:text-nowrap">on the Internet Computer</span>
@@ -191,8 +191,8 @@ export function HomePage() {
               <div class="flex flex-grow gap-2 items-center">
                 <img src="/LogoWhite.svg" class="w-[50px] h-[50px] rounded-full" />
                 <div class="flex flex-col gap-1">
-                  <p class="font-semibold text-wrap text-md">
-                    BURN <span class="text-gray-140">ICRC-1/2</span>
+                  <p class="font-bold text-wrap text-md">
+                    BURN <span class="font-light">ICRC-1/2</span>
                   </p>
                   <Copyable text={import.meta.env.VITE_BURN_TOKEN_CANISTER_ID} />
                 </div>

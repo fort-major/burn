@@ -161,6 +161,9 @@ export const PoolPage = () => {
     <div class="flex flex-col gap-8">
       <div class="flex flex-col gap-4">
         <p class="font-normal text-lg text-white">Are you sure you want to burn all deposited ICP?</p>
+        <p class="font-semibold text-orange">
+          This operation takes a significant amount of time! Please, wait patiently after pressing "Yes".
+        </p>
       </div>
       <div class="flex gap-2">
         <Btn text="No" bgColor={COLORS.gray[105]} onClick={handleBurnModalClose} />
