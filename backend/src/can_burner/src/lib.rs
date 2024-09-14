@@ -1,4 +1,5 @@
 use candid::{Nat, Principal};
+use futures::future::join_all;
 use ic_cdk::api::call::CallResult;
 use ic_cdk::api::cycles_burn;
 use ic_cdk::api::management_canister::main::raw_rand;
@@ -9,8 +10,11 @@ use ic_ledger_types::{transfer, AccountIdentifier, Memo, Subaccount, Tokens, Tra
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
 use ic_stable_structures::{Cell, DefaultMemoryImpl, StableBTreeMap};
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::TransferArg;
-use shared::burner::api::{GetBurnersRequest, GetBurnersResponse, GetTotalsResponse};
+use icrc_ledger_types::icrc1::transfer::{Memo as ICRCMemo, TransferArg};
+use shared::burner::api::{
+    GetBurnersRequest, GetBurnersResponse, GetTotalsResponse, RefundLostTokensRequest,
+    RefundLostTokensResponse, RefundTokenKind,
+};
 use shared::burner::state::BurnerState;
 use shared::burner::types::{
     BurnerStateInfo, CMCClient, NotifyTopUpError, NotifyTopUpRequest, TCycles,
@@ -254,12 +258,58 @@ fn init_seed() {
     });
 }
 
+#[update]
+async fn refund_lost_tokens(req: RefundLostTokensRequest) -> RefundLostTokensResponse {
+    assert_caller_is_dev();
+
+    match req.kind {
+        RefundTokenKind::ICP(accounts) => {
+            let icp_can_id = Principal::from_text(ICP_CAN_ID).unwrap();
+            let mut futs = Vec::new();
+
+            for (account, refund_sum) in accounts {
+                let transfer_args = TransferArgs {
+                    amount: Tokens::from_e8s(refund_sum),
+                    to: account,
+                    memo: Memo(763824),
+                    fee: Tokens::from_e8s(ICP_FEE),
+                    from_subaccount: None,
+                    created_at_time: None,
+                };
+
+                futs.push(async {
+                    let res = transfer(icp_can_id, transfer_args).await;
+
+                    match res {
+                        Ok(r) => match r {
+                            Ok(b) => Ok(Nat::from(b)),
+                            Err(e) => Err(format!("ICP Transfer error: {}", e)),
+                        },
+                        Err(e) => Err(format!("ICP Call error: {:?}", e)),
+                    }
+                });
+            }
+
+            RefundLostTokensResponse {
+                results: join_all(futs).await,
+            }
+        }
+    }
+}
+
 thread_local! {
     static STOPPED_FOR_UPDATE: RefCell<(Principal, bool)> = RefCell::new((Principal::anonymous(), false));
 }
 
 fn is_stopped() -> bool {
     STOPPED_FOR_UPDATE.with_borrow(|(_, is_stopped)| *is_stopped)
+}
+
+fn assert_caller_is_dev() {
+    let dev = STOPPED_FOR_UPDATE.with_borrow(|(dev, _)| *dev);
+    if caller() != dev {
+        panic!("Access denied");
+    }
 }
 
 fn assert_running() {

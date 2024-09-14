@@ -19,3 +19,4 @@ garde = { workspace = true }
 ic-e8s = { workspace = true }
 icrc-ledger-types = { workspace = true }
 ic-ledger-types = { workspace = true }
+futures = { workspace = true }

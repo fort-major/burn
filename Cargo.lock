@@ -63,6 +63,7 @@ name = "burner"
 version = "0.1.0"
 dependencies = [
  "candid",
+ "futures",
  "garde",
  "ic-cdk 0.13.5",
  "ic-cdk-timers",

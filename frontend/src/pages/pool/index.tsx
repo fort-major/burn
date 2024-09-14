@@ -11,6 +11,7 @@ import { TextInput } from "@components/text-input";
 import { AccountIdentifier, SubAccount } from "@dfinity/ledger-icp";
 import { IcrcLedgerCanister } from "@dfinity/ledger-icrc";
 import { Principal } from "@dfinity/principal";
+import { MsqClient } from "@fort-major/msq-client";
 import { useNavigate } from "@solidjs/router";
 import { useAuth } from "@store/auth";
 import { useBurner } from "@store/burner";
@@ -308,21 +309,6 @@ export const PoolPage = () => {
                     }).toHex()}
                   />
                 </div>
-
-                <Spoiler header="For ICRC-1 Wallets">
-                  <div class="flex flex-col gap-1">
-                    <p class="font-semibold text-xs text-errorRed">
-                      Only send here, if your wallet supports sending to Principal ID + Subaccount ID
-                    </p>
-                    <p class="font-semibold text-md">Principal ID</p>
-                    <Copyable class="self-start" text={import.meta.env.VITE_BURNER_CANISTER_ID} />
-                  </div>
-
-                  <div class="flex flex-col gap-1">
-                    <p class="font-semibold text-md">Subaccount</p>
-                    <Copyable text={bytesToHex(mySubaccount()!)} />
-                  </div>
-                </Spoiler>
               </div>
             </div>
           </Show>
