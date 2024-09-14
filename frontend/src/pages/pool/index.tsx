@@ -9,6 +9,7 @@ import { Page } from "@components/page";
 import { Spoiler } from "@components/spoiler";
 import { TextInput } from "@components/text-input";
 import { AccountIdentifier, SubAccount } from "@dfinity/ledger-icp";
+import { IcrcLedgerCanister } from "@dfinity/ledger-icrc";
 import { Principal } from "@dfinity/principal";
 import { useNavigate } from "@solidjs/router";
 import { useAuth } from "@store/auth";
@@ -16,14 +17,15 @@ import { useBurner } from "@store/burner";
 import { DEFAULT_TOKENS, useTokens } from "@store/tokens";
 import { COLORS } from "@utils/colors";
 import { avatarSrcFromPrincipal } from "@utils/common";
-import { bytesToHex } from "@utils/encoding";
+import { bytesToHex, tokensToStr } from "@utils/encoding";
+import { logInfo } from "@utils/error";
 import { eventHandler } from "@utils/security";
 import { ONE_MIN_NS, Result } from "@utils/types";
 import { batch, createEffect, createSignal, For, Match, on, onMount, Show, Switch } from "solid-js";
 
 export const PoolPage = () => {
-  const { isAuthorized, identity } = useAuth();
-  const { subaccounts, fetchSubaccountOf } = useTokens();
+  const { isAuthorized, identity, agent, assertAuthorized, disable, enable } = useAuth();
+  const { subaccounts, fetchSubaccountOf, balanceOf, fetchBalanceOf } = useTokens();
   const {
     canWithdraw,
     canStake,
@@ -41,6 +43,7 @@ export const PoolPage = () => {
   const [withdrawModalVisible, setWithdrawModalVisible] = createSignal(false);
   const [burnModalVisible, setBurnModalVisible] = createSignal(false);
   const [claimModalVisible, setClaimModalVisible] = createSignal(false);
+  const [claimLostModalVisible, setClaimLostModalVisible] = createSignal(false);
   const [recepient, setRecepient] = createSignal(Result.Err<string>(""));
 
   const myPrincipal = () => {
@@ -95,6 +98,7 @@ export const PoolPage = () => {
 
     fetchPoolMembers();
     fetchSubaccountOf(myPrincipal()!);
+    fetchBalanceOf(DEFAULT_TOKENS.burn, identity()!.getPrincipal());
   });
 
   createEffect(
@@ -110,6 +114,7 @@ export const PoolPage = () => {
       if (!p) return;
 
       fetchSubaccountOf(p);
+      fetchBalanceOf(DEFAULT_TOKENS.burn, identity()!.getPrincipal());
     })
   );
 
@@ -205,6 +210,80 @@ export const PoolPage = () => {
     </div>
   );
 
+  const handleClaimLostModalClose = () => {
+    batch(() => {
+      setRecepient(Result.Err<string>(""));
+      setClaimLostModalVisible(false);
+    });
+  };
+
+  const handleClaimLost = async () => {
+    assertAuthorized();
+    const a = agent()!;
+
+    disable();
+
+    const b = balanceOf(DEFAULT_TOKENS.burn, identity()!.getPrincipal())!;
+
+    const owner = Principal.fromText(recepient().unwrapOk());
+
+    const burnToken = IcrcLedgerCanister.create({ canisterId: DEFAULT_TOKENS.burn, agent: a });
+
+    logInfo("Claiming lost $BURN...");
+
+    await burnToken.transfer({
+      to: {
+        owner,
+        subaccount: [],
+      },
+      amount: b - 10_000n,
+    });
+
+    logInfo(`Successfully claimed ${tokensToStr(b - 10_000n, 8)} $BURN!`);
+
+    enable();
+
+    handleClaimLostModalClose();
+  };
+
+  const canClaimLost = () => {
+    const id = identity();
+    if (!id) return false;
+
+    const lostBurnBalance = balanceOf(DEFAULT_TOKENS.burn, id.getPrincipal());
+    if (!lostBurnBalance) return false;
+
+    return true;
+  };
+
+  const claimLostForm = (
+    <div class="flex flex-col gap-8">
+      <div class="flex flex-col gap-4">
+        <p class="font-normal text-lg text-white">Your lost assets we were able to find:</p>
+        <div class="flex flex-col gap-2">
+          <BalanceOf tokenId={DEFAULT_TOKENS.burn} owner={identity()!.getPrincipal()} />
+        </div>
+        <div class="flex flex-col gap-2">
+          <p class="font-semibold text-sm text-gray-140">
+            Recepient Principal ID <span class="text-errorRed">*</span>
+          </p>
+          <TextInput
+            placeholder={import.meta.env.VITE_BURNER_CANISTER_ID}
+            validations={[{ principal: null }, { required: null }]}
+            value={recepient().unwrap()}
+            onChange={setRecepient}
+          />
+        </div>
+      </div>
+      <Btn
+        text="Re-claim Lost Assets"
+        bgColor={COLORS.orange}
+        disabled={recepient().isErr() || !canClaimLost()}
+        onClick={handleClaimLost}
+      />
+    </div>
+  );
+
   return (
     <Page slim>
       <div class="flex flex-col gap-4">
@@ -286,16 +365,29 @@ export const PoolPage = () => {
                 {totals.data?.yourShareTcycles?.toString()} / {totals.data?.totalSharesSupply.toString()})
               </p>
             </div>
-            <Btn
-              text="Claim"
-              icon={EIconKind.ArrowUpRight}
-              class="w-[200px]"
-              bgColor={COLORS.orange}
-              iconClass="rotate-180"
-              iconColor={COLORS.white}
-              disabled={!canClaimReward()}
-              onClick={() => setClaimModalVisible(true)}
-            />
+
+            <div class="flex flex-col items-center gap-2">
+              <Btn
+                text="Claim"
+                icon={EIconKind.ArrowUpRight}
+                class="w-[200px]"
+                bgColor={COLORS.orange}
+                iconClass="rotate-180"
+                iconColor={COLORS.white}
+                disabled={!canClaimReward()}
+                onClick={() => setClaimModalVisible(true)}
+              />
+              <Show when={canClaimLost()}>
+                <p
+                  class="underline font-normal text-gray-140 cursor-pointer"
+                  onClick={eventHandler(() => {
+                    setClaimLostModalVisible(true);
+                  })}
+                >
+                  Re-claim Lost
+                </p>
+              </Show>
+            </div>
           </Show>
         </div>
       </div>
@@ -374,6 +466,11 @@ export const PoolPage = () => {
         <Match when={claimModalVisible()}>
           <Modal title="Claim BURN" onClose={handleClaimModalClose}>
             {claimForm}
+          </Modal>
+        </Match>
+        <Match when={claimLostModalVisible()}>
+          <Modal title="Claim Lost Tokens" onClose={handleClaimLostModalClose}>
+            {claimLostForm}
           </Modal>
         </Match>
       </Switch>
