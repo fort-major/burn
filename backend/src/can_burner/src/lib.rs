@@ -10,7 +10,7 @@ use ic_ledger_types::{transfer, AccountIdentifier, Memo, Subaccount, Tokens, Tra
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
 use ic_stable_structures::{Cell, DefaultMemoryImpl, StableBTreeMap};
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{Memo as ICRCMemo, TransferArg};
+use icrc_ledger_types::icrc1::transfer::{TransferArg};
 use shared::burner::api::{
     GetBurnersRequest, GetBurnersResponse, GetTotalsResponse, RefundLostTokensRequest,
     RefundLostTokensResponse, RefundTokenKind,

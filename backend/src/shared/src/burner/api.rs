@@ -1,7 +1,7 @@
 use candid::{CandidType, Nat, Principal};
 use ic_e8s::c::E8s;
 use ic_ledger_types::AccountIdentifier;
-use icrc_ledger_types::icrc1::account::Account;
+
 use serde::Deserialize;
 
 use super::types::TCycles;

@@ -15,13 +15,15 @@ type GetTotalsResponse = record {
   current_pos_round : nat64;
   current_share_fee : nat;
 };
+type RefundLostTokensRequest = record { kind : RefundTokenKind };
+type RefundLostTokensResponse = record { results : vec Result };
+type RefundTokenKind = variant { ICP : vec record { blob; nat64 } };
 type Result = variant { Ok : nat; Err : text };
-type Result_1 = variant { Ok : nat64; Err : text };
 service : () -> {
   claim_reward : (principal) -> (Result);
   get_burners : (GetBurnersRequest) -> (GetBurnersResponse) query;
   get_totals : () -> (GetTotalsResponse) query;
-  refund_lost_icps : (vec record { blob; nat64 }) -> (vec Result_1);
+  refund_lost_tokens : (RefundLostTokensRequest) -> (RefundLostTokensResponse);
   resume : () -> ();
   stake : (nat64) -> ();
   stop : () -> ();
