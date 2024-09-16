@@ -2,6 +2,7 @@ import { Component } from "solid-js";
 import { useLocation } from "@solidjs/router";
 import { HomePage } from "@pages/home";
 import { PoolPage } from "@pages/pool";
+import { InfoPage } from "@pages/info";
 
 export interface IRoute {
   parent?: IRoute;
@@ -24,6 +25,9 @@ export const ROOT = route({
     }),
     pool: route({
       component: PoolPage,
+    }),
+    info: route({
+      component: InfoPage,
     }),
   },
 });

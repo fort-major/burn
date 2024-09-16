@@ -6,6 +6,8 @@ import { createSignal, onCleanup, Show } from "solid-js";
 
 export interface ICopyableProps extends IClass {
   text: string;
+  ellipsis?: boolean;
+  ellipsisSymbols?: number;
   before?: string;
   after?: string;
 }
@@ -40,10 +42,18 @@ export const Copyable = (props: ICopyableProps) => {
     >
       <p class="font-normal text-xs text-gray-165">
         <Show when={props.before}>{props.before} </Show>
-        <span class="font-semibold">{props.text}</span>
+        <span class="font-semibold">
+          {props.ellipsis ? applyMiddleEllipsis(props.text, props.ellipsisSymbols ?? 5) : props.text}
+        </span>
         <Show when={props.after}> {props.after}</Show>
       </p>
       <Icon kind={state() === "idle" ? EIconKind.Copy : EIconKind.CheckCircle} color={COLORS.gray[165]} size={14} />
     </div>
   );
 };
+
+function applyMiddleEllipsis(text: string, symbols: number): string {
+  if (text.length <= symbols) return text;
+
+  return `${text.substring(0, symbols + 1)}...`;
+}

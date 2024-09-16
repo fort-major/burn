@@ -12,6 +12,7 @@ import { AccountIdentifier, SubAccount } from "@dfinity/ledger-icp";
 import { IcrcLedgerCanister } from "@dfinity/ledger-icrc";
 import { Principal } from "@dfinity/principal";
 import { MsqClient } from "@fort-major/msq-client";
+import { areWeOnMobile } from "@pages/home";
 import { useNavigate } from "@solidjs/router";
 import { useAuth } from "@store/auth";
 import { useBurner } from "@store/burner";
@@ -27,18 +28,7 @@ import { batch, createEffect, createSignal, For, Match, on, onMount, Show, Switc
 export const PoolPage = () => {
   const { isAuthorized, identity, agent, assertAuthorized, disable, enable } = useAuth();
   const { subaccounts, fetchSubaccountOf, balanceOf, fetchBalanceOf, claimLost, canClaimLost } = useTokens();
-  const {
-    canWithdraw,
-    canStake,
-    totals,
-    fetchTotals,
-    canClaimReward,
-    withdraw,
-    stake,
-    claimReward,
-    poolMembers,
-    fetchPoolMembers,
-  } = useBurner();
+  const { canWithdraw, canStake, totals, fetchTotals, canClaimReward, withdraw, stake, claimReward } = useBurner();
   const navigate = useNavigate();
 
   const [withdrawModalVisible, setWithdrawModalVisible] = createSignal(false);
@@ -97,7 +87,6 @@ export const PoolPage = () => {
       return;
     }
 
-    fetchPoolMembers();
     fetchSubaccountOf(myPrincipal()!);
   });
 
@@ -171,8 +160,8 @@ export const PoolPage = () => {
         </p>
       </div>
       <div class="flex gap-2">
-        <Btn text="No" bgColor={COLORS.gray[105]} onClick={handleBurnModalClose} />
-        <Btn text="Yes" bgColor={COLORS.orange} onClick={handleBurn} />
+        <Btn text="No" class="flex-grow" bgColor={COLORS.gray[105]} onClick={handleBurnModalClose} />
+        <Btn text="Yes" class="flex-grow" bgColor={COLORS.orange} onClick={handleBurn} />
       </div>
     </div>
   );
@@ -229,8 +218,8 @@ export const PoolPage = () => {
       <div class="flex flex-col gap-4">
         <p class="font-normal text-lg text-white">Your lost assets we were able to find:</p>
         <div class="flex flex-col gap-2">
-          <BalanceOf tokenId={DEFAULT_TOKENS.burn} owner={identity()!.getPrincipal()} />
-          <BalanceOf tokenId={DEFAULT_TOKENS.icp} owner={identity()!.getPrincipal()} />
+          <BalanceOf tokenId={DEFAULT_TOKENS.burn} owner={identity()?.getPrincipal()} />
+          <BalanceOf tokenId={DEFAULT_TOKENS.icp} owner={identity()?.getPrincipal()} />
         </div>
         <div class="flex flex-col gap-2">
           <p class="font-semibold text-sm text-gray-140">
@@ -257,14 +246,9 @@ export const PoolPage = () => {
     <Page slim>
       <div class="flex flex-col gap-4">
         <p class={headerClass}>Deposited ICP</p>
-        <div class="flex justify-between gap-4">
+        <div class="flex flex-col md:flex-row md:justify-between gap-10 md:gap-4">
           <Show when={mySubaccount()}>
             <div class="flex flex-col gap-3">
-              <BalanceOf
-                tokenId={DEFAULT_TOKENS.icp}
-                owner={Principal.fromText(import.meta.env.VITE_BURNER_CANISTER_ID)}
-                subaccount={mySubaccount()!}
-              />
               <div class="flex flex-col gap-2">
                 <p class="font-semibold text-gray-140 text-sm">Send ICP here to deposit (1 ICP minimum)</p>
 
@@ -275,15 +259,22 @@ export const PoolPage = () => {
                       principal: Principal.fromText(import.meta.env.VITE_BURNER_CANISTER_ID),
                       subAccount: SubAccount.fromBytes(mySubaccount()!) as SubAccount,
                     }).toHex()}
+                    ellipsis={areWeOnMobile() ? true : false}
+                    ellipsisSymbols={areWeOnMobile() ? 30 : undefined}
                   />
                 </div>
               </div>
+              <BalanceOf
+                tokenId={DEFAULT_TOKENS.icp}
+                owner={Principal.fromText(import.meta.env.VITE_BURNER_CANISTER_ID)}
+                subaccount={mySubaccount()!}
+              />
             </div>
           </Show>
-          <div class="flex flex-col items-center gap-2">
+          <div class="flex flex-col md:items-center gap-4">
             <Btn
               text="Burn"
-              class="w-[200px]"
+              class="md:w-[200px]"
               bgColor={COLORS.orange}
               icon={EIconKind.FlameBW}
               disabled={!canStake()}
@@ -291,7 +282,7 @@ export const PoolPage = () => {
             />
             <Show when={canWithdraw()}>
               <p
-                class="underline font-normal text-gray-140 cursor-pointer"
+                class="underline font-normal text-gray-140 cursor-pointer text-center"
                 onClick={eventHandler(() => {
                   setWithdrawModalVisible(true);
                 })}
@@ -305,7 +296,7 @@ export const PoolPage = () => {
 
       <div class="flex flex-col gap-4">
         <p class={headerClass}>Unclaimed BURN</p>
-        <div class="flex justify-between gap-4">
+        <div class="flex flex-col md:flex-row md:justify-between gap-10 md:gap-4">
           <Show when={totals.data}>
             <div class="flex flex-col gap-1">
               <BalanceOf
@@ -320,11 +311,11 @@ export const PoolPage = () => {
               </p>
             </div>
 
-            <div class="flex flex-col items-center gap-2">
+            <div class="flex flex-col md:items-center gap-4">
               <Btn
                 text="Claim"
                 icon={EIconKind.ArrowUpRight}
-                class="w-[200px]"
+                class="md:w-[200px]"
                 bgColor={COLORS.orange}
                 iconClass="rotate-180"
                 iconColor={COLORS.white}
@@ -333,7 +324,7 @@ export const PoolPage = () => {
               />
               <Show when={canClaimLost()}>
                 <p
-                  class="underline font-normal text-gray-140 cursor-pointer"
+                  class="underline font-normal text-gray-140 cursor-pointer text-center"
                   onClick={eventHandler(() => {
                     setClaimLostModalVisible(true);
                   })}
@@ -368,42 +359,6 @@ export const PoolPage = () => {
             </For>
           </div>
         </Show>
-      </div>
-
-      <div class="flex flex-col gap-4">
-        <p class={headerClass}>Pool Members</p>
-        <div class="flex flex-col gap-2">
-          <div class="mb-2 grid grid-cols-12 items-center gap-3 text-xs font-semibold text-gray-140">
-            <p class="col-span-1"></p>
-            <p class="col-span-7">Principal ID</p>
-            <p class="col-span-3 text-center">Unclaimed Reward</p>
-            <p class="col-span-1">Pool Share</p>
-          </div>
-          <For each={poolMembers()} fallback={<p class="text-sm text-gray-140">Nothing here yet :(</p>}>
-            {(member, idx) => (
-              <div class="grid grid-cols-12 items-center gap-3">
-                <div class="flex items-center gap-1">
-                  <p class="text-xs font-semibold min-w-7">{idx() + 1}</p>
-                  <Avatar
-                    class="col-span-1"
-                    url={avatarSrcFromPrincipal(member.id)}
-                    size="sm"
-                    borderColor={COLORS.gray[140]}
-                  />
-                </div>
-                <Copyable class="col-span-7" text={member.id.toText()} />
-                <div class="col-span-3 flex justify-center">
-                  <BalanceOf tokenId={DEFAULT_TOKENS.burn} balance={member.unclaimedReward.toBigIntRaw()} />
-                </div>
-                <p class="col-span-1 font-semibold text-gray-140 text-md text-right">
-                  <Show when={totals.data && !totals.data.totalSharesSupply.isZero()}>
-                    {member.share.div(totals.data!.totalSharesSupply).toPercent().toDecimals(4).toString()}%
-                  </Show>
-                </p>
-              </div>
-            )}
-          </For>
-        </div>
       </div>
 
       <Switch>

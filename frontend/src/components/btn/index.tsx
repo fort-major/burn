@@ -34,7 +34,7 @@ export function Btn(props: IBtnProps) {
       onClick={handleClick}
     >
       <Show when={props.text}>
-        <p class="font-primary font-medium text-md select-none">{props.text}</p>
+        <p class="font-primary text-md select-none">{props.text}</p>
       </Show>
       <Show when={props.icon}>
         <Icon kind={props.icon!} class={props.iconClass} color={d() ? COLORS.gray[140] : props.iconColor} />

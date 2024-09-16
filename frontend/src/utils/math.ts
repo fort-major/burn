@@ -133,6 +133,10 @@ export class E8s {
     return this.val.toString();
   }
 
+  public toShortString() {
+    return this.val.toShortString(2, 8);
+  }
+
   public static fromString(s: string): E8s {
     return E8s.new(EDs.fromString(s, 8).val);
   }
@@ -171,6 +175,10 @@ export class E8s {
 
   public toPercent() {
     return this.val.toPercent();
+  }
+
+  public static fromFloat(x: number) {
+    return E8s.new(EDs.fromFloat(x, 8).val);
   }
 }
 
@@ -323,6 +331,16 @@ export class EDs {
     return tokensToStr(this.val, this.decimals);
   }
 
+  public toShortString(minDecimals: number, maxDecimals: number) {
+    const copy = EDs.new(this.val, this.decimals);
+
+    if (copy.lt(EDs.one(this.decimals))) {
+      return copy.toDecimals(maxDecimals).toString();
+    } else {
+      return copy.toDecimals(minDecimals).toString();
+    }
+  }
+
   public static fromString(s: string, decimals: number): EDs {
     return EDs.new(strToTokens(s, decimals), decimals);
   }
@@ -381,5 +399,12 @@ export class EDs {
 
   public toPercent() {
     return EDs.new(this.val * 100n, this.decimals);
+  }
+
+  public static fromFloat(x: number, decimals: number) {
+    const numBase = 10 ** decimals;
+    const scaled = Math.floor(x * numBase);
+
+    return EDs.new(BigInt(scaled), decimals);
   }
 }

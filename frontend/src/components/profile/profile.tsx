@@ -10,6 +10,10 @@ import { BalanceOf } from "@components/balance-of";
 import { useBurner } from "@store/burner";
 import { Principal } from "@dfinity/principal";
 import { DEFAULT_TOKENS } from "@store/tokens";
+import { Identity } from "@fort-major/agent-js-fork";
+import { makeAvatarSvg } from "@fort-major/msq-shared";
+import { MsqIdentity } from "@fort-major/msq-client";
+import { generateRandomPseudonym } from "@utils/pseudonym";
 
 export interface IProfileProps extends IClass {
   avatarSize?: "sm" | "md" | "lg";
@@ -20,8 +24,8 @@ export function ProfileMini(props: IProfileProps) {
   const { identity } = useAuth();
   const { totals, fetchTotals } = useBurner();
 
-  const [pseudonym] = createResource(identity, (it) => it.getPseudonym());
-  const [avatarSrc] = createResource(identity, (it) => it.getAvatarSrc());
+  const [pseudonym] = createResource(identity, getPseudonym);
+  const [avatarSrc] = createResource(identity, getAvatarSrc);
 
   return (
     <div class="flex flex-row items-center gap-2">
@@ -47,7 +51,7 @@ export function ProfileMini(props: IProfileProps) {
 export function ProfileMicro(props: IProfileProps) {
   const { identity } = useAuth();
 
-  const [avatarSrc] = createResource(identity, (it) => it.getAvatarSrc());
+  const [avatarSrc] = createResource(identity, getAvatarSrc);
 
   return (
     <div
@@ -58,4 +62,19 @@ export function ProfileMicro(props: IProfileProps) {
       <Avatar borderColor={COLORS.chartreuse} url={avatarSrc()} size={props.avatarSize ?? "sm"} />
     </div>
   );
+}
+
+function getAvatarSrc(identity: Identity) {
+  const pid = identity.getPrincipal();
+  const svg = btoa(makeAvatarSvg(pid));
+
+  return `data:image/svg+xml;base64,${svg}`;
+}
+
+function getPseudonym(identity: Identity & Partial<MsqIdentity>) {
+  if (identity.getPseudonym) {
+    return identity.getPseudonym();
+  }
+
+  return generateRandomPseudonym(identity.getPrincipal());
 }

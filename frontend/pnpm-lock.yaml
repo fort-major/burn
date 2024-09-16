@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@dfinity/auth-client':
+        specifier: ^2.1.1
+        version: 2.1.1(@dfinity/agent@1.4.0(@dfinity/candid@1.4.0(@dfinity/principal@1.3.0))(@dfinity/principal@1.3.0))(@dfinity/identity@1.4.0(@dfinity/agent@1.4.0(@dfinity/candid@1.4.0(@dfinity/principal@1.3.0))(@dfinity/principal@1.3.0))(@dfinity/principal@1.3.0)(@peculiar/webcrypto@1.5.0))(@dfinity/principal@1.3.0)
       '@dfinity/candid':
         specifier: ^1.4.0
         version: 1.4.0(@dfinity/principal@1.3.0)
@@ -930,6 +933,13 @@ packages:
     peerDependencies:
       '@dfinity/candid': ^1.4.0
       '@dfinity/principal': ^1.4.0
+
+  '@dfinity/auth-client@2.1.1':
+    resolution: {integrity: sha512-yvP3g9Y4ZnBw7GVy37ICFKt+2pZ3BAtOqbia5OSnaMRXgpgmfIvvyxFbMIrIDzLQJM+EuEmm1ZomXCyeFWDqyw==}
+    peerDependencies:
+      '@dfinity/agent': ^2.1.1
+      '@dfinity/identity': ^2.1.1
+      '@dfinity/principal': ^2.1.1
 
   '@dfinity/candid@1.4.0':
     resolution: {integrity: sha512-PsTJVn63ZM4A/6Xs5coI0zMFevSwJ8hcyh38LdH/92n6wi9UOTis1yc4qL5MZvvRCUAD0c3rVjELL+49E9sPyA==}
@@ -2503,6 +2513,9 @@ packages:
 
   icrc-35@0.2.3:
     resolution: {integrity: sha512-m/C2A/aYh7UXSLk9SDgad3ltMQJIYYtTSB8rSgX7nK+Tt1HZYQtwiV65FbwZP559HKN9QGeGdtqkegRaFGL9BQ==}
+
+  idb@7.1.1:
+    resolution: {integrity: sha512-gchesWBzyvGHRO9W8tzUWFDycow5gwjvFKfyV9FF32Y7F50yZMp7mP+T2mJIWFx49zicqyC4uefHM17o6xKIVQ==}
 
   ieee754@1.2.1:
     resolution: {integrity: sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==}
@@ -5557,6 +5570,13 @@ snapshots:
       buffer: 6.0.3
       simple-cbor: 0.4.1
 
+  '@dfinity/auth-client@2.1.1(@dfinity/agent@1.4.0(@dfinity/candid@1.4.0(@dfinity/principal@1.3.0))(@dfinity/principal@1.3.0))(@dfinity/identity@1.4.0(@dfinity/agent@1.4.0(@dfinity/candid@1.4.0(@dfinity/principal@1.3.0))(@dfinity/principal@1.3.0))(@dfinity/principal@1.3.0)(@peculiar/webcrypto@1.5.0))(@dfinity/principal@1.3.0)':
+    dependencies:
+      '@dfinity/agent': 1.4.0(@dfinity/candid@1.4.0(@dfinity/principal@1.3.0))(@dfinity/principal@1.3.0)
+      '@dfinity/identity': 1.4.0(@dfinity/agent@1.4.0(@dfinity/candid@1.4.0(@dfinity/principal@1.3.0))(@dfinity/principal@1.3.0))(@dfinity/principal@1.3.0)(@peculiar/webcrypto@1.5.0)
+      '@dfinity/principal': 1.3.0
+      idb: 7.1.1
+
   '@dfinity/candid@1.4.0(@dfinity/principal@1.3.0)':
     dependencies:
       '@dfinity/principal': 1.3.0
@@ -7531,6 +7551,8 @@ snapshots:
   icrc-35@0.2.3:
     dependencies:
       zod: 3.22.4
+
+  idb@7.1.1: {}
 
   ieee754@1.2.1: {}
 

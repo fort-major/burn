@@ -181,11 +181,16 @@ impl BurnerState {
             self.shares.iter()
         };
 
+        let fee = self.get_info().get_current_fee();
         let mut entries = Vec::new();
         let mut i = 0;
 
         loop {
             if let Some((account, (share, unclaimed_reward))) = iter.next() {
+                if share < fee {
+                    continue;
+                }
+
                 entries.push((account, share, unclaimed_reward));
                 i += 1;
 

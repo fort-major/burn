@@ -19,8 +19,8 @@ export function Modal(props: IModalProps) {
   const mount = document.getElementById("portal")!;
 
   onMount(() => {
-    ref!.className = "relative flex justify-center p-5";
-    mount.style.display = "block";
+    ref!.className = "relative flex items-center md:items-start justify-center p-5";
+    mount.style.display = "flex";
     mount.style.overflow = "hidden";
   });
 
@@ -30,9 +30,9 @@ export function Modal(props: IModalProps) {
 
   return (
     <Portal ref={ref} mount={mount}>
-      <div class="flex flex-col gap-4 rounded-3xl p-6 shadow-sm shadow-orange text-white bg-black mt-36 md:min-w-[550px]">
+      <div class="flex flex-col gap-4 rounded-3xl p-6 text-white bg-gray-110 md:mt-36 min-w-[300px] md:min-w-[550px]">
         <div class="flex items-center justify-between">
-          <p class="font-primary font-bold text-2xl">{props.title ?? "Dialog"}</p>
+          <p class="font-primary font-bold text-xl md:text-2xl">{props.title ?? "Dialog"}</p>
           <Icon kind={EIconKind.CancelCircle} color={COLORS.gray[150]} onClick={handleClose} class="cursor-pointer" />
         </div>
         {props.children}

@@ -15,7 +15,8 @@ fi
 # check if canisters are created
 
 dfx canister --network=$network create burner && \
-dfx canister --network=$network create burn_token
+dfx canister --network=$network create burn_token && \
+dfx canister --network=$network create internet_identity
 
 # put env vars into backend
 
@@ -42,6 +43,7 @@ touch $file_frontend
 
 echo "VITE_BURNER_CANISTER_ID=\"$(dfx canister --network=$network id burner)\"" >> $file_frontend
 echo "VITE_BURN_TOKEN_CANISTER_ID=\"$(dfx canister --network=$network id burn_token)\"" >> $file_frontend
+echo "VITE_II_CANISTER_ID=\"$(dfx canister --network=$network id internet_identity)\"" >> $file_frontend
 echo "VITE_ROOT_KEY=\"$(dfx ping $network | grep -oP '(?<="root_key": )\[.*\]')\"" >> $file_frontend
 
 if [ $mode = dev ]; then

@@ -7,7 +7,7 @@ import { Principal } from "@dfinity/principal";
 import { E8s, EDs } from "@utils/math";
 import { bytesToHex, debugStringify, tokensToStr } from "@utils/encoding";
 import { IcrcLedgerCanister, IcrcMetadataResponseEntries } from "@dfinity/ledger-icrc";
-import { newBurnerActor, opt, optUnwrap } from "@utils/backend";
+import { newBurnerActor, newICPSwapInfoActor, opt, optUnwrap } from "@utils/backend";
 import { nowNs } from "@utils/common";
 
 export type TPrincipalStr = string;
@@ -41,6 +41,9 @@ export interface ITokensStoreContext {
 
   canClaimLost: () => boolean;
   claimLost: (recepient: Principal) => Promise<void>;
+
+  icpSwapUsdExchangeRates: Store<Partial<Record<TPrincipalStr, E8s>>>;
+  fetchIcpSwapUsdExchangeRates: () => Promise<void>;
 }
 
 const TokensContext = createContext<ITokensStoreContext>();
@@ -67,10 +70,16 @@ export function TokensStore(props: IChildren) {
   const [balances, setBalances] = createStore<ITokensStoreContext["balances"]>();
   const [subaccounts, setSubaccounts] = createStore<ITokensStoreContext["subaccounts"]>();
   const [metadata, setMetadata] = createStore<ITokensStoreContext["metadata"]>();
+  const [icpSwapUsdExchangeRates, setIcpSwapUsdExchangeRates] =
+    createStore<ITokensStoreContext["icpSwapUsdExchangeRates"]>();
 
   createEffect(
     on(anonymousAgent, (a) => {
       if (!a) return;
+
+      if (Object.keys(icpSwapUsdExchangeRates).length === 0) {
+        fetchIcpSwapUsdExchangeRates();
+      }
 
       fetchMetadata(DEFAULT_TOKENS.burn);
       fetchMetadata(DEFAULT_TOKENS.icp);
@@ -82,10 +91,25 @@ export function TokensStore(props: IChildren) {
       if (!ready) return;
       const pid = identity()!.getPrincipal();
 
+      if (Object.keys(icpSwapUsdExchangeRates).length === 0) {
+        fetchIcpSwapUsdExchangeRates();
+      }
+
       fetchBalanceOf(DEFAULT_TOKENS.burn, pid);
       fetchBalanceOf(DEFAULT_TOKENS.icp, pid);
     })
   );
+
+  const fetchIcpSwapUsdExchangeRates: ITokensStoreContext["fetchIcpSwapUsdExchangeRates"] = async () => {
+    const actor = await newICPSwapInfoActor();
+    const entries = await actor.getAllTokens();
+
+    for (let entry of entries) {
+      const rate = E8s.fromFloat(entry.priceUSD);
+
+      setIcpSwapUsdExchangeRates(entry.address, rate);
+    }
+  };
 
   const balanceOf: ITokensStoreContext["balanceOf"] = (tokenId, owner, subaccount) => {
     return balances[tokenId.toText()]?.[owner.toText()]?.[bytesToHex(orDefaultSubaccount(subaccount))];
@@ -271,6 +295,8 @@ export function TokensStore(props: IChildren) {
         canTransfer,
         canClaimLost,
         claimLost,
+        icpSwapUsdExchangeRates,
+        fetchIcpSwapUsdExchangeRates,
       }}
     >
       {props.children}

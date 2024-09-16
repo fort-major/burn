@@ -1,15 +1,19 @@
-import { Accessor, batch, createContext, createSignal, onMount, useContext } from "solid-js";
-import { IChildren } from "../utils/types";
-import { ErrorCode, err, logInfo } from "../utils/error";
+import { Accessor, batch, createContext, createEffect, createSignal, on, onMount, useContext } from "solid-js";
+import { IChildren, ONE_WEEK_NS } from "../utils/types";
+import { ErrorCode, err, logErr, logInfo } from "../utils/error";
 import { Identity, Agent } from "@dfinity/agent";
 import { MsqClient, MsqIdentity } from "@fort-major/msq-client";
 import { makeAgent, makeAnonymousAgent } from "../utils/backend";
+import { AuthClient } from "@dfinity/auth-client";
+import { debugStringify } from "@utils/encoding";
+
+export type TAuthProvider = "MSQ" | "II";
 
 export interface IAuthStoreContext {
-  authorize: () => Promise<boolean>;
+  authorize: (provider: TAuthProvider, isMembered: boolean) => Promise<boolean>;
   deauthorize: () => Promise<boolean>;
-  identity: Accessor<(Identity & MsqIdentity) | undefined>;
-  msqClient: Accessor<MsqClient | undefined>;
+  authProvider: () => TAuthProvider | undefined;
+  identity: Accessor<Identity | undefined>;
 
   agent: Accessor<Agent | undefined>;
   anonymousAgent: Accessor<Agent | undefined>;
@@ -39,26 +43,47 @@ export function useAuth(): IAuthStoreContext {
 export type TAutoAuthState = "attepting" | "success" | "fail" | "unavailable";
 
 export function AuthStore(props: IChildren) {
-  const [identity, setIdentity] = createSignal<(Identity & MsqIdentity) | undefined>();
-  const [msqClient, setMsqClient] = createSignal<MsqClient | undefined>();
-  const [agent, setAgent] = createSignal<Agent | undefined>();
-  const [anonymousAgent, setAnonymousAgent] = createSignal<Agent | undefined>();
+  const [identity, setIdentity] = createSignal<Identity>();
+  const [msqClient, setMsqClient] = createSignal<MsqClient>();
+  const [iiClient, setIiClient] = createSignal<AuthClient>();
+  const [agent, setAgent] = createSignal<Agent>();
+  const [anonymousAgent, setAnonymousAgent] = createSignal<Agent>();
   const [disabled, setDisabled] = createSignal(false);
 
   onMount(async () => {
     makeAnonymousAgent().then((a) => setAnonymousAgent(a));
 
-    if (MsqClient.isSafeToResume()) {
-      await authorize();
+    const rememberedProvider = retrieveRememberedAuthProvider();
+
+    if (rememberedProvider !== null) {
+      await authorize(rememberedProvider, true);
     }
   });
+
+  const disable = () => setDisabled(true);
+  const enable = () => setDisabled(false);
+
+  const authProvider: IAuthStoreContext["authProvider"] = () => {
+    if (msqClient()) return "MSQ";
+    if (iiClient()) return "II";
+
+    return undefined;
+  };
 
   const deauthorize: IAuthStoreContext["deauthorize"] = async () => {
     assertAuthorized();
 
-    const msq = msqClient()!;
+    disable();
 
-    const res = await msq.requestLogout();
+    const msq = msqClient();
+
+    let res = true;
+
+    if (msq) {
+      res = await msq.requestLogout();
+    } else {
+      await iiClient()!.logout();
+    }
 
     if (res) {
       batch(() => {
@@ -67,26 +92,86 @@ export function AuthStore(props: IChildren) {
       });
     }
 
+    enable();
+
     return res;
   };
 
-  const authorize: IAuthStoreContext["authorize"] = async () => {
-    const result = await MsqClient.createAndLogin();
+  const authorize: IAuthStoreContext["authorize"] = async (provider, isRemembered) => {
+    if (provider === "MSQ") {
+      disable();
 
-    if ("Err" in result) {
-      err(ErrorCode.AUTH, result.Err);
+      const result = await MsqClient.createAndLogin();
+
+      if ("Err" in result) {
+        enable();
+        err(ErrorCode.AUTH, result.Err);
+      }
+
+      const { msq, identity } = result.Ok;
+
+      setMsqClient(msq);
+
+      await initIdentity(identity);
+
+      storeRememberedAuthProvider("MSQ");
+      enable();
+
+      return true;
+    } else {
+      disable();
+
+      const client = await AuthClient.create({ idleOptions: { disableDefaultIdleCallback: true } });
+      const isAuthenticated = await client.isAuthenticated();
+
+      if (isAuthenticated) {
+        setIiClient(client);
+
+        const identity = client.getIdentity();
+
+        await initIdentity(identity);
+        enable();
+
+        return true;
+      }
+
+      if (!isRemembered) {
+        try {
+          await new Promise((res, rej) =>
+            client.login({
+              identityProvider: iiFeHost(),
+              onSuccess: res,
+              onError: rej,
+              maxTimeToLive: ONE_WEEK_NS,
+            })
+          );
+
+          setIiClient(client);
+
+          const identity = client.getIdentity();
+
+          await initIdentity(identity);
+
+          storeRememberedAuthProvider("II");
+          enable();
+
+          return true;
+        } catch (e) {
+          logErr(ErrorCode.AUTH, debugStringify(e));
+          enable();
+
+          return false;
+        }
+      }
+
+      storeRememberedAuthProvider(null);
+      enable();
+
+      return false;
     }
-
-    const { msq, identity } = result.Ok;
-
-    setMsqClient(msq);
-
-    await initIdentity(identity);
-
-    return true;
   };
 
-  const initIdentity = async (identity: Identity & MsqIdentity) => {
+  const initIdentity = async (identity: Identity) => {
     let a = await makeAgent(identity);
 
     batch(() => {
@@ -121,9 +206,9 @@ export function AuthStore(props: IChildren) {
     <AuthContext.Provider
       value={{
         identity,
+        authProvider,
         authorize,
         deauthorize,
-        msqClient,
         agent,
         anonymousAgent,
         isAuthorized,
@@ -131,11 +216,31 @@ export function AuthStore(props: IChildren) {
         assertReadyToFetch,
         assertAuthorized,
         disabled,
-        disable: () => setDisabled(true),
-        enable: () => setDisabled(false),
+        disable,
+        enable,
       }}
     >
       {props.children}
     </AuthContext.Provider>
   );
+}
+
+const REMEMBERED_AUTH_PROVIDER_KEY = "msq-burn-auth-provider";
+
+function retrieveRememberedAuthProvider(): TAuthProvider | null {
+  return localStorage.getItem(REMEMBERED_AUTH_PROVIDER_KEY) as TAuthProvider | null;
+}
+
+function storeRememberedAuthProvider(provider: TAuthProvider | null) {
+  if (provider === null) {
+    localStorage.removeItem(REMEMBERED_AUTH_PROVIDER_KEY);
+  } else {
+    localStorage.setItem(REMEMBERED_AUTH_PROVIDER_KEY, provider);
+  }
+}
+
+function iiFeHost(): string | undefined {
+  if (import.meta.env.MODE === "ic") return undefined;
+
+  return import.meta.env.VITE_IC_HOST.replace("http://", `http://${import.meta.env.VITE_II_CANISTER_ID}.`);
 }
