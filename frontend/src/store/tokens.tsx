@@ -1,11 +1,11 @@
 import { createContext, createEffect, on, useContext } from "solid-js";
 import { IChildren } from "../utils/types";
-import { ErrorCode, err, logInfo } from "../utils/error";
+import { ErrorCode, err, logErr, logInfo } from "../utils/error";
 import { createStore, Store } from "solid-js/store";
 import { useAuth } from "./auth";
 import { Principal } from "@dfinity/principal";
 import { E8s, EDs } from "@utils/math";
-import { bytesToHex } from "@utils/encoding";
+import { bytesToHex, debugStringify, tokensToStr } from "@utils/encoding";
 import { IcrcLedgerCanister, IcrcMetadataResponseEntries } from "@dfinity/ledger-icrc";
 import { newBurnerActor, opt, optUnwrap } from "@utils/backend";
 import { nowNs } from "@utils/common";
@@ -38,6 +38,9 @@ export interface ITokensStoreContext {
 
   transfer: (tokenId: Principal, qty: EDs, to: Principal) => Promise<void>;
   canTransfer: (tokenId: Principal) => boolean;
+
+  canClaimLost: () => boolean;
+  claimLost: (recepient: Principal) => Promise<void>;
 }
 
 const TokensContext = createContext<ITokensStoreContext>();
@@ -58,7 +61,8 @@ export const DEFAULT_TOKENS = {
 };
 
 export function TokensStore(props: IChildren) {
-  const { assertReadyToFetch, assertAuthorized, anonymousAgent, isAuthorized, agent, identity } = useAuth();
+  const { assertReadyToFetch, assertAuthorized, anonymousAgent, isAuthorized, agent, identity, disable, enable } =
+    useAuth();
 
   const [balances, setBalances] = createStore<ITokensStoreContext["balances"]>();
   const [subaccounts, setSubaccounts] = createStore<ITokensStoreContext["subaccounts"]>();
@@ -70,6 +74,16 @@ export function TokensStore(props: IChildren) {
 
       fetchMetadata(DEFAULT_TOKENS.burn);
       fetchMetadata(DEFAULT_TOKENS.icp);
+    })
+  );
+
+  createEffect(
+    on(isAuthorized, (ready) => {
+      if (!ready) return;
+      const pid = identity()!.getPrincipal();
+
+      fetchBalanceOf(DEFAULT_TOKENS.burn, pid);
+      fetchBalanceOf(DEFAULT_TOKENS.icp, pid);
     })
   );
 
@@ -146,21 +160,101 @@ export function TokensStore(props: IChildren) {
   const transfer: ITokensStoreContext["transfer"] = async (tokenId, qty, to) => {
     assertAuthorized();
 
-    const meta = metadata[tokenId.toText()]!;
+    disable();
 
+    const meta = metadata[tokenId.toText()]!;
     const ledger = IcrcLedgerCanister.create({ agent: agent()!, canisterId: tokenId });
 
-    const blockIdx = await ledger.transfer({
-      to: {
-        owner: to,
-        subaccount: [],
-      },
-      amount: qty.val,
-      fee: meta.fee.val,
-      created_at_time: nowNs(),
-    });
+    try {
+      const blockIdx = await ledger.transfer({
+        to: {
+          owner: to,
+          subaccount: [],
+        },
+        amount: qty.val,
+        fee: meta.fee.val,
+        created_at_time: nowNs(),
+      });
 
-    logInfo(`Transferred ${qty.toString()} ${meta.ticker} at #${blockIdx.toString()}`);
+      logInfo(`Transferred ${qty.toString()} ${meta.ticker} at #${blockIdx.toString()}`);
+    } catch (e) {
+      logErr(ErrorCode.NETWORK, debugStringify(e));
+    } finally {
+      enable();
+    }
+  };
+
+  const canClaimLost: ITokensStoreContext["canClaimLost"] = () => {
+    const id = identity();
+    if (!id) return false;
+
+    const lostBurnBalance = balanceOf(DEFAULT_TOKENS.burn, id.getPrincipal());
+    const lostIcpBalance = balanceOf(DEFAULT_TOKENS.icp, id.getPrincipal());
+
+    if (!lostBurnBalance && !lostIcpBalance) return false;
+
+    return true;
+  };
+
+  const claimLost: ITokensStoreContext["claimLost"] = async (recepient) => {
+    assertAuthorized();
+    const a = agent()!;
+    const pid = identity()!.getPrincipal();
+
+    const burnBalance = balanceOf(DEFAULT_TOKENS.burn, pid);
+
+    if (burnBalance) {
+      disable();
+
+      const burnToken = IcrcLedgerCanister.create({ canisterId: DEFAULT_TOKENS.burn, agent: a });
+
+      logInfo("Claiming lost BURN...");
+
+      try {
+        await burnToken.transfer({
+          to: {
+            owner: recepient,
+            subaccount: [],
+          },
+          amount: burnBalance - 10_000n,
+        });
+
+        logInfo(`Successfully claimed ${tokensToStr(burnBalance - 10_000n, 8)} BURN!`);
+      } catch (e) {
+        logErr(ErrorCode.NETWORK, debugStringify(e));
+      } finally {
+        enable();
+      }
+    }
+
+    const icpBalance = balanceOf(DEFAULT_TOKENS.icp, pid);
+
+    if (icpBalance) {
+      disable();
+
+      const icpToken = IcrcLedgerCanister.create({ canisterId: DEFAULT_TOKENS.icp, agent: a });
+
+      logInfo("Claiming lost ICP...");
+
+      try {
+        await icpToken.transfer({
+          to: {
+            owner: recepient,
+            subaccount: [],
+          },
+          amount: icpBalance - 10_000n,
+        });
+
+        logInfo(`Successfully claimed ${tokensToStr(icpBalance - 10_000n, 8)} ICP!`);
+      } catch (e) {
+        logErr(ErrorCode.NETWORK, debugStringify(e));
+      } finally {
+        enable();
+      }
+    }
+
+    fetchBalanceOf(DEFAULT_TOKENS.burn, pid);
+    fetchBalanceOf(DEFAULT_TOKENS.icp, pid);
   };
 
   return (
@@ -175,6 +269,8 @@ export function TokensStore(props: IChildren) {
         fetchMetadata,
         transfer,
         canTransfer,
+        canClaimLost,
+        claimLost,
       }}
     >
       {props.children}

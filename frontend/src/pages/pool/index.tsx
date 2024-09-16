@@ -26,7 +26,7 @@ import { batch, createEffect, createSignal, For, Match, on, onMount, Show, Switc
 
 export const PoolPage = () => {
   const { isAuthorized, identity, agent, assertAuthorized, disable, enable } = useAuth();
-  const { subaccounts, fetchSubaccountOf, balanceOf, fetchBalanceOf } = useTokens();
+  const { subaccounts, fetchSubaccountOf, balanceOf, fetchBalanceOf, claimLost, canClaimLost } = useTokens();
   const {
     canWithdraw,
     canStake,
@@ -99,7 +99,6 @@ export const PoolPage = () => {
 
     fetchPoolMembers();
     fetchSubaccountOf(myPrincipal()!);
-    fetchBalanceOf(DEFAULT_TOKENS.burn, identity()!.getPrincipal());
   });
 
   createEffect(
@@ -115,7 +114,6 @@ export const PoolPage = () => {
       if (!p) return;
 
       fetchSubaccountOf(p);
-      fetchBalanceOf(DEFAULT_TOKENS.burn, identity()!.getPrincipal());
     })
   );
 
@@ -220,41 +218,10 @@ export const PoolPage = () => {
 
   const handleClaimLost = async () => {
     assertAuthorized();
-    const a = agent()!;
 
-    disable();
-
-    const b = balanceOf(DEFAULT_TOKENS.burn, identity()!.getPrincipal())!;
-
-    const owner = Principal.fromText(recepient().unwrapOk());
-
-    const burnToken = IcrcLedgerCanister.create({ canisterId: DEFAULT_TOKENS.burn, agent: a });
-
-    logInfo("Claiming lost $BURN...");
-
-    await burnToken.transfer({
-      to: {
-        owner,
-        subaccount: [],
-      },
-      amount: b - 10_000n,
-    });
-
-    logInfo(`Successfully claimed ${tokensToStr(b - 10_000n, 8)} $BURN!`);
-
-    enable();
+    await claimLost(Principal.fromText(recepient().unwrapOk()));
 
     handleClaimLostModalClose();
-  };
-
-  const canClaimLost = () => {
-    const id = identity();
-    if (!id) return false;
-
-    const lostBurnBalance = balanceOf(DEFAULT_TOKENS.burn, id.getPrincipal());
-    if (!lostBurnBalance) return false;
-
-    return true;
   };
 
   const claimLostForm = (
@@ -263,6 +230,7 @@ export const PoolPage = () => {
         <p class="font-normal text-lg text-white">Your lost assets we were able to find:</p>
         <div class="flex flex-col gap-2">
           <BalanceOf tokenId={DEFAULT_TOKENS.burn} owner={identity()!.getPrincipal()} />
+          <BalanceOf tokenId={DEFAULT_TOKENS.icp} owner={identity()!.getPrincipal()} />
         </div>
         <div class="flex flex-col gap-2">
           <p class="font-semibold text-sm text-gray-140">
