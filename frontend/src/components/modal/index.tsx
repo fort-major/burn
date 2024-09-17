@@ -1,4 +1,5 @@
 import { EIconKind, Icon } from "@components/icon";
+import { areWeOnMobile } from "@pages/home";
 import { COLORS } from "@utils/colors";
 import { eventHandler } from "@utils/security";
 import { IChildren } from "@utils/types";
@@ -20,7 +21,7 @@ export function Modal(props: IModalProps) {
 
   onMount(() => {
     ref!.className = "relative flex items-center md:items-start justify-center p-5";
-    mount.style.display = "flex";
+    mount.style.display = areWeOnMobile() ? "flex" : "block";
     mount.style.overflow = "hidden";
   });
 

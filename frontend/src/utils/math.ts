@@ -133,8 +133,8 @@ export class E8s {
     return this.val.toString();
   }
 
-  public toShortString() {
-    return this.val.toShortString(2, 8);
+  public toShortString(decimals: { belowOne: number; belowThousand: number; afterThousand: number }) {
+    return this.val.toShortString(decimals);
   }
 
   public static fromString(s: string): E8s {
@@ -331,13 +331,16 @@ export class EDs {
     return tokensToStr(this.val, this.decimals);
   }
 
-  public toShortString(minDecimals: number, maxDecimals: number) {
+  public toShortString(decimals: { belowOne: number; belowThousand: number; afterThousand: number }) {
     const copy = EDs.new(this.val, this.decimals);
+    const thousand = EDs.fromBigIntBase(1000n, this.decimals);
 
     if (copy.lt(EDs.one(this.decimals))) {
-      return copy.toDecimals(maxDecimals).toString();
+      return copy.toDecimals(decimals.belowOne).toString();
+    } else if (copy.gt(thousand)) {
+      return copy.div(thousand).toDecimals(decimals.afterThousand).toString() + "k";
     } else {
-      return copy.toDecimals(minDecimals).toString();
+      return copy.toDecimals(decimals.belowThousand).toString();
     }
   }
 

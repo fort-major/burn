@@ -1,4 +1,14 @@
-import { Accessor, batch, createContext, createEffect, createSignal, on, onMount, useContext } from "solid-js";
+import {
+  Accessor,
+  batch,
+  createContext,
+  createEffect,
+  createResource,
+  createSignal,
+  on,
+  onMount,
+  useContext,
+} from "solid-js";
 import { IChildren, ONE_WEEK_NS } from "../utils/types";
 import { ErrorCode, err, logErr, logInfo } from "../utils/error";
 import { Identity, Agent } from "@dfinity/agent";
@@ -45,20 +55,27 @@ export type TAutoAuthState = "attepting" | "success" | "fail" | "unavailable";
 export function AuthStore(props: IChildren) {
   const [identity, setIdentity] = createSignal<Identity>();
   const [msqClient, setMsqClient] = createSignal<MsqClient>();
-  const [iiClient, setIiClient] = createSignal<AuthClient>();
   const [agent, setAgent] = createSignal<Agent>();
   const [anonymousAgent, setAnonymousAgent] = createSignal<Agent>();
   const [disabled, setDisabled] = createSignal(false);
 
-  onMount(async () => {
+  const [iiClient] = createResource(() => AuthClient.create({ idleOptions: { disableDefaultIdleCallback: true } }));
+
+  onMount(() => {
     makeAnonymousAgent().then((a) => setAnonymousAgent(a));
-
-    const rememberedProvider = retrieveRememberedAuthProvider();
-
-    if (rememberedProvider !== null) {
-      await authorize(rememberedProvider, true);
-    }
   });
+
+  createEffect(
+    on(iiClient, async (client) => {
+      if (!client) return;
+
+      const rememberedProvider = retrieveRememberedAuthProvider();
+
+      if (rememberedProvider !== null) {
+        await authorize(rememberedProvider, true);
+      }
+    })
+  );
 
   const disable = () => setDisabled(true);
   const enable = () => setDisabled(false);
@@ -121,12 +138,15 @@ export function AuthStore(props: IChildren) {
     } else {
       disable();
 
-      const client = await AuthClient.create({ idleOptions: { disableDefaultIdleCallback: true } });
+      const client = iiClient();
+      if (!client) {
+        enable();
+        err(ErrorCode.AUTH, "Uninitialized auth client");
+      }
+
       const isAuthenticated = await client.isAuthenticated();
 
       if (isAuthenticated) {
-        setIiClient(client);
-
         const identity = client.getIdentity();
 
         await initIdentity(identity);
@@ -145,8 +165,6 @@ export function AuthStore(props: IChildren) {
               maxTimeToLive: ONE_WEEK_NS,
             })
           );
-
-          setIiClient(client);
 
           const identity = client.getIdentity();
 

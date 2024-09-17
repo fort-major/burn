@@ -86,7 +86,9 @@ export const ReturnCalculator = () => {
       <div class="flex flex-col gap-4 text-right md:flex-shrink md:w-80">
         <Show when={totals.data && fuel()}>
           <div class="flex flex-col">
-            <p class="font-semibold text-6xl leading-[50px]">{burn()!.toShortString()}</p>
+            <p class="font-semibold text-6xl leading-[50px]">
+              {burn()!.toShortString({ belowOne: 4, belowThousand: 2, afterThousand: 1 })}
+            </p>
             <p class="text-gray-140">my total BURN reward</p>
           </div>
           <div class="flex flex-col">

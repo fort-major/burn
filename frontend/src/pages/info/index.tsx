@@ -18,7 +18,8 @@ export const InfoPage = () => {
   const { poolMembers, fetchPoolMembers, totals } = useBurner();
 
   const burnExchangeRate = () => icpSwapUsdExchangeRates["egjwt-lqaaa-aaaak-qi2aa-cai"] ?? E8s.zero();
-  const burnUSDPrice = () => burnExchangeRate()?.toDynamic().toShortString(2, 4);
+  const burnUSDPrice = () =>
+    burnExchangeRate()?.toDynamic().toShortString({ belowOne: 4, belowThousand: 2, afterThousand: 2 });
   const tcyclesExchangeRate = () => icpSwapUsdExchangeRates["aanaa-xaaaa-aaaah-aaeiq-cai"] ?? E8s.zero();
 
   const totalShareWorth = () =>
@@ -95,40 +96,51 @@ export const InfoPage = () => {
           </div>
 
           <div class="flex flex-col gap-2">
-            <For each={poolMembers()} fallback={<p class="text-sm text-gray-140">Nothing here yet :(</p>}>
-              {(member, idx) => (
-                <div class="grid p-2 grid-cols-5 md:grid-cols-6 items-center gap-3 odd:bg-gray-105 even:bg-black">
-                  <div class="flex items-center gap-1 col-span-1">
-                    <p class="text-xs font-semibold min-w-7">{idx() + 1}</p>
-                    <Avatar url={avatarSrcFromPrincipal(member.id)} size="sm" borderColor={COLORS.gray[140]} />
-                  </div>
+            <Show when={tcyclesExchangeRate().toBool()}>
+              <For each={poolMembers()} fallback={<p class="text-sm text-gray-140">Nothing here yet :(</p>}>
+                {(member, idx) => {
+                  const blocksLeft = member.share
+                    .div(totals.data!.currentBlockShareFee)
+                    .toShortString({ belowOne: 0, belowThousand: 0, afterThousand: 1 });
 
-                  <Copyable class="col-span-1 hidden md:flex" text={member.id.toText()} ellipsis />
+                  const poolShare = member.share
+                    .div(totals.data!.totalSharesSupply)
+                    .toPercent()
+                    .toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 1 });
 
-                  <p class="col-span-1 font-semibold text-gray-140 text-md text-right">
-                    {member.share.toDecimals(1).toString()}
-                  </p>
+                  const shareWorth = member.share
+                    .mul(tcyclesExchangeRate().toDynamic().toDecimals(12))
+                    .toShortString({ belowOne: 3, belowThousand: 1, afterThousand: 1 });
 
-                  <p class="col-span-1 font-semibold text-gray-140 text-md text-right">
-                    <Show when={totals.data}>
-                      {member.share.div(totals.data!.currentBlockShareFee).toDecimals(0).toString()}
-                    </Show>
-                  </p>
+                  const fuelLeft = member.share.toShortString({ belowOne: 4, belowThousand: 2, afterThousand: 1 });
 
-                  <p class="col-span-1 font-semibold text-gray-140 text-md text-right">
-                    <Show when={totals.data && !totals.data.totalSharesSupply.isZero()}>
-                      {member.share.div(totals.data!.totalSharesSupply).toPercent().toShortString(2, 8)}%
-                    </Show>
-                  </p>
+                  return (
+                    <div class="grid p-2 grid-cols-5 md:grid-cols-6 items-center gap-3 odd:bg-gray-105 even:bg-black">
+                      <div class="flex items-center gap-1 col-span-1">
+                        <p class="text-xs font-semibold min-w-7">{idx() + 1}</p>
+                        <Avatar url={avatarSrcFromPrincipal(member.id)} size="sm" borderColor={COLORS.gray[140]} />
+                      </div>
 
-                  <p class="col-span-1 font-semibold text-gray-140 text-md text-right">
-                    <Show when={totals.data && !totals.data.totalSharesSupply.isZero()}>
-                      ${member.share.mul(tcyclesExchangeRate().toDynamic().toDecimals(12)).toDecimals(2).toString()}
-                    </Show>
-                  </p>
-                </div>
-              )}
-            </For>
+                      <Copyable class="col-span-1 hidden md:flex" text={member.id.toText()} ellipsis />
+
+                      <p class="col-span-1 font-semibold text-gray-140 text-md text-right">{fuelLeft}</p>
+
+                      <p class="col-span-1 font-semibold text-gray-140 text-md text-right">
+                        <Show when={totals.data}>{blocksLeft}</Show>
+                      </p>
+
+                      <p class="col-span-1 font-semibold text-gray-140 text-md text-right">
+                        <Show when={totals.data && !totals.data.totalSharesSupply.isZero()}>{poolShare}%</Show>
+                      </p>
+
+                      <p class="col-span-1 font-semibold text-gray-140 text-md text-right">
+                        <Show when={totals.data && !totals.data.totalSharesSupply.isZero()}>${shareWorth}</Show>
+                      </p>
+                    </div>
+                  );
+                }}
+              </For>
+            </Show>
           </div>
 
           <div class="grid px-2 grid-cols-6 items-center gap-3 text-md font-semibold text-gray-190">

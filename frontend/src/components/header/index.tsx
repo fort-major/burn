@@ -61,7 +61,7 @@ export function Header(props: IHeaderProps) {
   return (
     <>
       <header
-        class="fixed gap-10 md:gap-20 z-40 top-0 left-0 right-0 w-full md:h-[80px] bg-black flex flex-col px-5 pt-3 pb-7 md:px-10 md:py-5 md:flex-row md:justify-between md:items-center md:border-b md:border-b-gray-120"
+        class="fixed gap-10 md:gap-20 z-40 top-0 left-0 right-0 w-full md:h-[80px] bg-black flex flex-col px-5 py-3 md:pb-3 md:px-10 md:py-4 md:flex-row md:justify-between md:items-center md:border-b md:border-b-gray-120"
         classList={{ [props.class!]: !!props.class }}
       >
         <div class="flex justify-between items-center md:justify-start">
@@ -121,7 +121,7 @@ export function Header(props: IHeaderProps) {
               />
             </Match>
             <Match when={isAuthorized()}>
-              <div class="gap-4 items-center flex pl-4 md:border-l border-l-gray-120">
+              <div class="gap-4 items-center flex pb-4 md:pb-0 md:pl-4 md:border-l border-l-gray-120">
                 <ProfileMini onClick={deauthorize} avatarSize="md" />
                 <Icon
                   kind={EIconKind.Logout}

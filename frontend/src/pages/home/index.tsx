@@ -206,7 +206,10 @@ export function HomePage() {
         <h3 class="font-primary font-semibold text-2xl">Stats</h3>
         <Show when={totals.data}>
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-y-16">
-            <Stat data={totals.data!.totalTcyclesBurned.toDecimals(2).toString()} title="Total Burned TCycles" />
+            <Stat
+              data={totals.data!.totalTcyclesBurned.toShortString({ belowOne: 4, belowThousand: 2, afterThousand: 0 })}
+              title="Total Burned TCycles"
+            />
             <Stat
               data={totals.data!.currentBurnTokenReward.toDynamic().toDecimals(4).toString()}
               title="Current Block BURN Reward"
@@ -226,10 +229,11 @@ export function HomePage() {
               />
             </Show>
             <Stat
-              data={totals.data!.totalBurnTokenMinted.toDynamic().toDecimals(1).toString()}
+              data={totals
+                .data!.totalBurnTokenMinted.toDynamic()
+                .toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 1 })}
               title="Total BURN Supply"
             />
-            <Stat data={totals.data!.totalBurners.toString()} title="Pool Members" />
           </div>
         </Show>
       </div>
