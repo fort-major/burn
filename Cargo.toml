@@ -1,5 +1,5 @@
 [workspace]
-members = ["backend/src/can_burner", "backend/src/shared"]
+members = ["backend/src/can_burner", "backend/src/shared", "backend/src/t"]
 resolver = "2"
 
 [profile.release]
@@ -10,17 +10,18 @@ opt-level = 'z'
 panic = 'abort'
 
 [workspace.dependencies]
+ic-cdk = "0.13"
+ic-stable-structures = "0.6"
+ic-cdk-timers = "0.7"
+ic-verifiable-credentials = { path = "../verifiable-credentials-sdk" }
+ic-e8s = "0.1.2"
+ic-ledger-types = "0.13"
+icrc-ledger-types = "0.1"
 candid = "0.10"
 serde = "1.0"
-ic-cdk = "0.13"
-ic-cdk-timers = "0.7"
-icrc-ledger-types = "0.1"
-ic-ledger-types = "0.13"
 num-bigint = "0.4"
 chrono = { version = "0.4", default-features = false }
 futures = { version = "0.3", default-features = false }
 lazy_static = "1.4"
-ic-e8s = "0.1.2"
 garde = { version = "0.18", features = ["derive"] }
-ic-stable-structures = "0.6"
 sha2 = "0.10"

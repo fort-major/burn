@@ -834,6 +834,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "t"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "dotenv",
+ "ic-cdk 0.13.5",
+ "ic-cdk-timers",
+ "ic-e8s",
+ "ic-ledger-types",
+ "ic-stable-structures",
+ "icrc-ledger-types",
+ "lazy_static",
+ "num-bigint",
+ "serde",
+ "sha2",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
