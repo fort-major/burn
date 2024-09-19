@@ -13,7 +13,7 @@ panic = 'abort'
 ic-cdk = "0.13"
 ic-stable-structures = "0.6"
 ic-cdk-timers = "0.7"
-ic-verifiable-credentials = { path = "../verifiable-credentials-sdk" }
+ic-verifiable-credentials = { path = "../verifiable-credentials-sdk/rust-packages/ic-verifiable-credentials" }
 ic-e8s = "0.1.2"
 ic-ledger-types = "0.13"
 icrc-ledger-types = "0.1"
