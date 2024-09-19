@@ -1,11 +1,12 @@
 import { Copyable } from "@components/copyable";
 import { EIconKind, Icon } from "@components/icon";
+import { useAuth } from "@store/auth";
 import { useBurner } from "@store/burner";
 import { COLORS } from "@utils/colors";
 import { E8s } from "@utils/math";
 import { eventHandler } from "@utils/security";
 import { IClass, ONE_MIN_NS, ONE_SEC_NS } from "@utils/types";
-import { createSignal, For, JSX, Match, onCleanup, onMount, Show, Switch } from "solid-js";
+import { createEffect, createSignal, For, JSX, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 
 const Btn = (props: {
   color: string;
@@ -120,7 +121,36 @@ const Stat = (props: { title: string; data?: string }) => (
 export const areWeOnMobile = () => window.innerWidth <= 640;
 
 export function HomePage() {
-  const { totals } = useBurner();
+  const { isReadyToFetch } = useAuth();
+  const { totals, poolMembers, fetchPoolMembers } = useBurner();
+
+  onMount(() => {
+    if (!isReadyToFetch()) return;
+    if (poolMembers().length !== 0) return;
+
+    fetchPoolMembers();
+  });
+
+  createEffect(
+    on(isReadyToFetch, (ready) => {
+      if (!ready) return;
+      if (poolMembers().length !== 0) return;
+
+      fetchPoolMembers();
+    })
+  );
+
+  const circulatingSupply = () => totals.data?.totalBurnTokenMinted;
+  const totalSupply = () => {
+    const c = circulatingSupply();
+    if (!c) return;
+
+    const nonMinted = poolMembers()
+      .map((it) => it.unclaimedReward)
+      .reduce((prev, cur) => prev.add(cur), E8s.zero());
+
+    return c.add(nonMinted);
+  };
 
   return (
     <div class="bg-black text-white relative flex flex-col gap-20 pb-32 sm:pb-10">
@@ -229,11 +259,15 @@ export function HomePage() {
               />
             </Show>
             <Stat
-              data={totals
-                .data!.totalBurnTokenMinted.toDynamic()
-                .toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 1 })}
-              title="Total BURN Supply"
+              data={circulatingSupply()!.toDynamic().toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 1 })}
+              title="Circulating BURN Supply"
             />
+            <Show when={totalSupply()}>
+              <Stat
+                data={totalSupply()!.toDynamic().toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 1 })}
+                title="Total BURN Supply"
+              />
+            </Show>
           </div>
         </Show>
       </div>
