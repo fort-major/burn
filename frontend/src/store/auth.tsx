@@ -72,7 +72,14 @@ export function AuthStore(props: IChildren) {
       const rememberedProvider = retrieveRememberedAuthProvider();
 
       if (rememberedProvider !== null) {
-        await authorize(rememberedProvider, true);
+        try {
+          await authorize(rememberedProvider, true);
+        } catch (e) {
+          logErr(ErrorCode.AUTH, debugStringify(e));
+          storeRememberedAuthProvider(null);
+        } finally {
+          enable();
+        }
       }
     })
   );
@@ -156,30 +163,23 @@ export function AuthStore(props: IChildren) {
       }
 
       if (!isRemembered) {
-        try {
-          await new Promise((res, rej) =>
-            client.login({
-              identityProvider: iiFeHost(),
-              onSuccess: res,
-              onError: rej,
-              maxTimeToLive: ONE_WEEK_NS,
-            })
-          );
+        await new Promise((res, rej) =>
+          client.login({
+            identityProvider: iiFeHost(),
+            onSuccess: res,
+            onError: rej,
+            maxTimeToLive: ONE_WEEK_NS,
+          })
+        );
 
-          const identity = client.getIdentity();
+        const identity = client.getIdentity();
 
-          await initIdentity(identity);
+        await initIdentity(identity);
 
-          storeRememberedAuthProvider("II");
-          enable();
+        storeRememberedAuthProvider("II");
+        enable();
 
-          return true;
-        } catch (e) {
-          logErr(ErrorCode.AUTH, debugStringify(e));
-          enable();
-
-          return false;
-        }
+        return true;
       }
 
       storeRememberedAuthProvider(null);
