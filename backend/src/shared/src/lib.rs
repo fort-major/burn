@@ -4,6 +4,7 @@ use lazy_static::lazy_static;
 use serde::Deserialize;
 
 pub mod burner;
+pub mod decideid;
 mod env;
 pub mod icrc1;
 
@@ -11,7 +12,7 @@ pub const CMC_CAN_ID: &str = "rkp4c-7iaaa-aaaaa-aaaca-cai";
 pub const ICP_CAN_ID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
 pub const MEMO_TOP_UP_CANISTER: u64 = 1347768404_u64;
 pub const ICP_FEE: u64 = 10_000u64;
-pub const CYCLES_BURNER_FEE: u128 = 100_000_000_000_u128;
+pub const CYCLES_BURNER_FEE: u128 = 10_000_000_000_u128;
 pub const MIN_ICP_STAKE_E8S_U64: u64 = 5000_0000;
 
 pub const ONE_MINUTE_NS: u64 = 1_000_000_000 * 60;

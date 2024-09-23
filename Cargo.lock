@@ -1983,11 +1983,13 @@ version = "0.1.0"
 dependencies = [
  "candid",
  "dotenv",
+ "ic-canister-sig-creation",
  "ic-cdk 0.13.5",
  "ic-cdk-timers",
  "ic-e8s",
  "ic-ledger-types",
  "ic-stable-structures",
+ "ic-verifiable-credentials",
  "icrc-ledger-types",
  "lazy_static",
  "num-bigint",
@@ -2140,25 +2142,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
-]
-
-[[package]]
-name = "t"
-version = "0.1.0"
-dependencies = [
- "candid",
- "dotenv",
- "ic-cdk 0.13.5",
- "ic-cdk-timers",
- "ic-e8s",
- "ic-ledger-types",
- "ic-stable-structures",
- "ic-verifiable-credentials",
- "icrc-ledger-types",
- "lazy_static",
- "num-bigint",
- "serde",
- "sha2 0.10.8",
 ]
 
 [[package]]

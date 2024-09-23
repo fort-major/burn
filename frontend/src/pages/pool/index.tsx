@@ -183,6 +183,10 @@ export const PoolPage = () => {
       <div class="flex flex-col gap-4">
         <p class="font-normal text-lg text-white">Mint all unclaimed BURN tokens?</p>
         <div class="flex flex-col gap-2">
+          <p class="font-normal text-sm text-white">
+            $BURN is supported by an absolute majority of wallets. We still would like to kindly ask you to{" "}
+            <span class="font-bold">check if the wallet you send to supports $BURN</span>.
+          </p>
           <p class="font-semibold text-sm text-gray-140">
             Recepient Principal ID <span class="text-errorRed">*</span>
           </p>
