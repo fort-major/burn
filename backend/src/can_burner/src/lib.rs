@@ -15,8 +15,8 @@ use shared::burner::types::TCycles;
 use shared::icrc1::ICRC1CanisterClient;
 use shared::{CYCLES_BURNER_FEE, ENV_VARS, ICP_CAN_ID, MIN_ICP_STAKE_E8S_U64};
 use utils::{
-    assert_running, deposit_cycles, lottery_and_pos, set_init_seed_one_timer, STATE,
-    STOPPED_FOR_UPDATE,
+    assert_caller_is_dev, assert_running, deposit_cycles, lottery_and_pos, set_init_seed_one_timer,
+    STATE, STOPPED_FOR_UPDATE,
 };
 
 use std::time::Duration;
@@ -147,6 +147,28 @@ fn migrate_msq_account(req: MigrateMsqAccountRequest) -> MigrateMsqAccountRespon
         .expect("Unable to migrate MSQ account");
 
     MigrateMsqAccountResponse {}
+}
+
+#[update]
+fn enable_lottery() {
+    assert_caller_is_dev();
+
+    STATE.with_borrow_mut(|s| {
+        let mut info = s.get_info();
+        info.enable_lottery();
+        s.set_info(info);
+    });
+}
+
+#[update]
+fn disable_lottery() {
+    assert_caller_is_dev();
+
+    STATE.with_borrow_mut(|s| {
+        let mut info = s.get_info();
+        info.disable_lottery();
+        s.set_info(info);
+    });
 }
 
 #[query]

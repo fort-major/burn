@@ -238,7 +238,7 @@ export function HomePage() {
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-y-16">
             <Stat
               data={totals.data!.totalTcyclesBurned.toShortString({ belowOne: 4, belowThousand: 2, afterThousand: 0 })}
-              title="Total Burned TCycles"
+              title="Total Burned Fuel"
             />
             <Stat
               data={totals.data!.currentBurnTokenReward.toDynamic().toDecimals(4).toString()}

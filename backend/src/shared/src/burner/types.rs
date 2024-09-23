@@ -66,7 +66,8 @@ pub struct BurnerStateInfo {
     pub seed: Vec<u8>,
     pub current_pos_round: u64,
     pub pos_round_delay_ns: u64,
-    pub current_pos_index: u64,
+
+    pub lottery_enabled: Option<bool>,
 
     pub tmp_can_migrate: Option<BTreeSet<Principal>>,
 }
@@ -76,6 +77,18 @@ impl BurnerStateInfo {
         self.seed = seed;
         self.current_burn_token_reward = E8s::from(POS_ROUND_START_REWARD_E8S);
         self.pos_round_delay_ns = POS_ROUND_DELAY_NS;
+    }
+
+    pub fn is_lottery_enabled(&self) -> bool {
+        self.lottery_enabled.unwrap_or_default()
+    }
+
+    pub fn enable_lottery(&mut self) {
+        self.lottery_enabled = Some(true);
+    }
+
+    pub fn disable_lottery(&mut self) {
+        self.lottery_enabled = Some(false);
     }
 
     pub fn complete_round(&mut self) {

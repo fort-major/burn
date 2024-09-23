@@ -118,7 +118,11 @@ export const InfoPage = () => {
                     <div class="grid p-2 grid-cols-5 md:grid-cols-6 items-center gap-3 odd:bg-gray-105 even:bg-black">
                       <div class="flex items-center gap-1 col-span-1">
                         <p class="text-xs font-semibold min-w-7">{idx() + 1}</p>
-                        <Avatar url={avatarSrcFromPrincipal(member.id)} size="sm" borderColor={COLORS.gray[140]} />
+                        <Avatar
+                          url={avatarSrcFromPrincipal(member.id)}
+                          size="sm"
+                          borderColor={member.isVerifiedViaDecideID ? COLORS.orange : COLORS.gray[140]}
+                        />
                       </div>
 
                       <Copyable class="col-span-1 hidden md:flex" text={member.id.toText()} ellipsis />

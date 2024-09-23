@@ -1,33 +1,43 @@
-import { Accessor, createContext, createEffect, createSignal, on, onCleanup, onMount, useContext } from "solid-js";
-import { IChildren, ONE_MIN_NS } from "../utils/types";
+import { createContext, createEffect, createSignal, on, onCleanup, onMount, useContext } from "solid-js";
+import { IChildren, ONE_WEEK_NS } from "../utils/types";
 import { ErrorCode, err, logErr, logInfo } from "../utils/error";
-import { createStore, produce, Store } from "solid-js/store";
-import { useAuth } from "./auth";
-import { GetTotalsResponse } from "@/declarations/burner/burner.did";
+import { createStore, Store } from "solid-js/store";
+import { iiFeHost, useAuth } from "./auth";
 import { newBurnerActor, optUnwrap } from "@utils/backend";
-import { DEFAULT_TOKENS, TPrincipalStr, useTokens } from "./tokens";
+import { DEFAULT_TOKENS, useTokens } from "./tokens";
 import { E8s, EDs } from "@utils/math";
 import { Principal } from "@dfinity/principal";
 import { debugStringify } from "@utils/encoding";
+import {
+  requestVerifiablePresentation,
+  VerifiablePresentationResponse,
+} from "@dfinity/verifiable-credentials/request-verifiable-presentation";
 
 export interface ITotals {
   totalSharesSupply: EDs;
   totalTcyclesBurned: EDs;
   totalBurnTokenMinted: E8s;
-  totalBurners: bigint;
   currentBurnTokenReward: E8s;
   posStartKey?: Principal;
   currentPosRound: bigint;
   currentBlockShareFee: EDs;
   posRoundDelayNs: bigint;
+
+  totalBurners: bigint;
+  totalVerifiedAccounts: bigint;
+  totalLotteryParticipants: bigint;
+
   yourShareTcycles: EDs;
   yourUnclaimedReward: E8s;
+  yourDecideIdVerificationStatus: boolean;
+  yourLotteryEligibilityStatus: boolean;
 }
 
 export interface IPoolMember {
   id: Principal;
   share: EDs;
   unclaimedReward: E8s;
+  isVerifiedViaDecideID: boolean;
 }
 
 export interface IBurnerStoreContext {
@@ -47,6 +57,12 @@ export interface IBurnerStoreContext {
 
   poolMembers: () => IPoolMember[];
   fetchPoolMembers: () => Promise<void>;
+
+  canMigrateMsqAccount: () => boolean;
+  migrateMsqAccount: () => Promise<void>;
+
+  canVerifyDecideId: () => boolean;
+  verifyDecideId: () => Promise<void>;
 }
 
 const BurnerContext = createContext<IBurnerStoreContext>();
@@ -62,13 +78,25 @@ export function useBurner(): IBurnerStoreContext {
 }
 
 export function BurnerStore(props: IChildren) {
-  const { assertReadyToFetch, assertAuthorized, anonymousAgent, isAuthorized, agent, identity, disable, enable } =
-    useAuth();
+  const {
+    assertReadyToFetch,
+    assertAuthorized,
+    anonymousAgent,
+    isAuthorized,
+    agent,
+    identity,
+    disable,
+    enable,
+    authProvider,
+    iiClient,
+    deauthorize,
+  } = useAuth();
   const { subaccounts, fetchSubaccountOf, balanceOf, fetchBalanceOf } = useTokens();
 
   const [totals, setTotals] = createStore<IBurnerStoreContext["totals"]>();
   const [poolMembers, setPoolMembers] = createSignal<IPoolMember[]>([]);
   const [int, setInt] = createSignal<NodeJS.Timeout>();
+  const [canMigrate, setCanMigrate] = createSignal(false);
 
   onMount(() => {
     const t = setInterval(() => {
@@ -98,6 +126,10 @@ export function BurnerStore(props: IChildren) {
       if (ready) {
         fetchSubaccountOf(identity()!.getPrincipal());
         fetchTotals();
+
+        if (authProvider() === "MSQ") {
+          fetchCanMigrateMsqAccount();
+        }
       }
     })
   );
@@ -114,14 +146,20 @@ export function BurnerStore(props: IChildren) {
       totalSharesSupply: EDs.new(resp.total_share_supply, 12),
       totalTcyclesBurned: EDs.new(resp.total_tcycles_burned, 12),
       totalBurnTokenMinted: E8s.new(resp.total_burn_token_minted),
-      totalBurners: resp.total_burners,
       currentBurnTokenReward: E8s.new(resp.current_burn_token_reward),
       posStartKey: optUnwrap(resp.pos_start_key),
       posRoundDelayNs: resp.pos_round_delay_ns,
       currentPosRound: resp.current_pos_round,
+      currentBlockShareFee: EDs.new(resp.current_share_fee, 12),
+
+      totalBurners: resp.total_burners,
+      totalLotteryParticipants: resp.total_lottery_participants,
+      totalVerifiedAccounts: resp.total_verified_accounts,
+
       yourShareTcycles: EDs.new(resp.your_share_tcycles, 12),
       yourUnclaimedReward: E8s.new(resp.your_unclaimed_reward_e8s),
-      currentBlockShareFee: EDs.new(resp.current_share_fee, 12),
+      yourDecideIdVerificationStatus: resp.your_decide_id_verification_status,
+      yourLotteryEligibilityStatus: resp.your_lottery_eligibility_status,
     };
 
     setTotals({ data: iTotals });
@@ -147,6 +185,7 @@ export function BurnerStore(props: IChildren) {
           id: entry[0],
           share: EDs.new(entry[1], 12),
           unclaimedReward: E8s.new(entry[2]),
+          isVerifiedViaDecideID: entry[3],
         };
 
         members.push(iPoolMember);
@@ -206,7 +245,7 @@ export function BurnerStore(props: IChildren) {
     const myDepositAccount = getMyDepositAccount()!;
     const b = balanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount)!;
     const burner = newBurnerActor(agent()!);
-    await burner.stake(b - 10_000n);
+    await burner.stake({ qty_e8s_u64: b - 10_000n });
 
     enable();
 
@@ -240,7 +279,7 @@ export function BurnerStore(props: IChildren) {
     const b = balanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount)!;
 
     const burner = newBurnerActor(agent()!);
-    await burner.withdraw(b - 10_000n, to);
+    await burner.withdraw({ qty_e8s: b - 10_000n, to });
 
     enable();
 
@@ -263,7 +302,7 @@ export function BurnerStore(props: IChildren) {
     disable();
 
     const burner = newBurnerActor(agent()!);
-    const result = await burner.claim_reward(to);
+    const result = await burner.claim_reward({ to });
 
     if ("Err" in result) {
       logErr(ErrorCode.UNKNOWN, debugStringify(result.Err));
@@ -276,6 +315,122 @@ export function BurnerStore(props: IChildren) {
 
     fetchTotals();
     logInfo(`Successfully claimed all BURN!`);
+  };
+
+  const fetchCanMigrateMsqAccount = async () => {
+    assertAuthorized();
+
+    const burner = newBurnerActor(agent()!);
+    const result = await burner.can_migrate_msq_account();
+
+    setCanMigrate(result);
+  };
+
+  const canMigrateMsqAccount = () => {
+    if (!isAuthorized()) return false;
+    if (!canMigrate()) return false;
+    if (authProvider() === "II") return false;
+
+    return true;
+  };
+
+  const migrateMsqAccount: IBurnerStoreContext["migrateMsqAccount"] = async () => {
+    assertAuthorized();
+
+    disable();
+
+    try {
+      const iiIdentity = await accessIiIdentity();
+
+      const burner = newBurnerActor(agent()!);
+      await burner.migrate_msq_account({ to: iiIdentity.getPrincipal() });
+
+      await deauthorize();
+      window.location.reload();
+    } finally {
+      enable();
+    }
+  };
+
+  const accessIiIdentity = async () => {
+    const client = iiClient();
+    if (!client) {
+      enable();
+      err(ErrorCode.AUTH, "Uninitialized auth client");
+    }
+
+    const isAuthenticated = await client.isAuthenticated();
+
+    if (isAuthenticated) {
+      return client.getIdentity();
+    }
+
+    await new Promise((res, rej) =>
+      client.login({
+        identityProvider: iiFeHost(),
+        onSuccess: res,
+        onError: rej,
+        maxTimeToLive: ONE_WEEK_NS,
+      })
+    );
+
+    return client.getIdentity();
+  };
+
+  const canVerifyDecideId: IBurnerStoreContext["canVerifyDecideId"] = () => {
+    if (!isAuthorized()) return false;
+
+    const t = totals.data;
+    if (!t) return false;
+
+    const p = authProvider();
+    if (p === "MSQ") return false;
+
+    return !t.yourDecideIdVerificationStatus;
+  };
+
+  const verifyDecideId: IBurnerStoreContext["verifyDecideId"] = async () => {
+    assertAuthorized();
+
+    disable();
+
+    try {
+      const userPrincipal = identity()!.getPrincipal();
+
+      const jwt: string = await new Promise((res, rej) => {
+        requestVerifiablePresentation({
+          onSuccess: async (verifiablePresentation: VerifiablePresentationResponse) => {
+            if ("Ok" in verifiablePresentation) {
+              res(verifiablePresentation.Ok);
+            } else {
+              rej(new Error(verifiablePresentation.Err));
+            }
+          },
+          onError(err) {
+            rej(new Error(err));
+          },
+          issuerData: {
+            origin: "https://id.decideai.xyz/",
+            canisterId: Principal.fromText("qgxyr-pyaaa-aaaah-qdcwq-cai"),
+          },
+          credentialData: {
+            credentialSpec: {
+              credentialType: "ProofOfUniqueness",
+              arguments: {},
+            },
+            credentialSubject: userPrincipal,
+          },
+          identityProvider: new URL(iiFeHost()),
+        });
+      });
+
+      const burner = newBurnerActor(agent()!);
+      await burner.verify_decide_id({ jwt });
+
+      fetchTotals();
+    } finally {
+      enable();
+    }
   };
 
   return (
@@ -292,6 +447,11 @@ export function BurnerStore(props: IChildren) {
         canWithdraw,
         canClaimReward,
         claimReward,
+
+        canMigrateMsqAccount,
+        migrateMsqAccount,
+        canVerifyDecideId,
+        verifyDecideId,
       }}
     >
       {props.children}

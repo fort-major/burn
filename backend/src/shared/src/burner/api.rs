@@ -27,6 +27,7 @@ pub struct GetTotalsResponse {
     pub current_pos_round: u64,
     pub pos_round_delay_ns: u64,
     pub current_share_fee: TCycles,
+    pub is_lottery_enabled: bool,
 
     pub total_burners: u64,
     pub total_verified_accounts: u64,

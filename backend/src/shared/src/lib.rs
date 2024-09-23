@@ -1,5 +1,8 @@
 use candid::{CandidType, Principal};
-use env::{CAN_BURNER_CANISTER_ID, CAN_BURN_TOKEN_CANISTER_ID, CAN_ROOT_KEY};
+use env::{
+    CAN_BURNER_CANISTER_ID, CAN_BURN_TOKEN_CANISTER_ID, CAN_IC_HOST, CAN_II_CANISTER_ID, CAN_MODE,
+    CAN_ROOT_KEY,
+};
 use lazy_static::lazy_static;
 use serde::Deserialize;
 
@@ -29,16 +32,27 @@ lazy_static! {
 pub struct EnvVarsState {
     pub burner_canister_id: Principal,
     pub burn_token_canister_id: Principal,
-    pub ic_root_key: Vec<u8>,
+    pub ii_canister_id: Principal,
+    pub ii_origin: String,
+    pub ic_root_key_der: Vec<u8>,
 }
 
 impl EnvVarsState {
     pub fn new() -> Self {
+        let ii_origin = if CAN_MODE == "ic" {
+            String::from("https://identity.ic0.app/")
+        } else {
+            String::from(CAN_IC_HOST).replace("http://", &format!("http://{}.", CAN_II_CANISTER_ID))
+        };
+
         Self {
             burner_canister_id: Principal::from_text(CAN_BURNER_CANISTER_ID).unwrap(),
             burn_token_canister_id: Principal::from_text(CAN_BURN_TOKEN_CANISTER_ID).unwrap(),
+            ii_canister_id: Principal::from_text(CAN_II_CANISTER_ID).unwrap(),
 
-            ic_root_key: CAN_ROOT_KEY
+            ii_origin,
+
+            ic_root_key_der: CAN_ROOT_KEY
                 .trim_start_matches("[")
                 .trim_end_matches("]")
                 .split(",")

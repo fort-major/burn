@@ -1,11 +1,11 @@
 use candid::Principal;
-use ic_canister_sig_creation::IC_ROOT_PUBLIC_KEY;
+use ic_canister_sig_creation::extract_raw_root_pk_from_der;
 use ic_verifiable_credentials::{
     issuer_api::CredentialSpec, validate_ii_presentation_and_claims, VcFlowSigners,
 };
 
-const II_CANISTER_ID: &str = "rdmx6-jaaaa-aaaaa-aaadq-cai";
-const II_ORIGIN: &str = "https://identity.ic0.app/";
+use crate::ENV_VARS;
+
 const ISSUER_CANISTER_ID: &str = "qgxyr-pyaaa-aaaah-qdcwq-cai";
 const ISSUER_ORIGIN: &str = "https://id.decideai.xyz/";
 const CRED_TYPE: &str = "ProofOfUniqueness";
@@ -16,8 +16,8 @@ const CRED_TYPE: &str = "ProofOfUniqueness";
  */
 pub fn verify_decide_id_proof(jwt: &str, caller: Principal, now: u128) -> Result<(), String> {
     let signers = VcFlowSigners {
-        ii_canister_id: Principal::from_text(II_CANISTER_ID).unwrap(),
-        ii_origin: II_ORIGIN.into(),
+        ii_canister_id: ENV_VARS.ii_canister_id,
+        ii_origin: ENV_VARS.ii_origin.clone(),
         issuer_canister_id: Principal::from_text(ISSUER_CANISTER_ID).unwrap(),
         issuer_origin: ISSUER_ORIGIN.into(),
     };
@@ -27,7 +27,10 @@ pub fn verify_decide_id_proof(jwt: &str, caller: Principal, now: u128) -> Result
         arguments: None,
     };
 
-    validate_ii_presentation_and_claims(&jwt, caller, &signers, &spec, &IC_ROOT_PUBLIC_KEY, now)
+    let pk =
+        extract_raw_root_pk_from_der(&ENV_VARS.ic_root_key_der).expect("Unable to extract the PK");
+
+    validate_ii_presentation_and_claims(&jwt, caller, &signers, &spec, &pk, now)
         .map_err(|e| format!("{:?}", e))
         .map(|_| ())
 }

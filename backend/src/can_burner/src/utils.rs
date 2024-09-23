@@ -53,9 +53,15 @@ pub fn lottery_and_pos() {
         return;
     }
 
-    let lottery_round_complete = STATE.with_borrow_mut(|s| s.lottery_round());
+    let lottery_enabled = STATE.with_borrow(|s| s.get_info().is_lottery_enabled());
 
-    set_timer(Duration::from_nanos(0), move || pos(lottery_round_complete));
+    if lottery_enabled {
+        let lottery_round_complete = STATE.with_borrow_mut(|s| s.lottery_round());
+
+        set_timer(Duration::from_nanos(0), move || pos(lottery_round_complete));
+    } else {
+        pos(false);
+    }
 }
 
 pub fn pos(lottery_round_complete: bool) {

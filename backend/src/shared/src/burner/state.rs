@@ -79,6 +79,8 @@ impl BurnerState {
 
             info.note_migrated(caller);
 
+            self.set_info(info);
+
             Ok(())
         } else {
             Err(String::from("No entry found"))
@@ -155,7 +157,7 @@ impl BurnerState {
         }
     }
 
-    // returns true if the round is complete
+    // returns true if any winner was determined
     pub fn lottery_round(&mut self) -> bool {
         if self.eligible_for_lottery.is_empty() {
             return false;
@@ -344,6 +346,8 @@ impl BurnerState {
     pub fn get_totals(&self, caller: &Principal) -> GetTotalsResponse {
         let info = self.get_info();
         let fee = BurnerStateInfo::get_current_fee();
+        let is_lottery_enabled = info.is_lottery_enabled();
+
         let (share, unclaimed_reward) = self.shares.get(caller).unwrap_or_default();
         let verified_via_decide_id = self.verified_via_decide_id.contains_key(caller);
         let eligible_for_lottery = self.eligible_for_lottery.contains_key(caller);
@@ -357,6 +361,7 @@ impl BurnerState {
             current_pos_round: info.current_pos_round,
             pos_round_delay_ns: info.pos_round_delay_ns,
             current_share_fee: fee,
+            is_lottery_enabled,
 
             total_burners: self.shares.len(),
             total_verified_accounts: self.verified_via_decide_id.len(),

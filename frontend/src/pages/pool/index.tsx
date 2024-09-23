@@ -6,6 +6,7 @@ import { Copyable } from "@components/copyable";
 import { EIconKind, Icon } from "@components/icon";
 import { Modal } from "@components/modal";
 import { Page } from "@components/page";
+import { getAvatarSrc, getPseudonym, ProfileFull } from "@components/profile/profile";
 import { Spoiler } from "@components/spoiler";
 import { TextInput } from "@components/text-input";
 import { AccountIdentifier, SubAccount } from "@dfinity/ledger-icp";
@@ -23,7 +24,7 @@ import { bytesToHex, tokensToStr } from "@utils/encoding";
 import { logInfo } from "@utils/error";
 import { eventHandler } from "@utils/security";
 import { ONE_MIN_NS, Result } from "@utils/types";
-import { batch, createEffect, createSignal, For, Match, on, onMount, Show, Switch } from "solid-js";
+import { batch, createEffect, createResource, createSignal, For, Match, on, onMount, Show, Switch } from "solid-js";
 
 export const PoolPage = () => {
   const { isAuthorized, identity, agent, assertAuthorized, disable, enable } = useAuth();
@@ -248,6 +249,8 @@ export const PoolPage = () => {
 
   return (
     <Page slim>
+      <ProfileFull />
+
       <div class="flex flex-col gap-4">
         <p class={headerClass}>Deposited ICP</p>
         <div class="flex flex-col md:flex-row md:justify-between gap-10 md:gap-4">
@@ -353,13 +356,17 @@ export const PoolPage = () => {
               fallback={<p class="font-semibold text-xs text-gray-125">Burn ICP to join the pool</p>}
               each={Array(burnoutLeftoverBlocks()!).fill(0)}
             >
-              {(_, idx) => (
-                <Icon
-                  class={idx() === burnoutLeftoverBlocks() - 1 ? "animate-pulse" : undefined}
-                  kind={EIconKind.BlockFilled}
-                  color={COLORS.orange}
-                />
-              )}
+              {(_, idx) => {
+                return idx() < 100 || idx() === burnoutLeftoverBlocks()! - 1 ? (
+                  <Icon
+                    class={idx() === burnoutLeftoverBlocks() - 1 ? "animate-pulse" : undefined}
+                    kind={EIconKind.BlockFilled}
+                    color={COLORS.orange}
+                  />
+                ) : idx() === 100 ? (
+                  <p class="w-6 text-center">...</p>
+                ) : undefined;
+              }}
             </For>
           </div>
         </Show>
