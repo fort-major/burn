@@ -70,7 +70,7 @@ export function ProfileFull(props: IProfileProps) {
               >
                 <div
                   onClick={handleVerifyDecideIdClick}
-                  class="flex items-center flex-nowrap justify-center gap-2 text-white font-semibold rounded-full px-6 py-2 cursor-pointer bg-gray-110"
+                  class="flex items-center flex-nowrap justify-center gap-2 text-white font-normal text-sm rounded-full px-6 py-2 cursor-pointer bg-gray-110"
                 >
                   <span class="text-nowrap">Verify via</span>
                   <img class="h-6" src="/decide-id-logo.svg" />
@@ -83,10 +83,10 @@ export function ProfileFull(props: IProfileProps) {
               </Show>
               <Show when={canMigrateMsqAccount()}>
                 <p
-                  class="underline font-normal text-gray-140 cursor-pointer text-center"
+                  class="underline text-xs text-gray-140 cursor-pointer text-center"
                   onClick={handleMigratePopupOpenClick}
                 >
-                  Migrate to Internet Identity
+                  Migrate
                 </p>
               </Show>
             </div>

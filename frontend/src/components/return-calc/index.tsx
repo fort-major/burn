@@ -1,6 +1,6 @@
 import { useBurner } from "@store/burner";
 import { useTokens } from "@store/tokens";
-import { E8s, EDs } from "@utils/math";
+import { E8s } from "@utils/math";
 import { eventHandler } from "@utils/security";
 import { createSignal, Show } from "solid-js";
 
@@ -38,7 +38,7 @@ export const ReturnCalculator = () => {
     const t = totals.data!;
     const shareAbs = E8s.fromPercentNum(poolSharePercent()).divNum(100n);
 
-    return unwrapRewards(b.toBigIntBase(), t.currentPosRound).mul(shareAbs);
+    return unwrapRewards(b.toBigIntBase(), t.currentPosRound, t.isLotteryEnabled).mul(shareAbs);
   };
 
   const handleMyInvestmentChange = eventHandler((e: Event & { target: HTMLInputElement }) => {
@@ -89,7 +89,7 @@ export const ReturnCalculator = () => {
             <p class="font-semibold text-6xl leading-[50px]">
               {burn()!.toShortString({ belowOne: 4, belowThousand: 2, afterThousand: 1 })}
             </p>
-            <p class="text-gray-140">my total BURN reward</p>
+            <p class="text-gray-140">minimum BURN reward</p>
           </div>
           <div class="flex flex-col">
             <p class="font-semibold text-6xl leading-[50px]">{blocks()!.toDynamic().toDecimals(0).toString()}</p>
@@ -101,12 +101,16 @@ export const ReturnCalculator = () => {
   );
 };
 
-function unwrapRewards(blocksLeft: bigint, curBlock: bigint): E8s {
+function unwrapRewards(blocksLeft: bigint, curBlock: bigint, lotteryEnabled: boolean): E8s {
   const epoch = curBlock / 5040n;
   let curBlockReward = 1024_0000_0000n / 2n ** epoch;
 
   if (curBlockReward < 1_0000_0000n) {
     curBlockReward = 1_0000_0000n;
+  }
+
+  if (lotteryEnabled) {
+    curBlockReward /= 2n;
   }
 
   const blocksTilHalving = 5040n - (curBlock % 5040n);
@@ -116,5 +120,5 @@ function unwrapRewards(blocksLeft: bigint, curBlock: bigint): E8s {
 
   return E8s.new(curBlockReward)
     .mulNum(blocksTilHalving)
-    .add(unwrapRewards(blocksLeft - blocksTilHalving, curBlock + blocksTilHalving));
+    .add(unwrapRewards(blocksLeft - blocksTilHalving, curBlock + blocksTilHalving, lotteryEnabled));
 }

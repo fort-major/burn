@@ -22,6 +22,7 @@ export interface ITotals {
   currentPosRound: bigint;
   currentBlockShareFee: EDs;
   posRoundDelayNs: bigint;
+  isLotteryEnabled: boolean;
 
   totalBurners: bigint;
   totalVerifiedAccounts: bigint;
@@ -151,6 +152,7 @@ export function BurnerStore(props: IChildren) {
       posRoundDelayNs: resp.pos_round_delay_ns,
       currentPosRound: resp.current_pos_round,
       currentBlockShareFee: EDs.new(resp.current_share_fee, 12),
+      isLotteryEnabled: resp.is_lottery_enabled,
 
       totalBurners: resp.total_burners,
       totalLotteryParticipants: resp.total_lottery_participants,

@@ -216,11 +216,9 @@ fn post_upgrade_hook() {
 
 #[update]
 fn stop() {
-    STOPPED_FOR_UPDATE.with_borrow_mut(|(dev, is_stopped)| {
-        if caller() != *dev {
-            panic!("Access denied");
-        }
+    assert_caller_is_dev();
 
+    STOPPED_FOR_UPDATE.with_borrow_mut(|(dev, is_stopped)| {
         if !*is_stopped {
             *is_stopped = true;
         }
@@ -229,11 +227,9 @@ fn stop() {
 
 #[update]
 fn resume() {
-    STOPPED_FOR_UPDATE.with_borrow_mut(|(dev, is_stopped)| {
-        if caller() != *dev {
-            panic!("Access denied");
-        }
+    assert_caller_is_dev();
 
+    STOPPED_FOR_UPDATE.with_borrow_mut(|(dev, is_stopped)| {
         if *is_stopped {
             *is_stopped = false;
         }

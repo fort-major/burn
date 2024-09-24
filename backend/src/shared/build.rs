@@ -1,4 +1,4 @@
-const MODE: &str = "dev";
+const MODE: &str = "ic";
 
 // DO NOT MOVE PREVIOUS LINE OR THE BUILD WONT WORK!!!
 
