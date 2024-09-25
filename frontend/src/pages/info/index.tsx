@@ -2,6 +2,7 @@ import { Avatar } from "@components/avatar";
 import { BalanceOf } from "@components/balance-of";
 import { Btn } from "@components/btn";
 import { Copyable } from "@components/copyable";
+import { EIconKind, Icon } from "@components/icon";
 import { Page } from "@components/page";
 import { ReturnCalculator } from "@components/return-calc";
 import { useAuth } from "@store/auth";
@@ -84,7 +85,12 @@ export const InfoPage = () => {
       </div>
 
       <div class="flex flex-col gap-4">
-        <p class="text-white font-semibold text-4xl">Active Pool Members</p>
+        <p class="text-white font-semibold text-4xl flex gap-4 items-center">
+          Active Pool Members
+          <Show when={totals.data?.isLotteryEnabled}>
+            <Icon kind={EIconKind.Lottery} color={COLORS.orange} />
+          </Show>
+        </p>
         <div class="flex flex-col gap-4">
           <div class="mb-2 grid grid-cols-5 md:grid-cols-6 items-start md:items-center gap-3 text-xs font-semibold text-gray-140">
             <p class="col-span-1 text-right"></p>
@@ -118,7 +124,11 @@ export const InfoPage = () => {
                     <div class="grid p-2 grid-cols-5 md:grid-cols-6 items-center gap-3 odd:bg-gray-105 even:bg-black">
                       <div class="flex items-center gap-1 col-span-1">
                         <p class="text-xs font-semibold min-w-7">{idx() + 1}</p>
-                        <Avatar url={avatarSrcFromPrincipal(member.id)} size="sm" borderColor={COLORS.gray[140]} />
+                        <Avatar
+                          url={avatarSrcFromPrincipal(member.id)}
+                          size="sm"
+                          borderColor={member.isVerifiedViaDecideID ? COLORS.orange : COLORS.gray[140]}
+                        />
                       </div>
 
                       <Copyable class="col-span-1 hidden md:flex" text={member.id.toText()} ellipsis />

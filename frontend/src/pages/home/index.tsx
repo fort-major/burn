@@ -244,18 +244,12 @@ export function HomePage() {
               data={totals.data!.currentBurnTokenReward.toDynamic().toDecimals(4).toString()}
               title="Current Block BURN Reward"
             />
-            <Stat data={`${totals.data!.posRoundDelayNs / ONE_SEC_NS}s`} title="Current Block Time" />
+            <Stat data={`${totals.data!.posRoundDelayNs / ONE_SEC_NS}s`} title="Block Time" />
             <Stat data={totals.data!.currentPosRound.toString()} title="Current Block Index" />
-            <Show
-              when={
-                totals.data!.currentBurnTokenReward.ge(E8s.one()) || totals.data!.posRoundDelayNs < 720n * ONE_MIN_NS
-              }
-            >
+            <Show when={totals.data!.currentBurnTokenReward.gt(E8s.new(140000n))}>
               <Stat
                 data={(5040n - (totals.data!.currentPosRound % 5040n)).toString() + " blocks"}
-                title={
-                  totals.data!.currentBurnTokenReward.ge(E8s.one()) ? "Until Reward Halving" : "Until Time Doubling"
-                }
+                title={"Until Reward Halving"}
               />
             </Show>
             <Stat
@@ -267,6 +261,9 @@ export function HomePage() {
                 data={totalSupply()!.toDynamic().toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 1 })}
                 title="Total BURN Supply"
               />
+            </Show>
+            <Show when={totals.data!.totalVerifiedAccounts > 0}>
+              <Stat data={totals.data!.totalVerifiedAccounts.toString()} title="Verified Accounts" />
             </Show>
           </div>
         </Show>

@@ -17,6 +17,8 @@ ic-e8s = { workspace = true }
 ic-stable-structures = { workspace = true }
 sha2 = { workspace = true }
 ic-ledger-types = { workspace = true }
+ic-canister-sig-creation = { workspace = true }
+ic-verifiable-credentials = { workspace = true }
 
 [build-dependencies]
 dotenv = "0.15"

@@ -21,9 +21,11 @@ export type TAuthProvider = "MSQ" | "II";
 
 export interface IAuthStoreContext {
   authorize: (provider: TAuthProvider, isMembered: boolean) => Promise<boolean>;
-  deauthorize: () => Promise<boolean>;
+  deauthorize: () => Promise<void>;
   authProvider: () => TAuthProvider | undefined;
   identity: Accessor<Identity | undefined>;
+
+  iiClient: Accessor<AuthClient | undefined>;
 
   agent: Accessor<Agent | undefined>;
   anonymousAgent: Accessor<Agent | undefined>;
@@ -99,26 +101,18 @@ export function AuthStore(props: IChildren) {
 
     disable();
 
-    const msq = msqClient();
+    await msqClient()?.requestLogout();
+    await iiClient()?.logout();
 
-    let res = true;
+    storeRememberedAuthProvider(null);
 
-    if (msq) {
-      res = await msq.requestLogout();
-    } else {
-      await iiClient()!.logout();
-    }
-
-    if (res) {
-      batch(() => {
-        setAgent(undefined);
-        setIdentity(undefined);
-      });
-    }
+    batch(() => {
+      setAgent(undefined);
+      setIdentity(undefined);
+      setMsqClient(undefined);
+    });
 
     enable();
-
-    return res;
   };
 
   const authorize: IAuthStoreContext["authorize"] = async (provider, isRemembered) => {
@@ -163,23 +157,27 @@ export function AuthStore(props: IChildren) {
       }
 
       if (!isRemembered) {
-        await new Promise((res, rej) =>
-          client.login({
-            identityProvider: iiFeHost(),
-            onSuccess: res,
-            onError: rej,
-            maxTimeToLive: ONE_WEEK_NS,
-          })
-        );
+        try {
+          await new Promise((res, rej) =>
+            client.login({
+              identityProvider: iiFeHost(),
+              onSuccess: res,
+              onError: rej,
+              maxTimeToLive: ONE_WEEK_NS,
+            })
+          );
 
-        const identity = client.getIdentity();
+          const identity = client.getIdentity();
 
-        await initIdentity(identity);
+          await initIdentity(identity);
 
-        storeRememberedAuthProvider("II");
-        enable();
+          storeRememberedAuthProvider("II");
+          enable();
 
-        return true;
+          return true;
+        } finally {
+          enable();
+        }
       }
 
       storeRememberedAuthProvider(null);
@@ -236,6 +234,7 @@ export function AuthStore(props: IChildren) {
         disabled,
         disable,
         enable,
+        iiClient,
       }}
     >
       {props.children}
@@ -257,8 +256,8 @@ function storeRememberedAuthProvider(provider: TAuthProvider | null) {
   }
 }
 
-function iiFeHost(): string | undefined {
-  if (import.meta.env.MODE === "ic") return undefined;
+export function iiFeHost(): string {
+  if (import.meta.env.MODE === "ic") return "https://identity.ic0.app/";
 
   return import.meta.env.VITE_IC_HOST.replace("http://", `http://${import.meta.env.VITE_II_CANISTER_ID}.`);
 }
