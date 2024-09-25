@@ -412,7 +412,7 @@ export function BurnerStore(props: IChildren) {
             rej(new Error(err));
           },
           issuerData: {
-            origin: "https://id.decideai.xyz/",
+            origin: "https://id.decideai.xyz",
             canisterId: Principal.fromText("qgxyr-pyaaa-aaaah-qdcwq-cai"),
           },
           credentialData: {

@@ -24,7 +24,7 @@ export interface IProfileProps extends IClass {
 }
 
 export function ProfileFull(props: IProfileProps) {
-  const { identity, isAuthorized } = useAuth();
+  const { identity, isAuthorized, authProvider } = useAuth();
   const { totals, canMigrateMsqAccount, migrateMsqAccount, canVerifyDecideId, verifyDecideId } = useBurner();
 
   const [migratePopupVisible, setMigratePopupVisible] = createSignal(false);
@@ -43,6 +43,10 @@ export function ProfileFull(props: IProfileProps) {
     if (!t) return false;
 
     return t.yourDecideIdVerificationStatus;
+  };
+
+  const isMSQ = () => {
+    return authProvider() === "MSQ";
   };
 
   const handleVerifyDecideIdClick = eventHandler(() => {
@@ -64,10 +68,10 @@ export function ProfileFull(props: IProfileProps) {
             </div>
 
             <div class="flex flex-col items-start sm:flex-row sm:items-center gap-4">
-              <Show
-                when={!isDecideAIVerified() && canVerifyDecideId()}
-                fallback={<p class="text-xs text-gray-140">Only Internet Identity users can verify their personhood</p>}
-              >
+              <Show when={isMSQ()}>
+                <p class="text-xs text-gray-140">Only Internet Identity users can verify their personhood</p>
+              </Show>
+              <Show when={canVerifyDecideId()}>
                 <div
                   onClick={handleVerifyDecideIdClick}
                   class="flex items-center flex-nowrap justify-center gap-2 text-white font-normal text- rounded-full px-6 py-2 cursor-pointer bg-gray-110"
