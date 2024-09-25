@@ -280,6 +280,11 @@ export function HomePage() {
             ICP you burn, the bigger your share!"
           />
           <AboutCard
+            class="bg-gray-120"
+            title="Everybody has a Chance"
+            desc="Half of each block reward is distributed to a single lucky pool member, with no respect to their pool share. To take part in this 'lottery', verify your account via Decide AI."
+          />
+          <AboutCard
             class="bg-gray-110"
             title="Green & Efficient"
             desc="Unlike other similar projects, BURN doesn't waste IC's compute power, 
@@ -298,8 +303,7 @@ export function HomePage() {
             class="bg-gray-120"
             title="Simple Tokenomics"
             desc="The block reward is halved once per each 5040 blocks (~1 week), 
-            until it reaches 1 BURN per block. After that, the block time doubles 
-            once per each 5040 blocks, until it reaches 720 minutes (12h). This 
+            until it reaches 0.0014 BURN per block (~1 BURN a day). This 
             keeps the inflation reasonable, stimulating the value over time."
           />
         </AboutCols>
