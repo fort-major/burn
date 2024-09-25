@@ -218,7 +218,7 @@ fn post_upgrade_hook() {
 fn stop() {
     assert_caller_is_dev();
 
-    STOPPED_FOR_UPDATE.with_borrow_mut(|(dev, is_stopped)| {
+    STOPPED_FOR_UPDATE.with_borrow_mut(|(_dev, is_stopped)| {
         if !*is_stopped {
             *is_stopped = true;
         }
@@ -229,7 +229,7 @@ fn stop() {
 fn resume() {
     assert_caller_is_dev();
 
-    STOPPED_FOR_UPDATE.with_borrow_mut(|(dev, is_stopped)| {
+    STOPPED_FOR_UPDATE.with_borrow_mut(|(_dev, is_stopped)| {
         if *is_stopped {
             *is_stopped = false;
         }

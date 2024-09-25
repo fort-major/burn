@@ -56,21 +56,21 @@ export function ProfileFull(props: IProfileProps) {
   return (
     <>
       <div class="flex gap-10 items-center justify-between">
-        <div class="flex gap-5 items-center">
+        <div class="flex gap-5 items-start sm:items-center">
           <Avatar url={avatarSrc()} size="lg" borderColor={isDecideAIVerified() ? COLORS.orange : COLORS.gray[140]} />
           <div class="flex flex-col gap-3">
             <div class="flex flex-row gap-4 items-center">
               <p class="font-semibold text-white text-4xl">{pseudonym() ? pseudonym() : "Anonymous"}</p>
             </div>
 
-            <div class="flex flex-row items-center gap-4">
+            <div class="flex flex-col items-start sm:flex-row sm:items-center gap-4">
               <Show
                 when={!isDecideAIVerified() && canVerifyDecideId()}
                 fallback={<p class="text-xs text-gray-140">Only Internet Identity users can verify their personhood</p>}
               >
                 <div
                   onClick={handleVerifyDecideIdClick}
-                  class="flex items-center flex-nowrap justify-center gap-2 text-white font-normal text-sm rounded-full px-6 py-2 cursor-pointer bg-gray-110"
+                  class="flex items-center flex-nowrap justify-center gap-2 text-white font-normal text- rounded-full px-6 py-2 cursor-pointer bg-gray-110"
                 >
                   <span class="text-nowrap">Verify via</span>
                   <img class="h-6" src="/decide-id-logo.svg" />
@@ -78,7 +78,7 @@ export function ProfileFull(props: IProfileProps) {
               </Show>
               <Show when={isDecideAIVerified()}>
                 <p class="flex items-center gap-2 font-semibold text-xs bg-gray-120 h-7 px-2 rounded-lg">
-                  Verified Real Person <Icon kind={EIconKind.CheckCircle} size={15} color={COLORS.chartreuse} />
+                  Verified For Lottery <Icon kind={EIconKind.CheckCircle} size={15} color={COLORS.chartreuse} />
                 </p>
               </Show>
               <Show when={canMigrateMsqAccount()}>
@@ -107,7 +107,8 @@ export function ProfileFull(props: IProfileProps) {
                 Internet Identity account.
               </p>
               <p class="font-semibold text-xs text-errorRed">
-                Be cautious! After clicking the button below, you won't be able to change your decision!
+                Be cautious! After clicking the button below, you won't be able to change your decision! It is advised
+                to claim all unclaimed BURN before continuing.
               </p>
             </div>
 

@@ -249,9 +249,7 @@ export const PoolPage = () => {
 
   return (
     <Page slim>
-      <Show when={false}>
-        <ProfileFull />
-      </Show>
+      <ProfileFull />
 
       <div class="flex flex-col gap-4">
         <p class={headerClass}>Deposited ICP</p>
@@ -350,9 +348,6 @@ export const PoolPage = () => {
         <Show fallback={<p class={headerClass}>Burn ICP to Continue</p>} when={totals.data && burnoutLeftoverBlocks()!}>
           <div class="flex flex-row justify-between items-center gap-4">
             <p class={headerClass}>Minting In Progress</p>
-            <Show when={totals.data?.isLotteryEnabled}>
-              <p class="text-sm font-semibold text-orange">Lottery In Progress</p>
-            </Show>
           </div>
           <p>
             Enough fuel for {burnoutLeftoverBlocks()} blocks (approx.{" "}

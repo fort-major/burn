@@ -14,7 +14,7 @@ pub type TCycles = ECs<12>;
 pub type TimestampNs = u64;
 pub type Memory = VirtualMemory<DefaultMemoryImpl>;
 
-pub const TCYCLE_POS_ROUND_BASE_FEE: u64 = 5_000_000_000_u64;
+pub const TCYCLE_POS_ROUND_BASE_FEE: u64 = 25_000_000_000_u64;
 
 pub const POS_ROUND_START_REWARD_E8S: u64 = 1024_0000_0000_u64;
 pub const POS_ROUND_END_REWARD_E8S: u64 = 0_0014_0000_u64;
