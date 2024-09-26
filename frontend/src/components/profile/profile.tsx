@@ -104,11 +104,14 @@ export function ProfileFull(props: IProfileProps) {
             <div class="flex flex-col gap-2">
               <p class="text-md">
                 As an OG pool member, you have a one-time right to migrate your account from MSQ to the Internet
-                Identity.
+                Identity. Read the following instruction carefully.
               </p>
-              <p class="font-semibold text-md text-gray-140">
+              <p class="text-md text-gray-140">
                 This action is irreversible and it will transfer both: leftover fuel and unclaimed BURN tokens to your
-                Internet Identity account.
+                Internet Identity account. During the migration flow, you will be prompted to authorize via the Internet
+                Identity - <span class="font-bold">select the same anchor that you use for Decide ID</span>. After that
+                you will be prompted to log out from your MSQ account - click "Approve". After that, the page will
+                refresh and you should manually login to your Internet Identity once again.
               </p>
               <p class="font-semibold text-xs text-errorRed">
                 Be cautious! After clicking the button below, you won't be able to change your decision! It is advised

@@ -280,7 +280,7 @@ export function HomePage() {
             ICP you burn, the bigger your share!"
           />
           <AboutCard
-            class="bg-gray-120"
+            class="bg-gray-115"
             title="Everybody has a Chance"
             desc="Half of each block reward is distributed to a single lucky pool member, with no respect to their pool share. To take part in this 'lottery', verify your account via Decide AI."
           />
@@ -293,14 +293,14 @@ export function HomePage() {
             any negative impact on the network and the environment!"
           />
           <AboutCard
-            class="bg-gray-105"
+            class="bg-gray-108"
             title="Fuel Burns, You Know"
             desc="Each block each pool member loses a little piece of their share. 
             This enables a dynamic environment, where new people can join the fun 
             even if they're really late."
           />
           <AboutCard
-            class="bg-gray-120"
+            class="bg-gray-105"
             title="Simple Tokenomics"
             desc="The block reward is halved once per each 5040 blocks (~1 week), 
             until it reaches 0.0014 BURN per block (~1 BURN a day). This 

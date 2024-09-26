@@ -123,8 +123,8 @@ export function BurnerStore(props: IChildren) {
   );
 
   createEffect(
-    on(isAuthorized, (ready) => {
-      if (ready) {
+    on(agent, (a) => {
+      if (a!) {
         fetchSubaccountOf(identity()!.getPrincipal());
         fetchTotals();
 
