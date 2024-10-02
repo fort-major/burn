@@ -14,7 +14,7 @@ pub struct GetBurnersRequest {
 
 #[derive(CandidType, Deserialize)]
 pub struct GetBurnersResponse {
-    pub entries: Vec<(Principal, TCycles, E8s, bool)>,
+    pub entries: Vec<(Principal, TCycles, E8s, bool, u64)>,
 }
 
 #[derive(CandidType, Deserialize)]

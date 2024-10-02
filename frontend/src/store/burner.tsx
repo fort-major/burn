@@ -39,6 +39,7 @@ export interface IPoolMember {
   share: EDs;
   unclaimedReward: E8s;
   isVerifiedViaDecideID: boolean;
+  lotteryRoundsWon: bigint;
 }
 
 export interface IBurnerStoreContext {
@@ -188,6 +189,7 @@ export function BurnerStore(props: IChildren) {
           share: EDs.new(entry[1], 12),
           unclaimedReward: E8s.new(entry[2]),
           isVerifiedViaDecideID: entry[3],
+          lotteryRoundsWon: entry[4]
         };
 
         members.push(iPoolMember);

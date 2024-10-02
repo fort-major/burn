@@ -2,7 +2,7 @@ type ClaimRewardRequest = record { to : principal };
 type ClaimRewardResponse = record { result : Result };
 type GetBurnersRequest = record { take : nat32; start : opt principal };
 type GetBurnersResponse = record {
-  entries : vec record { principal; nat; nat; bool };
+  entries : vec record { principal; nat; nat; bool; nat64 };
 };
 type GetTotalsResponse = record {
   total_lottery_participants : nat64;

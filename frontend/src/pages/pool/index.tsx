@@ -73,13 +73,33 @@ export const PoolPage = () => {
 
     if (!t.totalSharesSupply.toBool()) return undefined;
 
-    return t.currentBurnTokenReward
+    const lotteryEnabled = t.isLotteryEnabled;
+
+    let reward = t.currentBurnTokenReward
       .toDynamic()
       .toDecimals(12)
       .mul(t.yourShareTcycles)
       .div(t.totalSharesSupply)
       .toDecimals(8)
       .toE8s();
+
+    if (lotteryEnabled) {
+      reward = reward.divNum(2n);
+    }
+
+    return reward;
+  };
+
+  const lotteryPostfix = () => {
+    const t = totals.data;
+    if (!t) return "";
+
+    if (t.isLotteryEnabled && t.yourLotteryEligibilityStatus)
+      return `+ a chance for ${t.currentBurnTokenReward
+        .divNum(2n)
+        .toShortString({ belowOne: 4, belowThousand: 0, afterThousand: 0 })} more BURN`;
+
+    return "";
   };
 
   onMount(() => {
@@ -311,7 +331,9 @@ export const PoolPage = () => {
                 onRefreshOverride={fetchTotals}
                 balance={totals.data!.yourUnclaimedReward.toBigIntRaw()}
               />
-              <p class="text-sm text-gray-140">Reward per Block: {myBlockCut()?.toString() ?? 0} BURN</p>
+              <p class="text-sm text-gray-140">
+                Reward per Block: {myBlockCut()?.toString() ?? 0} BURN {lotteryPostfix()}
+              </p>
               <p class="text-sm text-gray-140">
                 Pool Share: {myShare()?.toPercent().toDecimals(4).toString() ?? 0}% (
                 {totals.data?.yourShareTcycles?.toString()} / {totals.data?.totalSharesSupply.toString()})

@@ -1075,9 +1075,9 @@ dependencies = [
 
 [[package]]
 name = "ic-e8s"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d803080f697948ffa142d3a42d1179c4fdeb0cf0ef2adc88494c35d4c6a87589"
+checksum = "8bf7fd7c6a07f10e36cacb7031344504303b01c935e613b91d9bd1306edd1889"
 dependencies = [
  "candid",
  "ic-stable-structures",

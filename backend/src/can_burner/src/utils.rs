@@ -40,6 +40,9 @@ thread_local! {
             eligible_for_lottery: StableBTreeMap::init(
                 MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(3)))
             ),
+            lottery_rounds_won: StableBTreeMap::init(
+                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(4)))
+            ),
         }
     )
 }

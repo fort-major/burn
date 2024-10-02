@@ -14,7 +14,7 @@ import { E8s, EDs } from "@utils/math";
 import { createEffect, For, on, onMount, Show } from "solid-js";
 
 export const InfoPage = () => {
-  const { isReadyToFetch } = useAuth();
+  const { isReadyToFetch, identity } = useAuth();
   const { icpSwapUsdExchangeRates } = useTokens();
   const { poolMembers, fetchPoolMembers, totals } = useBurner();
 
@@ -121,9 +121,14 @@ export const InfoPage = () => {
                   const fuelLeft = member.share.toShortString({ belowOne: 4, belowThousand: 2, afterThousand: 1 });
 
                   return (
-                    <div class="grid p-2 grid-cols-5 md:grid-cols-6 items-center gap-3 odd:bg-gray-105 even:bg-black">
+                    <div class="grid p-2 grid-cols-5 md:grid-cols-6 items-center gap-3 odd:bg-gray-105 even:bg-black relative">
                       <div class="flex items-center gap-1 col-span-1">
-                        <p class="text-xs font-semibold min-w-7">{idx() + 1}</p>
+                        <p
+                          class="text-xs text-gray-140 font-semibold min-w-7"
+                          classList={{ ["text-white"]: identity()?.getPrincipal().compareTo(member.id) === "eq" }}
+                        >
+                          {idx() + 1}
+                        </p>
                         <Avatar
                           url={avatarSrcFromPrincipal(member.id)}
                           size="sm"
@@ -146,6 +151,14 @@ export const InfoPage = () => {
                       <p class="col-span-1 font-semibold text-gray-140 text-md text-right">
                         <Show when={totals.data && !totals.data.totalSharesSupply.isZero()}>${shareWorth}</Show>
                       </p>
+
+                      <Show when={member.isVerifiedViaDecideID}>
+                        <div
+                          class={`absolute right-[-10px] top-[-7px] text-black font-semibold text-[10px] leading-[8px] bg-orange rounded-full p-1`}
+                        >
+                          {member.lotteryRoundsWon.toString()}
+                        </div>
+                      </Show>
                     </div>
                   );
                 }}

@@ -16,6 +16,7 @@ pub struct BurnerState {
     pub info: Cell<BurnerStateInfo, Memory>,
     pub verified_via_decide_id: StableBTreeMap<Principal, (), Memory>,
     pub eligible_for_lottery: StableBTreeMap<Principal, (), Memory>,
+    pub lottery_rounds_won: StableBTreeMap<Principal, u64, Memory>,
 }
 
 impl BurnerState {
@@ -185,6 +186,9 @@ impl BurnerState {
         self.shares
             .insert(winner, (share, unclaimed_reward + cur_reward));
 
+        let rounds_won = self.lottery_rounds_won.get(&winner).unwrap_or_default();
+        self.lottery_rounds_won.insert(winner, rounds_won + 1);
+
         true
     }
 
@@ -324,8 +328,15 @@ impl BurnerState {
                 }
 
                 let is_lottery_participant = self.eligible_for_lottery.contains_key(&account);
+                let rounds_won = self.lottery_rounds_won.get(&account).unwrap_or_default();
 
-                entries.push((account, share, unclaimed_reward, is_lottery_participant));
+                entries.push((
+                    account,
+                    share,
+                    unclaimed_reward,
+                    is_lottery_participant,
+                    rounds_won,
+                ));
                 i += 1;
 
                 if i == req.take {
