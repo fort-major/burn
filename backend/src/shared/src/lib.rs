@@ -1,3 +1,4 @@
+use burner::types::TimestampNs;
 use candid::{CandidType, Principal};
 use env::{
     CAN_BURNER_CANISTER_ID, CAN_BURN_TOKEN_CANISTER_ID, CAN_IC_HOST, CAN_II_CANISTER_ID, CAN_MODE,
@@ -9,6 +10,8 @@ use serde::Deserialize;
 pub mod burner;
 pub mod decideid;
 mod env;
+pub mod furnace;
+pub mod icpswap;
 pub mod icrc1;
 
 pub const CMC_CAN_ID: &str = "rkp4c-7iaaa-aaaaa-aaaca-cai";
@@ -23,6 +26,19 @@ pub const ONE_HOUR_NS: u64 = ONE_MINUTE_NS * 60;
 pub const ONE_DAY_NS: u64 = ONE_HOUR_NS * 24;
 pub const ONE_WEEK_NS: u64 = ONE_DAY_NS * 7;
 pub const ONE_MONTH_NS: u64 = ONE_WEEK_NS * 30;
+
+pub trait Guard<T> {
+    fn validate_and_escape(
+        &mut self,
+        state: &T,
+        caller: Principal,
+        now: TimestampNs,
+    ) -> Result<(), String>;
+}
+
+pub fn escape_script_tag(s: &str) -> String {
+    html_escape::encode_script(s).to_string()
+}
 
 lazy_static! {
     pub static ref ENV_VARS: EnvVarsState = EnvVarsState::new();
