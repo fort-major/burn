@@ -659,6 +659,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
 
 [[package]]
+name = "furnace"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "futures",
+ "garde",
+ "ic-cdk 0.13.5",
+ "ic-cdk-timers",
+ "ic-e8s",
+ "ic-ledger-types",
+ "ic-stable-structures",
+ "icrc-ledger-types",
+ "serde",
+ "shared",
+]
+
+[[package]]
 name = "futures"
 version = "0.3.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,9 +1,11 @@
-use candid::Principal;
+use candid::{Nat, Principal};
 use ic_cdk::{api::call::CallResult, call};
 use ic_e8s::c::E8s;
 use icrc_ledger_types::{
-    icrc1::account::Account,
-    icrc1::transfer::{BlockIndex, TransferArg, TransferError},
+    icrc1::{
+        account::Account,
+        transfer::{BlockIndex, NumTokens, TransferArg, TransferError},
+    },
     icrc2::transfer_from::{TransferFromArgs, TransferFromError},
 };
 
@@ -32,5 +34,23 @@ impl ICRC1CanisterClient {
         arg: TransferFromArgs,
     ) -> CallResult<(Result<BlockIndex, TransferFromError>,)> {
         call(self.canister_id, "icrc2_transfer_from", (arg,)).await
+    }
+
+    pub async fn icrc1_furnace_burn(
+        &self,
+        minter_account: Account,
+        from_subaccount: Option<[u8; 32]>,
+        amount: NumTokens,
+    ) -> CallResult<(Result<BlockIndex, TransferError>,)> {
+        let arg = TransferArg {
+            from_subaccount,
+            amount,
+            to: minter_account,
+            fee: Some(Nat::from(0u64)),
+            created_at_time: None,
+            memo: None,
+        };
+
+        self.icrc1_transfer(arg).await
     }
 }

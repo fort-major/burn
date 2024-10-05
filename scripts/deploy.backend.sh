@@ -16,6 +16,7 @@ file_name="./backend/.env.$mode"
 source $file_name
 
 dfx deploy --network=$network burner --argument "()"
+dfx deploy --network=$network furnace --argument "()"
 
 if [ $mode = dev ]; then
     dfx deploy --network=$network internet_identity 

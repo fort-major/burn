@@ -10,6 +10,11 @@
       "package": "burner",
       "type": "rust"
     },
+    "furnace": {
+      "candid": "backend/src/can_furnace/can.did",
+      "package": "furnace",
+      "type": "rust"
+    },
     "frontend": {
       "build": [
         ""

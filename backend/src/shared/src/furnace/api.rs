@@ -43,7 +43,7 @@ impl Guard<FurnaceState> for CreatePositionRequest {
             self.title = Some(trimmed_title);
         }
 
-        let info = state.get_info_ref();
+        let info = state.get_furnace_info_ref();
         let usd_value = info
             .get_whitelisted_token_usd_value(&self.token_can_id, self.qty.clone())
             .ok_or(String::from("The token is not whitelisted"))?;
@@ -83,7 +83,7 @@ impl Guard<FurnaceState> for AffectPositionRequest {
     ) -> Result<(), String> {
         self.validate(&()).map_err(|e| e.to_string())?;
 
-        let info = state.get_info_ref();
+        let info = state.get_furnace_info_ref();
         let usd_value = info
             .get_whitelisted_token_usd_value(&self.token_can_id, self.qty.clone())
             .ok_or(String::from("The token is not whitelisted"))?;

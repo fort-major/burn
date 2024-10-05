@@ -48,12 +48,16 @@ impl FurnaceInfo {
     pub fn whitelist_token(
         &mut self,
         can_id: Principal,
+        minter_account_owner: Principal,
+        minter_account_subaccount: Option<[u8; 32]>,
         fee: Nat,
         exchange_rate_usd: E8s,
         decimals: u8,
     ) {
         let token_info = WhitelistedToken {
             can_id,
+            minter_account_owner,
+            minter_account_subaccount,
             is_enabled: true,
             fee: EDs::new(fee.0, decimals),
             exchange_rate_usd,
@@ -312,6 +316,8 @@ impl Storable for FurnacePosition {
 pub struct WhitelistedToken {
     pub can_id: Principal,
     pub is_enabled: bool,
+    pub minter_account_owner: Principal,
+    pub minter_account_subaccount: Option<[u8; 32]>,
 
     pub fee: EDs,
     pub exchange_rate_usd: E8s,
@@ -320,6 +326,53 @@ pub struct WhitelistedToken {
 }
 
 impl Storable for WhitelistedToken {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        std::borrow::Cow::Owned(encode_one(self).expect("Unable to encode"))
+    }
+
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        decode_one(&bytes).expect("Unable to decode")
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+#[derive(CandidType, Deserialize, Default, Clone)]
+pub struct RaffleRoundInfo {
+    pub prize_distribution: Vec<E8s>,
+    pub random_numbers: Vec<E8s>,
+    pub winners: Vec<(PositionId, E8s)>,
+    pub cursor: Option<PositionId>,
+    pub from: E8s,
+}
+
+impl RaffleRoundInfo {
+    pub fn match_winner(&mut self, to: &E8s, position_id: PositionId, votes: E8s) -> bool {
+        let mut is_winner = false;
+        for i in 0..self.random_numbers.len() {
+            {
+                let rng = self.random_numbers.get(i).unwrap();
+
+                if rng >= &self.from && rng <= to {
+                    self.winners.push((position_id, votes.clone()));
+                    is_winner = true;
+                }
+            }
+
+            if is_winner {
+                self.random_numbers.remove(i);
+            }
+        }
+
+        is_winner
+    }
+
+    pub fn round_is_over(&self) -> bool {
+        self.random_numbers.is_empty()
+    }
+}
+
+impl Storable for RaffleRoundInfo {
     fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
         std::borrow::Cow::Owned(encode_one(self).expect("Unable to encode"))
     }

@@ -13,3 +13,4 @@ function generate_did() {
 cargo fix --all --allow-dirty
 
 generate_did "burner"
+generate_did "furnace"
