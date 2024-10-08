@@ -1,12 +1,14 @@
-use candid::{CandidType, Int, Nat, Principal};
+use candid::{decode_one, encode_one, CandidType, Int, Nat, Principal};
 use ic_cdk::{api::call::CallResult, call};
+use ic_e8s::c::E8s;
+use ic_stable_structures::{storable::Bound, Storable};
 use serde::Deserialize;
 
-use crate::ENV_VARS;
+use crate::{utils::f64_to_e8s, ENV_VARS};
 
 pub const ICPSWAP_CAN_ID: &str = "ggzvv-5qaaa-aaaag-qck7a-cai";
 
-pub type GetAllTokensResponse = Vec<ICPSwapTokenEntry>;
+pub type GetAllTokensResponse = Vec<ICPSwapTokenInfo>;
 
 #[derive(CandidType, Deserialize)]
 pub struct ICPSwapTokenEntry {
@@ -25,6 +27,24 @@ pub struct ICPSwapTokenEntry {
     pub symbol: String,
 }
 
+#[derive(CandidType, Deserialize)]
+pub struct ICPSwapTokenInfo {
+    pub can_id: Principal,
+    pub exchange_rate_usd: E8s,
+}
+
+impl Storable for ICPSwapTokenInfo {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        std::borrow::Cow::Owned(encode_one(self).expect("Unable to encode"))
+    }
+
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        decode_one(&bytes).expect("Unable to decode")
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
+
 pub struct ICPSwapClient {
     pub can_id: Principal,
     pub mock: bool,
@@ -38,44 +58,30 @@ impl ICPSwapClient {
         }
     }
 
-    pub async fn get_all_tokens(&self) -> CallResult<(GetAllTokensResponse,)> {
+    pub async fn get_all_tokens(&self) -> CallResult<GetAllTokensResponse> {
         if self.mock {
-            Ok((vec![
-                ICPSwapTokenEntry {
-                    address: ENV_VARS.burn_token_canister_id.to_text(),
-                    standard: String::from("ICRC-2"),
-                    name: String::from("MSQ Cycle Burn"),
-                    symbol: String::from("BURN"),
-                    priceUSD: 0.035,
-
-                    id: Nat::from(0u64),
-                    volumeUSD1d: 0.0,
-                    volumeUSD7d: 0.0,
-                    totalVolumeUSD: 0.0,
-                    volumeUSD: 0.0,
-                    feesUSD: 0.0,
-                    priceUSDChange: 0.0,
-                    txCount: Int::from(10u64),
+            Ok(vec![
+                ICPSwapTokenInfo {
+                    can_id: ENV_VARS.burn_token_canister_id,
+                    exchange_rate_usd: E8s::from(0_0556_0000u64),
                 },
-                ICPSwapTokenEntry {
-                    address: String::from("ryjl3-tyaaa-aaaaa-aaaba-cai"),
-                    standard: String::from("ICRC-1"),
-                    name: String::from("Internet Computer"),
-                    symbol: String::from("ICP"),
-                    priceUSD: 8.03,
-
-                    id: Nat::from(1u64),
-                    volumeUSD1d: 0.0,
-                    volumeUSD7d: 0.0,
-                    totalVolumeUSD: 0.0,
-                    volumeUSD: 0.0,
-                    feesUSD: 0.0,
-                    priceUSDChange: 0.0,
-                    txCount: Int::from(10u64),
+                ICPSwapTokenInfo {
+                    can_id: ENV_VARS.icp_token_canister_id,
+                    exchange_rate_usd: E8s::from(8_0300_0000u64),
                 },
-            ],))
+            ])
         } else {
-            call(self.can_id, "getAllTokens", ()).await
+            call::<(), (Vec<ICPSwapTokenEntry>,)>(self.can_id, "getAllTokens", ())
+                .await
+                .map(|(tokens,)| {
+                    tokens
+                        .into_iter()
+                        .map(|token| ICPSwapTokenInfo {
+                            can_id: Principal::from_text(token.address).unwrap(),
+                            exchange_rate_usd: f64_to_e8s(token.priceUSD),
+                        })
+                        .collect()
+                })
         }
     }
 }

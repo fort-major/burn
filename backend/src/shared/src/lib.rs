@@ -13,6 +13,7 @@ mod env;
 pub mod furnace;
 pub mod icpswap;
 pub mod icrc1;
+pub mod utils;
 
 pub const CMC_CAN_ID: &str = "rkp4c-7iaaa-aaaaa-aaaca-cai";
 pub const ICP_CAN_ID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
@@ -45,12 +46,20 @@ lazy_static! {
 }
 
 #[derive(CandidType, Deserialize, Clone)]
+pub enum CanisterMode {
+    Dev,
+    IC,
+}
+
+#[derive(CandidType, Deserialize, Clone)]
 pub struct EnvVarsState {
     pub burner_canister_id: Principal,
     pub burn_token_canister_id: Principal,
     pub ii_canister_id: Principal,
     pub ii_origin: String,
     pub ic_root_key_der: Vec<u8>,
+    pub icp_token_canister_id: Principal,
+    pub mode: CanisterMode,
 }
 
 impl EnvVarsState {
@@ -74,6 +83,13 @@ impl EnvVarsState {
                 .split(",")
                 .map(|chunk| chunk.trim().parse().expect("Unable to parse ic root key"))
                 .collect(),
+
+            icp_token_canister_id: Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap(),
+            mode: if CAN_MODE == "ic" {
+                CanisterMode::IC
+            } else {
+                CanisterMode::Dev
+            },
         }
     }
 }
