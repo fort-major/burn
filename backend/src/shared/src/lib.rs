@@ -1,13 +1,14 @@
 use burner::types::TimestampNs;
 use candid::{CandidType, Principal};
 use env::{
-    CAN_BURNER_CANISTER_ID, CAN_BURN_TOKEN_CANISTER_ID, CAN_IC_HOST, CAN_II_CANISTER_ID, CAN_MODE,
-    CAN_ROOT_KEY,
+    CAN_BURNER_CANISTER_ID, CAN_BURN_TOKEN_CANISTER_ID, CAN_FURNACE_CANISTER_ID, CAN_IC_HOST,
+    CAN_II_CANISTER_ID, CAN_MODE, CAN_ROOT_KEY,
 };
 use lazy_static::lazy_static;
 use serde::Deserialize;
 
 pub mod burner;
+pub mod cmc;
 pub mod decideid;
 mod env;
 pub mod furnace;
@@ -15,11 +16,8 @@ pub mod icpswap;
 pub mod icrc1;
 pub mod utils;
 
-pub const CMC_CAN_ID: &str = "rkp4c-7iaaa-aaaaa-aaaca-cai";
-pub const ICP_CAN_ID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
 pub const MEMO_TOP_UP_CANISTER: u64 = 1347768404_u64;
 pub const ICP_FEE: u64 = 10_000u64;
-pub const CYCLES_BURNER_FEE: u128 = 10_000_000_000_u128;
 pub const MIN_ICP_STAKE_E8S_U64: u64 = 5000_0000;
 
 pub const ONE_MINUTE_NS: u64 = 1_000_000_000 * 60;
@@ -55,10 +53,12 @@ pub enum CanisterMode {
 pub struct EnvVarsState {
     pub burner_canister_id: Principal,
     pub burn_token_canister_id: Principal,
+    pub furnace_canister_id: Principal,
     pub ii_canister_id: Principal,
     pub ii_origin: String,
     pub ic_root_key_der: Vec<u8>,
     pub icp_token_canister_id: Principal,
+    pub cycles_minting_canister_id: Principal,
     pub mode: CanisterMode,
 }
 
@@ -73,6 +73,7 @@ impl EnvVarsState {
         Self {
             burner_canister_id: Principal::from_text(CAN_BURNER_CANISTER_ID).unwrap(),
             burn_token_canister_id: Principal::from_text(CAN_BURN_TOKEN_CANISTER_ID).unwrap(),
+            furnace_canister_id: Principal::from_text(CAN_FURNACE_CANISTER_ID).unwrap(),
             ii_canister_id: Principal::from_text(CAN_II_CANISTER_ID).unwrap(),
 
             ii_origin,
@@ -85,6 +86,9 @@ impl EnvVarsState {
                 .collect(),
 
             icp_token_canister_id: Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap(),
+            cycles_minting_canister_id: Principal::from_text("rkp4c-7iaaa-aaaaa-aaaca-cai")
+                .unwrap(),
+
             mode: if CAN_MODE == "ic" {
                 CanisterMode::IC
             } else {

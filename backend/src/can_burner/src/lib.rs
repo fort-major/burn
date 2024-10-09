@@ -1,8 +1,10 @@
+use std::collections::BTreeMap;
+
 use candid::{Nat, Principal};
-use ic_cdk::api::{cycles_burn, time};
-use ic_cdk::{caller, export_candid, init, post_upgrade, query, update};
-use ic_cdk_timers::set_timer;
-use ic_ledger_types::Subaccount;
+use ic_cdk::api::time;
+use ic_cdk::{caller, export_candid, id, init, post_upgrade, query, update};
+use ic_e8s::c::E8s;
+use ic_ledger_types::{AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use shared::burner::api::{
@@ -11,15 +13,16 @@ use shared::burner::api::{
     RefundLostTokensRequest, RefundLostTokensResponse, StakeRequest, StakeResponse,
     VerifyDecideIdRequest, VerifyDecideIdResponse, WithdrawRequest, WithdrawResponse,
 };
-use shared::burner::types::TCycles;
-use shared::icrc1::ICRC1CanisterClient;
-use shared::{CYCLES_BURNER_FEE, ENV_VARS, ICP_CAN_ID, MIN_ICP_STAKE_E8S_U64};
-use utils::{
-    assert_caller_is_dev, assert_running, deposit_cycles, lottery_and_pos, set_init_seed_one_timer,
-    STATE, STOPPED_FOR_UPDATE,
+use shared::burner::types::{
+    BURNER_DEV_FEE_SUBACCOUNT, BURNER_REDISTRIBUTION_SUBACCOUNT, BURNER_SPIKE_SUBACCOUNT,
 };
-
-use std::time::Duration;
+use shared::icrc1::ICRC1CanisterClient;
+use shared::{ENV_VARS, ICP_FEE, MIN_ICP_STAKE_E8S_U64};
+use utils::{
+    assert_caller_is_dev, assert_running, lottery_and_pos, set_cycles_icp_exchange_rate_timer,
+    set_icp_redistribution_timer, set_init_seed_one_timer, set_spike_timer,
+    stake_callers_icp_for_redistribution, STATE, STOPPED_FOR_UPDATE,
+};
 
 mod utils;
 
@@ -28,8 +31,7 @@ async fn withdraw(req: WithdrawRequest) -> WithdrawResponse {
     assert_running();
 
     let c = caller();
-    let icp_can_id = Principal::from_text(ICP_CAN_ID).unwrap();
-    let icp_can = ICRC1CanisterClient::new(icp_can_id);
+    let icp_can = ICRC1CanisterClient::new(ENV_VARS.icp_token_canister_id);
 
     icp_can
         .icrc1_transfer(TransferArg {
@@ -56,28 +58,26 @@ async fn stake(req: StakeRequest) -> StakeResponse {
     assert_running();
 
     if req.qty_e8s_u64 < MIN_ICP_STAKE_E8S_U64 {
-        panic!("At least 0.5 ICP is required to fuel the furnace");
+        panic!("At least 0.5 ICP is required to fuel the pool");
     }
 
-    let cycles = deposit_cycles(req.qty_e8s_u64)
+    stake_callers_icp_for_redistribution(req.qty_e8s_u64)
         .await
-        .expect("Unable to call cycle canister")
-        .0
-        .expect("Unable to deposit cycles");
+        .expect("Unable to stake ICP");
 
-    let deposited_cycles: u128 = cycles.0.clone().try_into().unwrap();
-
-    set_timer(Duration::from_secs(120), move || {
-        // yes, you found it
-        cycles_burn(deposited_cycles - CYCLES_BURNER_FEE);
-    });
-
-    let shares_minted = TCycles::new(Nat::from(deposited_cycles).0);
+    let staked_icps_e12s = E8s::from(req.qty_e8s_u64)
+        .to_dynamic()
+        .to_decimals(12)
+        .to_const::<12>();
 
     STATE.with_borrow_mut(|s| {
+        let mut info = s.get_info();
+        let cycles_rate = info.get_icp_to_cycles_exchange_rate();
+
+        let shares_minted = staked_icps_e12s * cycles_rate;
+
         s.mint_share(shares_minted.clone(), caller());
 
-        let mut info = s.get_info();
         info.note_burned_cycles(shares_minted);
 
         s.set_info(info);
@@ -171,6 +171,45 @@ fn disable_lottery() {
     });
 }
 
+#[update]
+async fn withdraw_dev_fee_icp(qty: u64, account_id: AccountIdentifier) -> Result<u64, String> {
+    assert_caller_is_dev();
+
+    let arg = TransferArgs {
+        from_subaccount: Some(Subaccount(BURNER_DEV_FEE_SUBACCOUNT)),
+        to: account_id,
+        amount: Tokens::from_e8s(qty),
+        memo: Memo(2),
+        fee: Tokens::from_e8s(ICP_FEE),
+        created_at_time: None,
+    };
+
+    ic_ledger_types::transfer(ENV_VARS.icp_token_canister_id, arg)
+        .await
+        .map_err(|e| format!("{:?} {}", e.0, e.1))?
+        .map_err(|e| format!("{e}"))
+}
+
+#[query]
+fn get_account_ids() -> BTreeMap<String, AccountIdentifier> {
+    let mut map = BTreeMap::new();
+    
+    map.insert(
+        String::from("Dev Fee"),
+        AccountIdentifier::new(&id(), &Subaccount(BURNER_DEV_FEE_SUBACCOUNT)),
+    );
+    map.insert(
+        String::from("Redistribution"),
+        AccountIdentifier::new(&id(), &Subaccount(BURNER_REDISTRIBUTION_SUBACCOUNT)),
+    );
+    map.insert(
+        String::from("Spike"),
+        AccountIdentifier::new(&id(), &Subaccount(BURNER_SPIKE_SUBACCOUNT)),
+    );
+
+    map
+}
+
 #[query]
 fn can_migrate_msq_account() -> bool {
     STATE.with_borrow(|s| s.get_info().can_migrate(&caller()))
@@ -201,6 +240,10 @@ fn init_hook() {
     STOPPED_FOR_UPDATE.with_borrow_mut(|(dev, _)| *dev = caller());
 
     set_init_seed_one_timer();
+    set_cycles_icp_exchange_rate_timer();
+    set_icp_redistribution_timer();
+    set_spike_timer();
+
     lottery_and_pos();
 }
 
@@ -208,8 +251,9 @@ fn init_hook() {
 fn post_upgrade_hook() {
     STOPPED_FOR_UPDATE.with_borrow_mut(|(dev, _)| *dev = caller());
 
-    // TODO: delete before the next upgrade
-    STATE.with_borrow_mut(|s| s.init_tmp_can_migrate());
+    set_cycles_icp_exchange_rate_timer();
+    set_icp_redistribution_timer();
+    set_spike_timer();
 
     lottery_and_pos();
 }

@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::{cmp::max, collections::BTreeSet};
 
 use candid::{CandidType, Nat, Principal};
 use ic_cdk::{api::call::CallResult, call};
@@ -8,7 +8,7 @@ use num_bigint::BigUint;
 use serde::Deserialize;
 use sha2::Digest;
 
-use crate::ONE_MINUTE_NS;
+use crate::{cmc::XdrData, ONE_MINUTE_NS, ONE_MONTH_NS, ONE_WEEK_NS};
 
 pub type TCycles = ECs<12>;
 pub type TimestampNs = u64;
@@ -24,37 +24,20 @@ pub const POS_ACCOUNTS_PER_BATCH: u64 = 300;
 
 pub const UPDATE_SEED_DOMAIN: &[u8] = b"msq-burn-update-seed";
 
-pub struct CMCClient(pub Principal);
+pub const BURNER_REDISTRIBUTION_SUBACCOUNT: [u8; 32] = [0u8; 32];
+pub const BURNER_SPIKE_SUBACCOUNT: [u8; 32] = [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+];
+pub const BURNER_DEV_FEE_SUBACCOUNT: [u8; 32] = [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2,
+];
 
-#[derive(CandidType, Deserialize)]
-pub struct NotifyTopUpRequest {
-    pub block_index: u64,
-    pub canister_id: Principal,
-}
+pub const REDISTRIBUTION_SPIKE_SHARE_E8S: u64 = 4750_0000; // 47.5%
+pub const REDISTRIBUTION_FURNACE_SHARE_E8S: u64 = 5000_0000; // 50%
+pub const REDISTRIBUTION_DEV_SHARE_E8S: u64 = 0250_0000; // 2.5%
 
-#[derive(CandidType, Deserialize, Debug)]
-pub enum NotifyTopUpError {
-    Refunded {
-        block_index: Option<u64>,
-        reason: String,
-    },
-    InvalidTransaction(String),
-    Other {
-        error_message: String,
-        error_code: u64,
-    },
-    Processing,
-    TransactionTooOld(u64),
-}
-
-impl CMCClient {
-    pub async fn notify_top_up(
-        &self,
-        req: NotifyTopUpRequest,
-    ) -> CallResult<(Result<Nat, NotifyTopUpError>,)> {
-        call(self.0, "notify_top_up", (req,)).await
-    }
-}
+pub const SPIKE_RECORD_DOWNGRADE_TIMEOUT_NS: u64 = ONE_WEEK_NS * 2;
+pub const DEFAULT_SPIKE_TARGET_E8S: u64 = 100_0000_0000u64;
 
 #[derive(CandidType, Deserialize, Clone, Default, Debug)]
 pub struct BurnerStateInfo {
@@ -70,6 +53,10 @@ pub struct BurnerStateInfo {
     pub lottery_enabled: Option<bool>,
 
     pub tmp_can_migrate: Option<BTreeSet<Principal>>,
+
+    pub icp_to_cycles_exchange_rate: Option<TCycles>,
+    pub icp_burn_spike_target: Option<u64>,
+    pub prev_icp_burn_spike_timestamp_ns: Option<TimestampNs>,
 }
 
 impl BurnerStateInfo {
@@ -77,6 +64,47 @@ impl BurnerStateInfo {
         self.seed = seed;
         self.current_burn_token_reward = E8s::from(POS_ROUND_START_REWARD_E8S);
         self.pos_round_delay_ns = POS_ROUND_DELAY_NS;
+    }
+
+    pub fn get_icp_burn_spike_target(&self) -> u64 {
+        self.icp_burn_spike_target
+            .unwrap_or(DEFAULT_SPIKE_TARGET_E8S)
+    }
+
+    pub fn update_icp_burn_spike_target(&mut self, prev_target_reached: bool, now: TimestampNs) {
+        if self.prev_icp_burn_spike_timestamp_ns.is_none() {
+            self.prev_icp_burn_spike_timestamp_ns = Some(now);
+        }
+
+        let prev_target = self.get_icp_burn_spike_target();
+
+        if prev_target_reached {
+            self.prev_icp_burn_spike_timestamp_ns = Some(now);
+            self.icp_burn_spike_target = Some(prev_target * 2);
+        } else {
+            let prev_spike_timestamp = self.prev_icp_burn_spike_timestamp_ns.unwrap();
+
+            if now - prev_spike_timestamp > SPIKE_RECORD_DOWNGRADE_TIMEOUT_NS {
+                let new_target = max(DEFAULT_SPIKE_TARGET_E8S, prev_target / 2);
+
+                self.prev_icp_burn_spike_timestamp_ns = Some(now);
+                self.icp_burn_spike_target = Some(new_target);
+            }
+        }
+    }
+
+    pub fn get_icp_to_cycles_exchange_rate(&self) -> TCycles {
+        self.icp_to_cycles_exchange_rate
+            .clone()
+            // shouldn't ever be the case, since we're fetching the rate each 10 minutes, but defaults to 8T per ICP
+            .unwrap_or(TCycles::from(8_0000_0000_0000u64))
+    }
+
+    pub fn update_icp_to_cycles_exchange_rate(&mut self, new_rate: XdrData) {
+        let rate_e4s = ECs::<4>::from(new_rate.xdr_permyriad_per_icp);
+        let rate_tcycles = rate_e4s.to_dynamic().to_decimals(12).to_const::<12>();
+
+        self.icp_to_cycles_exchange_rate = Some(rate_tcycles);
     }
 
     pub fn is_lottery_enabled(&self) -> bool {
