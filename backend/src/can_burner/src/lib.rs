@@ -14,7 +14,7 @@ use shared::burner::api::{
     VerifyDecideIdRequest, VerifyDecideIdResponse, WithdrawRequest, WithdrawResponse,
 };
 use shared::burner::types::{
-    BURNER_DEV_FEE_SUBACCOUNT, BURNER_REDISTRIBUTION_SUBACCOUNT, BURNER_SPIKE_SUBACCOUNT,
+    TCycles, BURNER_DEV_FEE_SUBACCOUNT, BURNER_REDISTRIBUTION_SUBACCOUNT, BURNER_SPIKE_SUBACCOUNT,
 };
 use shared::icrc1::ICRC1CanisterClient;
 use shared::{ENV_VARS, ICP_FEE, MIN_ICP_STAKE_E8S_U64};
@@ -78,7 +78,7 @@ async fn stake(req: StakeRequest) -> StakeResponse {
 
         s.mint_share(shares_minted.clone(), caller());
 
-        info.note_burned_cycles(shares_minted);
+        info.note_burned_cycles(shares_minted / TCycles::two());
 
         s.set_info(info);
     });
@@ -193,7 +193,7 @@ async fn withdraw_dev_fee_icp(qty: u64, account_id: AccountIdentifier) -> Result
 #[query]
 fn get_account_ids() -> BTreeMap<String, AccountIdentifier> {
     let mut map = BTreeMap::new();
-    
+
     map.insert(
         String::from("Dev Fee"),
         AccountIdentifier::new(&id(), &Subaccount(BURNER_DEV_FEE_SUBACCOUNT)),

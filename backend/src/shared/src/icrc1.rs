@@ -22,6 +22,10 @@ impl ICRC1CanisterClient {
         call(self.canister_id, "icrc1_balance_of", (arg,)).await
     }
 
+    pub async fn icrc1_minting_account(&self) -> CallResult<(Option<Account>,)> {
+        call(self.canister_id, "icrc1_minting_account", ()).await
+    }
+
     pub async fn icrc1_transfer(
         &self,
         arg: TransferArg,

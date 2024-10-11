@@ -1,13 +1,14 @@
 use candid::{CandidType, Nat, Principal};
 use garde::Validate;
 use ic_e8s::c::E8s;
+use icrc_ledger_types::icrc1::account::Account;
 use serde::Deserialize;
 
-use crate::{burner::types::TimestampNs, Guard, ENV_VARS};
+use crate::{burner::types::TimestampNs, Guard};
 
 use super::{
     state::FurnaceState,
-    types::{TokenXVote, MIN_ALLOWED_USD_POSITION_QTY_E8S},
+    types::{FurnaceWinnerHistoryEntry, TokenX, TokenXVote, MIN_ALLOWED_USD_POSITION_QTY_E8S},
 };
 
 #[derive(CandidType, Deserialize, Validate)]
@@ -32,6 +33,11 @@ impl Guard<FurnaceState> for PledgeRequest {
         self.validate(&()).map_err(|e| e.to_string())?;
 
         let info = state.get_furnace_info_ref();
+
+        if info.is_looking_for_winners || info.is_on_maintenance {
+            return Err(String::from("Unable to pledge right now, try again later"));
+        }
+
         let decimals_opt = info.get_decimals(&self.token_can_id);
 
         if decimals_opt.is_none() {
@@ -55,6 +61,37 @@ pub struct PledgeResponse {
     pub pledge_value_usd: E8s,
 }
 
+#[derive(CandidType, Deserialize)]
+pub struct WithdrawRequest {
+    pub token_can_id: Principal,
+    pub to: Account,
+    pub qty: Nat,
+}
+
+impl Guard<FurnaceState> for WithdrawRequest {
+    fn validate_and_escape(
+        &mut self,
+        state: &FurnaceState,
+        _caller: Principal,
+        _now: TimestampNs,
+    ) -> Result<(), String> {
+        let token_info = state
+            .get_supported_token(&self.token_can_id)
+            .ok_or(String::from("Unsupported token"))?;
+
+        if self.qty < token_info.fee {
+            return Err(String::from("Insufficient amount"));
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct WithdrawResponse {
+    pub block_idx: Nat,
+}
+
 #[derive(CandidType, Deserialize, Validate)]
 pub struct VoteTokenXRequest {
     #[garde(skip)]
@@ -69,6 +106,12 @@ impl Guard<FurnaceState> for VoteTokenXRequest {
         _now: TimestampNs,
     ) -> Result<(), String> {
         self.validate(&()).map_err(|e| e.to_string())?;
+
+        let info = state.get_furnace_info();
+
+        if info.is_looking_for_winners || info.is_on_maintenance {
+            return Err(String::from("Unable to vote right now, try again later"));
+        }
 
         if self.vote.can_ids_and_normalized_weights.len() > 5 {
             return Err(String::from("Too many splits"));
@@ -85,11 +128,7 @@ impl Guard<FurnaceState> for VoteTokenXRequest {
         }
 
         for (token_can_id, _) in &self.vote.can_ids_and_normalized_weights {
-            if token_can_id == &ENV_VARS.icp_token_canister_id {
-                return Err(String::from("Can't vote for ICP"));
-            }
-
-            if !state.supported_tokens.contains_key(token_can_id) {
+            if state.get_supported_token(token_can_id).is_none() {
                 return Err(String::from("Unsupported token"));
             }
         }
@@ -100,3 +139,187 @@ impl Guard<FurnaceState> for VoteTokenXRequest {
 
 #[derive(CandidType, Deserialize)]
 pub struct VoteTokenXResponse {}
+
+#[derive(CandidType, Deserialize, Validate)]
+pub struct AddSupportedTokenRequest {
+    #[garde(length(min = 1))]
+    pub tokens: Vec<TokenX>,
+}
+
+impl Guard<FurnaceState> for AddSupportedTokenRequest {
+    fn validate_and_escape(
+        &mut self,
+        state: &FurnaceState,
+        caller: Principal,
+        _now: TimestampNs,
+    ) -> Result<(), String> {
+        self.validate(&()).map_err(|e| e.to_string())?;
+
+        let info = state.get_furnace_info();
+        if !info.is_dev(&caller) {
+            return Err(String::from("Access denied"));
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct AddSupportedTokenResponse {}
+
+#[derive(CandidType, Deserialize, Validate)]
+pub struct RemoveSupportedTokenRequest {
+    #[garde(length(min = 1))]
+    pub token_can_ids: Vec<Principal>,
+}
+
+impl Guard<FurnaceState> for RemoveSupportedTokenRequest {
+    fn validate_and_escape(
+        &mut self,
+        state: &FurnaceState,
+        caller: Principal,
+        _now: TimestampNs,
+    ) -> Result<(), String> {
+        self.validate(&()).map_err(|e| e.to_string())?;
+
+        let info = state.get_furnace_info();
+        if !info.is_dev(&caller) {
+            return Err(String::from("Access denied"));
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct RemoveSupportedTokenResponse {}
+
+#[derive(CandidType, Deserialize, Validate)]
+pub struct SetMaintenanceStatusRequest {
+    #[garde(skip)]
+    pub new_status: bool,
+}
+
+impl Guard<FurnaceState> for SetMaintenanceStatusRequest {
+    fn validate_and_escape(
+        &mut self,
+        state: &FurnaceState,
+        caller: Principal,
+        _now: TimestampNs,
+    ) -> Result<(), String> {
+        self.validate(&()).map_err(|e| e.to_string())?;
+
+        let info = state.get_furnace_info();
+        if !info.is_dev(&caller) {
+            return Err(String::from("Access denied"));
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct SetMaintenanceStatusResponse {}
+
+#[derive(CandidType, Deserialize, Validate)]
+pub struct GetWinnersRequest {
+    #[garde(skip)]
+    pub skip: u64,
+    #[garde(range(min = 1, max = 100))]
+    pub take: usize,
+}
+
+impl Guard<FurnaceState> for GetWinnersRequest {
+    fn validate_and_escape(
+        &mut self,
+        _state: &FurnaceState,
+        _caller: Principal,
+        _now: TimestampNs,
+    ) -> Result<(), String> {
+        self.validate(&()).map_err(|e| e.to_string())
+    }
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct GetWinnersResponse {
+    pub winners: Vec<FurnaceWinnerHistoryEntry>,
+}
+
+#[derive(CandidType, Deserialize, Validate)]
+pub struct GetCurRoundPositionsRequest {
+    #[garde(skip)]
+    pub skip: u64,
+    #[garde(range(min = 1, max = 100))]
+    pub take: usize,
+}
+
+impl Guard<FurnaceState> for GetCurRoundPositionsRequest {
+    fn validate_and_escape(
+        &mut self,
+        _state: &FurnaceState,
+        _caller: Principal,
+        _now: TimestampNs,
+    ) -> Result<(), String> {
+        self.validate(&()).map_err(|e| e.to_string())
+    }
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct GetCurRoundPositionsResponse {
+    pub positions: Vec<(Principal, E8s)>,
+}
+
+#[derive(CandidType, Deserialize, Validate)]
+pub struct UpdateDispenserWasmRequest {
+    #[garde(skip)]
+    pub wasm: Vec<u8>,
+}
+
+impl Guard<FurnaceState> for UpdateDispenserWasmRequest {
+    fn validate_and_escape(
+        &mut self,
+        state: &FurnaceState,
+        caller: Principal,
+        _now: TimestampNs,
+    ) -> Result<(), String> {
+        self.validate(&()).map_err(|e| e.to_string())?;
+
+        let info = state.get_furnace_info();
+        if !info.is_dev(&caller) {
+            return Err(String::from("Access denied"));
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct UpdateDispenserWasmResponse {}
+
+#[derive(CandidType, Deserialize, Validate)]
+pub struct DeployDispenserRequest {
+    #[garde(skip)]
+    pub token_can_id: Principal,
+}
+
+impl Guard<FurnaceState> for DeployDispenserRequest {
+    fn validate_and_escape(
+        &mut self,
+        state: &FurnaceState,
+        _caller: Principal,
+        _now: TimestampNs,
+    ) -> Result<(), String> {
+        self.validate(&()).map_err(|e| e.to_string())?;
+
+        if let Some(_) = state.dispenser_of(&self.token_can_id) {
+            return Err(String::from("The dispenser already exists"));
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct DeployDispenserResponse {
+    pub dispenser_can_id: Principal,
+}

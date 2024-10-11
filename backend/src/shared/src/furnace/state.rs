@@ -19,10 +19,10 @@ use super::{
 
 pub struct FurnaceState {
     pub furnace_info: Cell<FurnaceInfo, Memory>,
-    pub supported_tokens: StableBTreeMap<Principal, ICPSwapTokenInfo, Memory>,
+    pub supported_tokens: StableBTreeMap<Principal, TokenX, Memory>,
+    pub token_exchange_rates: StableBTreeMap<Principal, ICPSwapTokenInfo, Memory>,
     pub winners: StableBTreeMap<TimestampNs, FurnaceWinnerHistoryEntry, Memory>,
 
-    pub cur_round_burned_burn: StableBTreeMap<Principal, E8s, Memory>,
     pub cur_round_positions: StableBTreeMap<Principal, E8s, Memory>,
     pub raffle_round_info: Cell<Option<RaffleRoundInfo>, Memory>,
 
@@ -30,17 +30,52 @@ pub struct FurnaceState {
     pub next_token_x_votes: StableBTreeMap<Principal, TokenXVote, Memory>,
 
     pub token_dispensers: StableBTreeMap<Principal, Principal, Memory>,
+    pub dispenser_wasm: Cell<Vec<u8>, Memory>,
 }
 
 impl FurnaceState {
-    pub fn init(&mut self, seed: Vec<u8>, now: TimestampNs) {
+    pub fn init(&mut self, dev_pid: Principal, seed: Vec<u8>, now: TimestampNs) {
         let mut furnace_info = self.get_furnace_info();
-        furnace_info.init(seed, now);
+        furnace_info.init(dev_pid, seed, now);
 
         self.set_furnace_info(furnace_info);
     }
 
-    pub fn dispenser_exists(&self, token_can_id: &Principal) -> Option<Principal> {
+    pub fn set_dispenser_wasm(&mut self, wasm: Vec<u8>) {
+        self.dispenser_wasm
+            .set(wasm)
+            .expect("Unable to store dispenser wasm");
+    }
+
+    pub fn get_dispenser_wasm(&self) -> &[u8] {
+        self.dispenser_wasm.get()
+    }
+
+    pub fn get_supported_token(&self, token_can_id: &Principal) -> Option<TokenX> {
+        self.supported_tokens.get(token_can_id)
+    }
+
+    pub fn add_supported_token(&mut self, token: TokenX) {
+        self.supported_tokens.insert(token.can_id, token);
+    }
+
+    pub fn remove_supported_token(&mut self, token_can_id: &Principal) {
+        self.supported_tokens.remove(token_can_id);
+    }
+
+    pub fn list_supported_tokens(&self) -> Vec<TokenX> {
+        self.supported_tokens.iter().map(|(_, it)| it).collect()
+    }
+
+    pub fn get_vote_token_x_of(&self, caller: &Principal) -> Option<TokenXVote> {
+        self.next_token_x_votes.get(caller)
+    }
+
+    pub fn list_token_x_alternatives(&self) -> Vec<(Principal, E8s)> {
+        self.next_token_x_alternatives.iter().collect()
+    }
+
+    pub fn dispenser_of(&self, token_can_id: &Principal) -> Option<Principal> {
         return self.token_dispensers.get(token_can_id);
     }
 
@@ -71,13 +106,22 @@ impl FurnaceState {
         VoteTokenXResponse {}
     }
 
-    // not batching this method, because the number of possible tokens is limited by ICPSwap
-    pub fn select_next_token_x(&mut self) -> Principal {
+    // not batching this method, because the number of possible tokens is very limited
+    pub fn select_next_token_x(&mut self) {
+        let mut info = self.get_furnace_info();
+
+        // if no token was elected - fallback to BURN
         if self.next_token_x_alternatives.is_empty() {
-            return ENV_VARS.burn_token_canister_id;
+            info.update_token_x(TokenX {
+                can_id: ENV_VARS.burn_token_canister_id,
+                fee: Nat::from(10_000u64),
+                decimals: 8,
+            });
+            self.set_furnace_info(info);
+
+            return;
         }
 
-        let mut info = self.get_furnace_info();
         let random_num = info.generate_random_numbers(1).remove(0);
 
         let mut total_votes = E8s::zero();
@@ -110,9 +154,12 @@ impl FurnaceState {
             }
         };
 
-        self.set_furnace_info(info);
+        let token_x = self
+            .get_supported_token(&result)
+            .expect("Only supported tokens can be elected");
+        info.update_token_x(token_x);
 
-        result
+        self.set_furnace_info(info);
     }
 
     pub fn complete_token_x_voting(&mut self, token_x: TokenX) {
@@ -125,11 +172,11 @@ impl FurnaceState {
         self.set_furnace_info(info);
     }
 
-    pub fn update_supported_tokens(&mut self, icp_swap_response: GetAllTokensResponse) {
-        self.supported_tokens.clear_new();
+    pub fn update_token_exchange_rates(&mut self, icp_swap_response: GetAllTokensResponse) {
+        self.token_exchange_rates.clear_new();
 
         for token in icp_swap_response {
-            self.supported_tokens.insert(token.can_id, token);
+            self.token_exchange_rates.insert(token.can_id, token);
         }
     }
 
@@ -166,15 +213,20 @@ impl FurnaceState {
         }
     }
 
+    pub fn set_looking_for_winners(&mut self, value: bool) {
+        let mut furnace_info = self.get_furnace_info();
+        furnace_info.is_looking_for_winners = value;
+        self.set_furnace_info(furnace_info);
+    }
+
     pub fn prepare_raffle(&mut self, cur_prize_fund_icp: E8s) {
         let mut furnace_info = self.get_furnace_info();
-
-        furnace_info.is_looking_for_winners = true;
 
         let prize_distribution = furnace_info.calculate_prize_distribution(&cur_prize_fund_icp);
         let random_numbers = furnace_info.generate_random_numbers(prize_distribution.len());
 
         let raffle_round_info = RaffleRoundInfo {
+            prize_fund_icp: cur_prize_fund_icp,
             prize_distribution,
             random_numbers,
             winners: Vec::new(),
@@ -187,76 +239,17 @@ impl FurnaceState {
         self.set_raffle_round_info(raffle_round_info);
     }
 
-    // TODO: make the voting power only count pledged BURN, otherwise it is not safe
-
-    /// returns true if should reschedule
-    pub fn eliminate_cur_positions_batch(&mut self, batch_size: usize) -> bool {
-        // don't eliminate the last one
-        if self.cur_round_positions.len() <= 1 {
-            return false;
-        }
-
-        let mut furnace_info = self.get_furnace_info();
-        let mut raffle_round_info = self.get_raffle_round_info();
-
-        let heads = furnace_info
-            .generate_random_bools(min(batch_size, self.cur_round_positions.len() as usize));
-
-        let mut iter = if let Some(cursor) = raffle_round_info.elimination_cursor {
-            let mut i = self.cur_round_positions.range(cursor..);
-            i.next();
-
-            i
-        } else {
-            self.cur_round_positions.iter()
-        };
-        let mut i = 0;
-
-        let mut positions_to_eliminate = Vec::new();
-        let mut should_reschedule = true;
-
-        loop {
-            let entry = iter.next();
-
-            if let Some((pid, _)) = entry {
-                if heads[i] {
-                    positions_to_eliminate.push(pid);
-                } else {
-                    raffle_round_info.elimination_cursor = Some(pid);
-                }
-            } else {
-                should_reschedule = false;
-                break;
-            }
-
-            i += 1;
-
-            if i == heads.len() {
-                break;
-            }
-        }
-
-        for pid in positions_to_eliminate {
-            self.cur_round_positions.remove(&pid);
-        }
-
-        self.set_furnace_info(furnace_info);
-        self.set_raffle_round_info(raffle_round_info);
-
-        should_reschedule
-    }
-
-    pub fn complete_raffle(
-        &mut self,
-        cur_prize_fund_icp: E8s,
-        now: TimestampNs,
-    ) -> FurnaceWinnerHistoryEntry {
+    pub fn complete_raffle(&mut self, now: TimestampNs) {
         let raffle_round_info = self.get_raffle_round_info();
         let mut furnace_info = self.get_furnace_info();
 
         let mut result = Vec::new();
         for (pid, prize_icp) in raffle_round_info.winners {
-            let entry = FurnaceWinner { prize_icp, pid };
+            let entry = FurnaceWinner {
+                prize_icp,
+                pid,
+                claimed: false,
+            };
 
             result.push(entry);
         }
@@ -266,27 +259,25 @@ impl FurnaceState {
             token_can_id: furnace_info.cur_token_x.can_id,
             pledged_usd: furnace_info.cur_round_pledged_usd.clone(),
             round: furnace_info.current_round,
-            prize_fund_icp: cur_prize_fund_icp.clone(),
+            prize_fund_icp: raffle_round_info.prize_fund_icp.clone(),
             winners: result,
         };
 
-        self.winners.insert(now, winner_history_entry.clone());
+        self.winners.insert(now, winner_history_entry);
 
         self.clear_raffle_round_info();
+        self.cur_round_positions.clear_new();
 
         furnace_info.complete_round(now);
-        furnace_info.is_looking_for_winners = false;
-        furnace_info.icp_won_total += cur_prize_fund_icp;
+        furnace_info.icp_won_total += raffle_round_info.prize_fund_icp;
 
         self.set_furnace_info(furnace_info);
-
-        winner_history_entry
     }
 
-    /// returns Ok(true) if should be rescheduled immediately, Ok(false) if all winners found, Err(()) if the pool is empty
-    pub fn find_winners_batch(&mut self, batch_size: usize) -> Result<bool, ()> {
+    /// returns true if should be rescheduled immediately, false if all winners found
+    pub fn find_winners_batch(&mut self, batch_size: usize) -> bool {
         if self.cur_round_positions.is_empty() {
-            return Err(());
+            return false;
         }
 
         let mut raffle_round_info = self.get_raffle_round_info();
@@ -330,13 +321,13 @@ impl FurnaceState {
 
         self.set_raffle_round_info(raffle_round_info);
 
-        Ok(!is_over)
+        !is_over
     }
 
     pub fn get_usd_value(&self, can_id: &Principal, qty: Nat, decimals: u8) -> E8s {
         let qty_e8s = EDs::new(qty.0, decimals).to_decimals(8).to_const();
         let exchange_rate = self
-            .supported_tokens
+            .token_exchange_rates
             .get(can_id)
             .expect("The token is not supported")
             .exchange_rate_usd;
@@ -352,7 +343,7 @@ impl FurnaceState {
         self.furnace_info.get()
     }
 
-    fn set_furnace_info(&mut self, info: FurnaceInfo) {
+    pub fn set_furnace_info(&mut self, info: FurnaceInfo) {
         self.furnace_info.set(info).expect("Unable to store info");
     }
 

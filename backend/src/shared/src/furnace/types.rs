@@ -14,6 +14,16 @@ pub const GEN_FURNACE_POSITION_ID_DOMAIN: &[u8] = b"msq-burn-furnace-position-id
 pub const DEFAULT_WINNER_ICP_THRESHOLD: u64 = 1_000_0000_0000; // 1k ICP ~ $10k
 pub const MIN_ALLOWED_USD_POSITION_QTY_E8S: u64 = 1_00_0000; // 1 cent
 
+pub const FURNACE_REDISTRIBUTION_SUBACCOUNT: [u8; 32] = [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+];
+pub const FURNACE_DEV_FEE_SUBACCOUNT: [u8; 32] = [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2,
+];
+pub const FURNACE_ICP_PRIZE_DISTRIBUTION_SUBACCOUNT: [u8; 32] = [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3,
+];
+
 #[derive(CandidType, Deserialize, Default, Clone)]
 pub struct FurnaceInfo {
     pub seed: Vec<u8>,
@@ -31,16 +41,57 @@ pub struct FurnaceInfo {
 
     pub is_looking_for_winners: bool,
     pub is_on_maintenance: bool,
+    pub dev_pid: Option<Principal>,
 }
 
-// TODO: prevent ICP from being selected
+#[derive(CandidType, Deserialize, Default, Clone)]
+pub struct FurnaceInfoPub {
+    pub current_round: u64,
+    pub round_delay: u64,
+    pub prev_round_timestamp: u64,
+
+    pub icp_won_total: E8s,
+    pub cur_token_x: TokenX,
+
+    pub cur_round_pledged_usd: E8s,
+    pub total_pledged_usd: E8s,
+    pub winner_icp_threshold: E8s,
+
+    pub is_looking_for_winners: bool,
+    pub is_on_maintenance: bool,
+    pub dev_pid: Option<Principal>,
+}
 
 impl FurnaceInfo {
-    pub fn init(&mut self, seed: Vec<u8>, now: TimestampNs) {
+    pub fn init(&mut self, dev_pid: Principal, seed: Vec<u8>, now: TimestampNs) {
         self.seed = seed;
         self.round_delay = DEFAULT_ROUND_DELAY_NS;
         self.prev_round_timestamp = now;
         self.winner_icp_threshold = E8s::from(DEFAULT_WINNER_ICP_THRESHOLD);
+        self.dev_pid = Some(dev_pid);
+    }
+
+    pub fn to_pub(&self) -> FurnaceInfoPub {
+        FurnaceInfoPub {
+            current_round: self.current_round,
+            round_delay: self.round_delay,
+            prev_round_timestamp: self.prev_round_timestamp,
+
+            icp_won_total: self.icp_won_total.clone(),
+            cur_token_x: self.cur_token_x.clone(),
+
+            cur_round_pledged_usd: self.cur_round_pledged_usd.clone(),
+            total_pledged_usd: self.total_pledged_usd.clone(),
+            winner_icp_threshold: self.winner_icp_threshold.clone(),
+
+            is_looking_for_winners: self.is_looking_for_winners,
+            is_on_maintenance: self.is_on_maintenance,
+            dev_pid: self.dev_pid,
+        }
+    }
+
+    pub fn is_dev(&self, pid: &Principal) -> bool {
+        &self.dev_pid.unwrap() == pid
     }
 
     pub fn note_pledged_usd(&mut self, qty: E8s) {
@@ -246,6 +297,7 @@ impl Storable for FurnaceWinnerHistoryEntry {
 pub struct FurnaceWinner {
     pub pid: Principal,
     pub prize_icp: E8s,
+    pub claimed: bool,
 }
 
 #[derive(CandidType, Deserialize, Clone)]
@@ -279,6 +331,7 @@ impl Storable for TokenX {
 
 #[derive(CandidType, Deserialize, Default, Clone)]
 pub struct RaffleRoundInfo {
+    pub prize_fund_icp: E8s,
     pub prize_distribution: Vec<E8s>,
     pub random_numbers: Vec<E8s>,
     pub winners: Vec<(Principal, E8s)>,

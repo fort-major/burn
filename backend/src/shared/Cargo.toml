@@ -24,5 +24,7 @@ garde = { workspace = true }
 html-escape = { workspace = true }
 url = { workspace = true }
 
+chrono = { workspace = true }
+
 [build-dependencies]
 dotenv = "0.15"
