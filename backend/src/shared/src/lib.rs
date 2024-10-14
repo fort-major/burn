@@ -10,6 +10,7 @@ use serde::Deserialize;
 pub mod burner;
 pub mod cmc;
 pub mod decideid;
+pub mod dispenser;
 mod env;
 pub mod furnace;
 pub mod icpswap;
@@ -33,10 +34,6 @@ pub trait Guard<T> {
         caller: Principal,
         now: TimestampNs,
     ) -> Result<(), String>;
-}
-
-pub fn escape_script_tag(s: &str) -> String {
-    html_escape::encode_script(s).to_string()
 }
 
 lazy_static! {

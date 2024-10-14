@@ -38,3 +38,7 @@ pub fn duration_until_next_sunday_15_00(now: u64) -> Duration {
 
     Duration::from_nanos(next_sunday_secs - now)
 }
+
+pub fn escape_script_tag(s: &str) -> String {
+    html_escape::encode_script(s).to_string()
+}

@@ -1,5 +1,3 @@
-use std::cmp::min;
-
 use candid::{Nat, Principal};
 use ic_e8s::{c::E8s, d::EDs};
 use ic_stable_structures::{Cell, StableBTreeMap};
