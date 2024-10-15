@@ -7,7 +7,7 @@ use num_bigint::BigUint;
 use serde::Deserialize;
 use sha2::Digest;
 
-use crate::{cmc::XdrData, ONE_MINUTE_NS};
+use crate::{cmc::XdrData, ONE_DAY_NS, ONE_HOUR_NS, ONE_MINUTE_NS, ONE_WEEK_NS};
 
 pub type TCycles = ECs<12>;
 pub type TimestampNs = u64;
@@ -35,18 +35,12 @@ pub const REDISTRIBUTION_SPIKE_SHARE_E8S: u64 = 4750_0000; // 47.5%
 pub const REDISTRIBUTION_FURNACE_SHARE_E8S: u64 = 5000_0000; // 50%
 pub const REDISTRIBUTION_DEV_SHARE_E8S: u64 = 0250_0000; // 2.5%
 
-//pub const KAMIKAZE_POOL_POSITION_LIFESPAN_NS: TimestampNs = ONE_DAY_NS;
-pub const KAMIKAZE_POOL_POSITION_LIFESPAN_NS: TimestampNs = ONE_MINUTE_NS * 10;
-//pub const ICPSWAP_PRICE_UPDATE_INTERVAL_NS: u64 = ONE_MINUTE_NS * 10;
-pub const ICPSWAP_PRICE_UPDATE_INTERVAL_NS: u64 = ONE_MINUTE_NS * 2;
-//pub const ICP_REDISTRIBUTION_INTERVAL_NS: u64 = ONE_HOUR_NS * 3;
-pub const ICP_REDISTRIBUTION_INTERVAL_NS: u64 = ONE_MINUTE_NS;
-//pub const SPIKING_INTERVAL_NS: u64 = ONE_HOUR_NS * 6;
-pub const SPIKING_INTERVAL_NS: u64 = ONE_MINUTE_NS;
-//pub const SPIKE_RECORD_DOWNGRADE_TIMEOUT_NS: TimestampNs = ONE_WEEK_NS * 2;
-pub const SPIKE_RECORD_DOWNGRADE_TIMEOUT_NS: TimestampNs = ONE_MINUTE_NS * 5;
-//pub const DEFAULT_SPIKE_TARGET_E8S: u64 = 20_000_0000_0000u64; // 20k ICP
-pub const DEFAULT_SPIKE_TARGET_E8S: u64 = 1_0000_0000u64; // 1 ICP
+pub const KAMIKAZE_POOL_POSITION_LIFESPAN_NS: TimestampNs = ONE_DAY_NS;
+pub const ICPSWAP_PRICE_UPDATE_INTERVAL_NS: u64 = ONE_MINUTE_NS * 10;
+pub const ICP_REDISTRIBUTION_INTERVAL_NS: u64 = ONE_HOUR_NS * 3;
+pub const SPIKING_INTERVAL_NS: u64 = ONE_HOUR_NS * 6;
+pub const SPIKE_RECORD_DOWNGRADE_TIMEOUT_NS: TimestampNs = ONE_WEEK_NS * 2;
+pub const DEFAULT_SPIKE_TARGET_E8S: u64 = 20_000_0000_0000u64; // 20k ICP
 
 #[derive(CandidType, Deserialize, Clone, Default, Debug)]
 pub struct BurnerStateInfo {

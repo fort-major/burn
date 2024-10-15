@@ -133,15 +133,15 @@ pub fn harakiri() {
     }
 }
 
-pub fn pos(lottery_round_complete: bool) {
-    let round_complete = STATE
-        .with_borrow_mut(|s| s.pos_round_batch(lottery_round_complete, POS_ACCOUNTS_PER_BATCH));
+pub fn pos(split_reward_in_half: bool) {
+    let round_complete =
+        STATE.with_borrow_mut(|s| s.pos_round_batch(split_reward_in_half, POS_ACCOUNTS_PER_BATCH));
 
     if round_complete {
         let delay = STATE.with_borrow(|s| s.get_info().pos_round_delay_ns);
         set_timer(Duration::from_nanos(delay), kamikaze_and_pos);
     } else {
-        set_timer(Duration::from_nanos(0), move || pos(lottery_round_complete));
+        set_timer(Duration::from_nanos(0), move || pos(split_reward_in_half));
     };
 }
 

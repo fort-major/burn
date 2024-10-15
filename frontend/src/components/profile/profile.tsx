@@ -67,7 +67,7 @@ export function ProfileFull(props: IProfileProps) {
               <p class="font-semibold text-white text-4xl">{pseudonym() ? pseudonym() : "Anonymous"}</p>
             </div>
 
-            <div class="flex flex-col items-start sm:flex-row sm:items-center gap-4">
+            {/* <div class="flex flex-col items-start sm:flex-row sm:items-center gap-4">
               <Show when={isMSQ()}>
                 <p class="text-xs text-gray-140">Only Internet Identity users can verify their personhood</p>
               </Show>
@@ -93,7 +93,7 @@ export function ProfileFull(props: IProfileProps) {
                   Migrate
                 </p>
               </Show>
-            </div>
+            </div> */}
           </div>
         </div>
       </div>

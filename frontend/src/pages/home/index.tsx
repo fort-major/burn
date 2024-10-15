@@ -280,11 +280,6 @@ export function HomePage() {
             ICP you burn, the bigger your share!"
           />
           <AboutCard
-            class="bg-gray-115"
-            title="Everybody has a Chance"
-            desc="Half of each block reward is distributed to a single lucky pool member, with no respect to their pool share. To take part in this 'lottery', verify your account via Decide AI."
-          />
-          <AboutCard
             class="bg-gray-110"
             title="Green & Efficient"
             desc="Unlike other similar projects, BURN doesn't waste IC's compute power, 

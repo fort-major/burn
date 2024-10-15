@@ -43,6 +43,17 @@ export const InfoPage = () => {
       .div(EDs.fromBigIntBase(BigInt(kamikazePoolMembers().length || 1), 12))
       .mul(tcyclesExchangeRate().toDynamic().toDecimals(12));
 
+  const avgShareWorth = () =>
+    poolMembers()
+      .map((it) => it.share)
+      .reduce((prev, cur) => prev.add(cur), EDs.zero(12))
+      .div(EDs.fromBigIntBase(BigInt(poolMembers().length || 1), 12))
+      .mul(tcyclesExchangeRate().toDynamic().toDecimals(12));
+
+  createEffect(() => {
+    console.log(tcyclesExchangeRate().toString(), totals.data?.icpToCyclesExchangeRate.toString());
+  });
+
   onMount(() => {
     if (isReadyToFetch()) {
       fetchPoolMembers();
@@ -127,8 +138,10 @@ export const InfoPage = () => {
                     let minutesLeftStr = "< 1";
                     if (harakiriAt > now) {
                       const dif = harakiriAt - now;
+                      const minutesLeft = Math.floor(dif / 60 / 1000);
 
-                      minutesLeftStr = `${Math.floor(dif / 60 / 1000)}`;
+                      minutesLeftStr =
+                        minutesLeft > 1000 ? `${(minutesLeft / 1000.0).toFixed(1)}k` : minutesLeft.toString();
                     }
 
                     const poolSharePercent = member.share
@@ -184,10 +197,10 @@ export const InfoPage = () => {
               </Show>
             </div>
 
-            <div class="grid px-2 grid-cols-6 items-center gap-3 text-md font-semibold text-gray-190">
-              <p class="col-span-2 text-left">Average</p>
+            <div class="grid px-2 grid-cols-5 sm:grid-cols-6 items-center gap-3 text-md font-semibold text-gray-190">
+              <p class="col-span-1 sm:col-span-2 text-right">Average</p>
               <p class="col-span-1 text-right font-semibold">${avgKamikazeShareWorth().toDecimals(2).toString()}</p>
-              <p class="col-span-2 text-left">Total</p>
+              <p class="col-span-2 text-right">Total</p>
               <p class="col-span-1 text-right font-semibold">${totalKamikazeShareWorth().toDecimals(0).toString()}</p>
             </div>
           </div>
@@ -242,7 +255,11 @@ export const InfoPage = () => {
                         <Avatar
                           url={avatarSrcFromPrincipal(member.id)}
                           size="sm"
-                          borderColor={member.isVerifiedViaDecideID ? COLORS.orange : COLORS.gray[140]}
+                          borderColor={
+                            identity()?.getPrincipal().compareTo(member.id) === "eq"
+                              ? COLORS.chartreuse
+                              : COLORS.gray[140]
+                          }
                         />
                       </div>
 
@@ -276,10 +293,10 @@ export const InfoPage = () => {
             </Show>
           </div>
 
-          <div class="grid px-2 grid-cols-6 items-center gap-3 text-md font-semibold text-gray-190">
-            <p class="col-span-2 text-left">Average</p>
-            <p class="col-span-1 text-right font-semibold">${avgKamikazeShareWorth().toDecimals(2).toString()}</p>
-            <p class="col-span-2 text-left">Total</p>
+          <div class="grid px-2 grid-cols-5 sm:grid-cols-6 items-center gap-3 text-md font-semibold text-gray-190">
+            <p class="col-span-1 sm:col-span-2 text-right">Average</p>
+            <p class="col-span-1 text-right font-semibold">${avgShareWorth().toDecimals(0).toString()}</p>
+            <p class="col-span-2 text-right">Total</p>
             <p class="col-span-1 text-right font-semibold">${totalShareWorth().toDecimals(0).toString()}</p>
           </div>
         </div>

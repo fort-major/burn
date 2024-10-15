@@ -346,22 +346,24 @@ export const PoolPage = () => {
             </div>
           </Show>
           <div class="flex flex-col md:items-center gap-4">
-            <Btn
-              text="Burn"
-              class="md:w-[200px]"
-              bgColor={COLORS.orange}
-              icon={EIconKind.FlameBW}
-              disabled={!canStake()}
-              onClick={() => setBurnModalVisible(true)}
-            />
-            <Show when={totals.data?.isKamikazePoolEnabled}>
-              <BooleanInput
-                labelOn="High-Risk"
-                labelOff="High-Risk"
-                value={isKamikazePool() || false}
-                onChange={setIsKamikazePool}
+            <div class="flex flex-col md:items-center gap-0">
+              <Show when={totals.data?.isKamikazePoolEnabled}>
+                <BooleanInput
+                  labelOn="High-Risk"
+                  labelOff="High-Risk"
+                  value={isKamikazePool() || false}
+                  onChange={setIsKamikazePool}
+                />
+              </Show>
+              <Btn
+                text="Burn"
+                class="md:w-[200px]"
+                bgColor={COLORS.orange}
+                icon={EIconKind.FlameBW}
+                disabled={!canStake()}
+                onClick={() => setBurnModalVisible(true)}
               />
-            </Show>
+            </div>
             <Show when={canWithdraw()}>
               <p
                 class="underline font-normal text-gray-140 cursor-pointer text-center"
@@ -393,10 +395,13 @@ export const PoolPage = () => {
                 Classic Pool Share: {myShare()?.toPercent().toDecimals(4).toString() ?? 0}% (
                 {totals.data?.yourShareTcycles?.toString()} / {totals.data?.totalSharesSupply.toString()})
               </p>
-              <p class="text-sm text-gray-140">
-                High-Risk Pool Winning Chance: {myHighRiskShare()?.toPercent().toDecimals(4).toString() ?? 0}% (
-                {totals.data?.yourKamikazeShareTcycles?.toString()} / {totals.data?.totalKamikazePoolSupply.toString()})
-              </p>
+              <Show when={totals.data?.isKamikazePoolEnabled}>
+                <p class="text-sm text-gray-140">
+                  High-Risk Pool Winning Chance: {myHighRiskShare()?.toPercent().toDecimals(4).toString() ?? 0}% (
+                  {totals.data?.yourKamikazeShareTcycles?.toString()} /{" "}
+                  {totals.data?.totalKamikazePoolSupply.toString()})
+                </p>
+              </Show>
             </div>
 
             <div class="flex flex-col md:items-center gap-4">
@@ -425,28 +430,30 @@ export const PoolPage = () => {
         </div>
       </div>
 
-      <div class="flex flex-col gap-4">
-        <Show
-          fallback={<p class={headerClass}>Burn ICP in High-Risk Pool to Continue</p>}
-          when={totals.data && burnoutLeftoverBlocks()!}
-        >
-          <div class="flex flex-row justify-between items-center gap-4">
-            <p class={headerClass}>High-Risk Pool Minting In Progress</p>
-          </div>
-          <p>Your position will be removed in {highRiskMinutesLeft()} minutes</p>
-          <div class="flex flex-wrap gap-2">
-            <For each={Array(highRiskMinutesLeft()!).fill(0)}>
-              {(_, idx) => (
-                <Icon
-                  class={idx() === highRiskMinutesLeft() - 1 ? "animate-pulse" : undefined}
-                  kind={EIconKind.BlockEmpty}
-                  color={COLORS.orange}
-                />
-              )}
-            </For>
-          </div>
-        </Show>
-      </div>
+      <Show when={totals.data && totals.data.isKamikazePoolEnabled}>
+        <div class="flex flex-col gap-4">
+          <Show
+            fallback={<p class={headerClass}>Burn ICP in High-Risk Pool to Continue</p>}
+            when={highRiskMinutesLeft()!}
+          >
+            <div class="flex flex-row justify-between items-center gap-4">
+              <p class={headerClass}>High-Risk Pool Minting In Progress</p>
+            </div>
+            <p>Your position will be removed in {highRiskMinutesLeft()} minutes</p>
+            <div class="flex flex-wrap gap-2">
+              <For each={Array(highRiskMinutesLeft()!).fill(0)}>
+                {(_, idx) => (
+                  <Icon
+                    class={idx() === highRiskMinutesLeft() - 1 ? "animate-pulse" : undefined}
+                    kind={EIconKind.BlockEmpty}
+                    color={COLORS.orange}
+                  />
+                )}
+              </For>
+            </div>
+          </Show>
+        </div>
+      </Show>
 
       <div class="flex flex-col gap-4">
         <Show

@@ -1,4 +1,5 @@
 use candid::{decode_one, encode_one, Principal};
+use ic_cdk::print;
 use ic_e8s::c::{E8s, ECs};
 use ic_stable_structures::{storable::Bound, Cell, StableBTreeMap, Storable};
 
@@ -90,7 +91,6 @@ impl BurnerState {
         self.kamikaze_shares.insert(to, (share, created_at));
 
         // adjust total share supply
-        info.total_shares_supply += &qty;
         info.kamikaze_pool_total_shares =
             Some(info.kamikaze_pool_total_shares.unwrap_or_default() + qty);
 
