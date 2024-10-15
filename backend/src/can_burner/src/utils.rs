@@ -6,14 +6,14 @@ use ic_cdk::{
         call::{CallResult, RejectionCode},
         cycles_burn,
         management_canister::main::raw_rand,
+        time,
     },
     caller, id, spawn,
 };
 use ic_cdk_timers::set_timer;
-use ic_e8s::c::E8s;
+
 use ic_ledger_types::{
     transfer, AccountBalanceArgs, AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs,
-    TransferResult,
 };
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager},
@@ -24,12 +24,13 @@ use shared::{
         state::BurnerState,
         types::{
             BurnerStateInfo, TCycles, BURNER_DEV_FEE_SUBACCOUNT, BURNER_REDISTRIBUTION_SUBACCOUNT,
-            BURNER_SPIKE_SUBACCOUNT, POS_ACCOUNTS_PER_BATCH, REDISTRIBUTION_DEV_SHARE_E8S,
-            REDISTRIBUTION_FURNACE_SHARE_E8S, REDISTRIBUTION_SPIKE_SHARE_E8S,
+            BURNER_SPIKE_SUBACCOUNT, ICPSWAP_PRICE_UPDATE_INTERVAL_NS,
+            ICP_REDISTRIBUTION_INTERVAL_NS, POS_ACCOUNTS_PER_BATCH, REDISTRIBUTION_DEV_SHARE_E8S,
+            REDISTRIBUTION_FURNACE_SHARE_E8S, REDISTRIBUTION_SPIKE_SHARE_E8S, SPIKING_INTERVAL_NS,
         },
     },
     cmc::{CMCClient, NotifyTopUpError, NotifyTopUpRequest},
-    ENV_VARS, ICP_FEE, MEMO_TOP_UP_CANISTER, ONE_HOUR_NS, ONE_MINUTE_NS,
+    ENV_VARS, ICP_FEE, MEMO_TOP_UP_CANISTER,
 };
 
 use crate::subaccount_of;
@@ -53,11 +54,19 @@ thread_local! {
             lottery_rounds_won: StableBTreeMap::init(
                 MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(4)))
             ),
+
+            kamikaze_shares: StableBTreeMap::init(
+                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(5)))
+            ),
+            kamikaze_rounds_won: StableBTreeMap::init(
+                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(6)))
+            ),
         }
     )
 }
 
-pub fn lottery_and_pos() {
+// temporarily disabled
+/* pub fn lottery_and_pos() {
     // if the canister is stopped for an upgrade - don't run any rounds and reschedule the next block in case the canister resumes.
     if is_stopped() {
         let delay = STATE.with_borrow(|s| s.get_info().pos_round_delay_ns);
@@ -75,6 +84,53 @@ pub fn lottery_and_pos() {
     } else {
         pos(false);
     }
+} */
+
+pub fn kamikaze_and_pos() {
+    // if the canister is stopped for an upgrade - don't run any rounds and reschedule the next block in case the canister resumes.
+    if is_stopped() {
+        let delay = STATE.with_borrow(|s| s.get_info().pos_round_delay_ns);
+        set_timer(Duration::from_nanos(delay), kamikaze_and_pos);
+
+        return;
+    }
+
+    let kamikaze_pool_enabled = STATE.with_borrow(|s| s.get_info().is_kamikaze_pool_enabled());
+
+    if kamikaze_pool_enabled {
+        kamikaze();
+    } else {
+        pos(false);
+    }
+}
+
+pub fn kamikaze() {
+    let kamikaze_round_result =
+        STATE.with_borrow_mut(|s| s.kamikaze_round_batch(POS_ACCOUNTS_PER_BATCH));
+
+    match kamikaze_round_result {
+        Some(should_reschedule) => {
+            if should_reschedule {
+                set_timer(Duration::from_nanos(0), kamikaze);
+            } else {
+                set_timer(Duration::from_nanos(0), harakiri);
+            }
+        }
+        None => {
+            set_timer(Duration::from_nanos(0), || pos(false));
+        }
+    }
+}
+
+pub fn harakiri() {
+    let should_reschedule =
+        STATE.with_borrow_mut(|s| s.kamikaze_harakiri_batch(time(), POS_ACCOUNTS_PER_BATCH));
+
+    if should_reschedule {
+        set_timer(Duration::from_nanos(0), harakiri);
+    } else {
+        set_timer(Duration::from_nanos(0), || pos(true));
+    }
 }
 
 pub fn pos(lottery_round_complete: bool) {
@@ -83,7 +139,7 @@ pub fn pos(lottery_round_complete: bool) {
 
     if round_complete {
         let delay = STATE.with_borrow(|s| s.get_info().pos_round_delay_ns);
-        set_timer(Duration::from_nanos(delay), lottery_and_pos);
+        set_timer(Duration::from_nanos(delay), kamikaze_and_pos);
     } else {
         set_timer(Duration::from_nanos(0), move || pos(lottery_round_complete));
     };
@@ -120,7 +176,7 @@ fn fetch_cycles_icp_exchange_rate() {
         }
 
         set_timer(
-            Duration::from_nanos(ONE_MINUTE_NS * 10),
+            Duration::from_nanos(ICPSWAP_PRICE_UPDATE_INTERVAL_NS),
             fetch_cycles_icp_exchange_rate,
         );
     });
@@ -141,6 +197,7 @@ fn redistribute_icps() {
             account: redistribution_account_id,
         };
 
+        // fetching how much ICPs were collected during this time
         let balance_call_result =
             ic_ledger_types::account_balance(ENV_VARS.icp_token_canister_id, account_balance_args)
                 .await;
@@ -149,11 +206,13 @@ fn redistribute_icps() {
             let balance_e8s = balance.e8s();
             let one_e8s = 1_0000_0000;
 
+            // if more than 1 ICP is collected
             if balance_e8s > one_e8s {
                 let qty_to_furnace = balance_e8s * REDISTRIBUTION_FURNACE_SHARE_E8S / one_e8s;
                 let qty_to_spike = balance_e8s * REDISTRIBUTION_SPIKE_SHARE_E8S / one_e8s;
                 let qty_to_dev = balance_e8s * REDISTRIBUTION_DEV_SHARE_E8S / one_e8s;
 
+                // send half to the Furnace (Bonfire) canister
                 let furnace_account_id =
                     AccountIdentifier::new(&ENV_VARS.furnace_canister_id, &Subaccount([0u8; 32]));
 
@@ -170,6 +229,7 @@ fn redistribute_icps() {
                 )
                 .await;
 
+                // send another half to a special subaccount of this canister, that will eventually burn them
                 let spike_account_id =
                     AccountIdentifier::new(&this_canister_id, &Subaccount(BURNER_SPIKE_SUBACCOUNT));
 
@@ -186,6 +246,7 @@ fn redistribute_icps() {
                 )
                 .await;
 
+                // send a little bit to the subaccount, where the devs can withdraw them
                 let dev_account_id = AccountIdentifier::new(
                     &this_canister_id,
                     &Subaccount(BURNER_DEV_FEE_SUBACCOUNT),
@@ -206,7 +267,10 @@ fn redistribute_icps() {
             }
         }
 
-        set_timer(Duration::from_nanos(ONE_HOUR_NS * 3), redistribute_icps);
+        set_timer(
+            Duration::from_nanos(ICP_REDISTRIBUTION_INTERVAL_NS),
+            redistribute_icps,
+        );
     });
 }
 
@@ -224,6 +288,7 @@ fn try_producing_a_chart_spike() {
             account: spike_account_id,
         };
 
+        // check how much ICPs were redistributed for burning
         let balance_call_result =
             ic_ledger_types::account_balance(ENV_VARS.icp_token_canister_id, account_balance_args)
                 .await;
@@ -231,6 +296,7 @@ fn try_producing_a_chart_spike() {
         if let Ok(balance) = balance_call_result {
             let spike_target = STATE.with_borrow(|s| s.get_info().get_icp_burn_spike_target());
 
+            // if current spiking target is reached, swap ICPs for cycles and burn the cycles
             if balance.e8s() > spike_target {
                 let deposit_cycles_call_result = deposit_cycles(balance.e8s()).await;
 
@@ -238,17 +304,25 @@ fn try_producing_a_chart_spike() {
                     if let Ok(cycles) = deposit_cycles_result {
                         let deposited_cycles: u128 = cycles.0.clone().try_into().unwrap();
 
+                        // take square root of deposited cycles as a fee to keep the thing running
+                        let burner_fee: u128 = TCycles::from(deposited_cycles)
+                            .sqrt()
+                            .val
+                            .try_into()
+                            .unwrap();
+
+                        let cycles_to_burn = deposited_cycles - burner_fee;
+
                         set_timer(Duration::from_secs(30), move || {
-                            // take square root of deposited cycles as a fee to keep the thing running
-                            let burner_fee: u128 = TCycles::from(deposited_cycles)
-                                .sqrt()
-                                .val
-                                .try_into()
-                                .unwrap();
-
                             // TODO: distribute cycles among other MSQ.Burn canisters
+                            cycles_burn(cycles_to_burn);
 
-                            cycles_burn(deposited_cycles - burner_fee);
+                            // note burned cycles
+                            STATE.with_borrow_mut(|s| {
+                                let mut info = s.get_info();
+                                info.note_burned_cycles(TCycles::from(cycles_to_burn));
+                                s.set_info(info);
+                            });
                         });
                     }
                 }
@@ -256,7 +330,7 @@ fn try_producing_a_chart_spike() {
         }
 
         set_timer(
-            Duration::from_nanos(ONE_HOUR_NS * 6),
+            Duration::from_nanos(SPIKING_INTERVAL_NS),
             try_producing_a_chart_spike,
         );
     });

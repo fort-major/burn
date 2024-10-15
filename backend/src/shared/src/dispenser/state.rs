@@ -1,7 +1,7 @@
 use candid::{Nat, Principal};
 use ic_e8s::d::EDs;
 use ic_stable_structures::{Cell, StableBTreeMap};
-use num_bigint::BigUint;
+
 
 use crate::burner::types::{Memory, TCycles, TimestampNs};
 
@@ -70,7 +70,7 @@ impl DispenserState {
             info.generate_random_number()
         };
 
-        let mut counter = if let Some(c) = distribution_info.kamikaze_random_number {
+        let mut counter = if let Some(c) = distribution_info.kamikaze_pool_counter {
             c
         } else {
             TCycles::zero()

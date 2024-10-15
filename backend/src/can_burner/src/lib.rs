@@ -9,17 +9,17 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use shared::burner::api::{
     ClaimRewardRequest, ClaimRewardResponse, GetBurnersRequest, GetBurnersResponse,
-    GetTotalsResponse, MigrateMsqAccountRequest, MigrateMsqAccountResponse,
-    RefundLostTokensRequest, RefundLostTokensResponse, StakeRequest, StakeResponse,
-    VerifyDecideIdRequest, VerifyDecideIdResponse, WithdrawRequest, WithdrawResponse,
+    GetTotalsResponse, MigrateMsqAccountRequest, MigrateMsqAccountResponse, StakeRequest,
+    StakeResponse, VerifyDecideIdRequest, VerifyDecideIdResponse, WithdrawRequest,
+    WithdrawResponse,
 };
 use shared::burner::types::{
-    TCycles, BURNER_DEV_FEE_SUBACCOUNT, BURNER_REDISTRIBUTION_SUBACCOUNT, BURNER_SPIKE_SUBACCOUNT,
+    BURNER_DEV_FEE_SUBACCOUNT, BURNER_REDISTRIBUTION_SUBACCOUNT, BURNER_SPIKE_SUBACCOUNT,
 };
 use shared::icrc1::ICRC1CanisterClient;
 use shared::{ENV_VARS, ICP_FEE, MIN_ICP_STAKE_E8S_U64};
 use utils::{
-    assert_caller_is_dev, assert_running, lottery_and_pos, set_cycles_icp_exchange_rate_timer,
+    assert_caller_is_dev, assert_running, kamikaze_and_pos, set_cycles_icp_exchange_rate_timer,
     set_icp_redistribution_timer, set_init_seed_one_timer, set_spike_timer,
     stake_callers_icp_for_redistribution, STATE, STOPPED_FOR_UPDATE,
 };
@@ -58,7 +58,7 @@ async fn stake(req: StakeRequest) -> StakeResponse {
     assert_running();
 
     if req.qty_e8s_u64 < MIN_ICP_STAKE_E8S_U64 {
-        panic!("At least 0.5 ICP is required to fuel the pool");
+        panic!("At least 0.5 ICP is required to participate");
     }
 
     stake_callers_icp_for_redistribution(req.qty_e8s_u64)
@@ -71,16 +71,41 @@ async fn stake(req: StakeRequest) -> StakeResponse {
         .to_const::<12>();
 
     STATE.with_borrow_mut(|s| {
-        let mut info = s.get_info();
+        let info = s.get_info();
         let cycles_rate = info.get_icp_to_cycles_exchange_rate();
 
         let shares_minted = staked_icps_e12s * cycles_rate;
 
         s.mint_share(shares_minted.clone(), caller());
+    });
 
-        info.note_burned_cycles(shares_minted / TCycles::two());
+    StakeResponse {}
+}
 
-        s.set_info(info);
+#[update]
+async fn stake_kamikaze(req: StakeRequest) -> StakeResponse {
+    assert_running();
+
+    if req.qty_e8s_u64 < MIN_ICP_STAKE_E8S_U64 {
+        panic!("At least 0.5 ICP is required to participate");
+    }
+
+    stake_callers_icp_for_redistribution(req.qty_e8s_u64)
+        .await
+        .expect("Unable to stake ICP");
+
+    let staked_icps_e12s = E8s::from(req.qty_e8s_u64)
+        .to_dynamic()
+        .to_decimals(12)
+        .to_const::<12>();
+
+    STATE.with_borrow_mut(|s| {
+        let info = s.get_info();
+        let cycles_rate = info.get_icp_to_cycles_exchange_rate();
+
+        let shares_minted = staked_icps_e12s * cycles_rate;
+
+        s.mint_kamikaze_share(shares_minted.clone(), caller(), time());
     });
 
     StakeResponse {}
@@ -132,10 +157,10 @@ async fn claim_reward(req: ClaimRewardRequest) -> ClaimRewardResponse {
 }
 
 #[update]
-fn verify_decide_id(req: VerifyDecideIdRequest) -> VerifyDecideIdResponse {
-    STATE
-        .with_borrow_mut(|s| s.verify_decide_id(&req.jwt, caller(), time()))
-        .expect("Unable to verify Decide ID");
+fn verify_decide_id(_req: VerifyDecideIdRequest) -> VerifyDecideIdResponse {
+    /* STATE
+    .with_borrow_mut(|s| s.verify_decide_id(&req.jwt, caller(), time()))
+    .expect("Unable to verify Decide ID"); */
 
     VerifyDecideIdResponse {}
 }
@@ -167,6 +192,28 @@ fn disable_lottery() {
     STATE.with_borrow_mut(|s| {
         let mut info = s.get_info();
         info.disable_lottery();
+        s.set_info(info);
+    });
+}
+
+#[update]
+fn enable_kamikaze_pool() {
+    assert_caller_is_dev();
+
+    STATE.with_borrow_mut(|s| {
+        let mut info = s.get_info();
+        info.enable_kamikaze_pool();
+        s.set_info(info);
+    });
+}
+
+#[update]
+fn disable_kamikaze_pool() {
+    assert_caller_is_dev();
+
+    STATE.with_borrow_mut(|s| {
+        let mut info = s.get_info();
+        info.disable_kamikaze_pool();
         s.set_info(info);
     });
 }
@@ -244,7 +291,7 @@ fn init_hook() {
     set_icp_redistribution_timer();
     set_spike_timer();
 
-    lottery_and_pos();
+    kamikaze_and_pos();
 }
 
 #[post_upgrade]
@@ -255,7 +302,7 @@ fn post_upgrade_hook() {
     set_icp_redistribution_timer();
     set_spike_timer();
 
-    lottery_and_pos();
+    kamikaze_and_pos();
 }
 
 #[update]
@@ -278,49 +325,6 @@ fn resume() {
             *is_stopped = false;
         }
     })
-}
-
-#[update]
-async fn refund_lost_tokens(_req: RefundLostTokensRequest) -> RefundLostTokensResponse {
-    /*     assert_caller_is_dev();
-
-    match req.kind {
-        RefundTokenKind::ICP(accounts) => {
-            let icp_can_id = Principal::from_text(ICP_CAN_ID).unwrap();
-            let mut futs = Vec::new();
-
-            for (account, refund_sum) in accounts {
-                let transfer_args = TransferArgs {
-                    amount: Tokens::from_e8s(refund_sum),
-                    to: account,
-                    memo: Memo(763824),
-                    fee: Tokens::from_e8s(ICP_FEE),
-                    from_subaccount: None,
-                    created_at_time: None,
-                };
-
-                futs.push(async {
-                    let res = transfer(icp_can_id, transfer_args).await;
-
-                    match res {
-                        Ok(r) => match r {
-                            Ok(b) => Ok(Nat::from(b)),
-                            Err(e) => Err(format!("ICP Transfer error: {}", e)),
-                        },
-                        Err(e) => Err(format!("ICP Call error: {:?}", e)),
-                    }
-                });
-            }
-
-            RefundLostTokensResponse {
-                results: join_all(futs).await,
-            }
-        }
-    } */
-
-    RefundLostTokensResponse {
-        results: Vec::new(),
-    }
 }
 
 export_candid!();

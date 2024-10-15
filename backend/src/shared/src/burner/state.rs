@@ -1,22 +1,33 @@
-use std::collections::BTreeSet;
+
 
 use candid::{decode_one, encode_one, Principal};
 use ic_e8s::c::{E8s, ECs};
 use ic_stable_structures::{storable::Bound, Cell, StableBTreeMap, Storable};
 
-use crate::decideid::verify_decide_id_proof;
+
 
 use super::{
-    api::{GetBurnersRequest, GetBurnersResponse, GetTotalsResponse},
-    types::{BurnerStateInfo, Memory, TCycles, TimestampNs, TCYCLE_POS_ROUND_BASE_FEE},
+    api::{
+        BurnerInfo, GetBurnersRequest, GetBurnersResponse, GetKamikazesRequest,
+        GetKamikazesResponse, GetTotalsResponse, KamikazeInfo,
+    },
+    types::{
+        BurnerStateInfo, Memory, TCycles, TimestampNs, KAMIKAZE_POOL_POSITION_LIFESPAN_NS,
+        TCYCLE_POS_ROUND_BASE_FEE,
+    },
 };
 
 pub struct BurnerState {
     pub shares: StableBTreeMap<Principal, (TCycles, E8s), Memory>,
-    pub info: Cell<BurnerStateInfo, Memory>,
+
+    pub kamikaze_shares: StableBTreeMap<Principal, (TCycles, u64), Memory>,
+    pub kamikaze_rounds_won: StableBTreeMap<Principal, u64, Memory>,
+
     pub verified_via_decide_id: StableBTreeMap<Principal, (), Memory>,
     pub eligible_for_lottery: StableBTreeMap<Principal, (), Memory>,
     pub lottery_rounds_won: StableBTreeMap<Principal, u64, Memory>,
+
+    pub info: Cell<BurnerStateInfo, Memory>,
 }
 
 impl BurnerState {
@@ -24,27 +35,6 @@ impl BurnerState {
         let mut info = self.get_info();
 
         info.init(seed);
-
-        self.set_info(info);
-    }
-
-    // TODO: delete this function, once the initialization is complete
-    pub fn init_tmp_can_migrate(&mut self) {
-        let mut info = self.get_info();
-
-        // only do this, if never done this before
-        if info.tmp_can_migrate.is_some() {
-            return;
-        }
-
-        let mut can_migrate_set = BTreeSet::new();
-        let mut iter = self.shares.iter();
-
-        while let Some((id, _)) = iter.next() {
-            can_migrate_set.insert(id);
-        }
-
-        info.tmp_can_migrate = Some(can_migrate_set);
 
         self.set_info(info);
     }
@@ -86,6 +76,29 @@ impl BurnerState {
         } else {
             Err(String::from("No entry found"))
         }
+    }
+
+    pub fn mint_kamikaze_share(&mut self, qty: TCycles, to: Principal, now: TimestampNs) {
+        // add new share to the account
+        let cur_opt = self.kamikaze_shares.get(&to);
+        let mut info = self.get_info();
+
+        let (share, created_at) = if let Some((mut cur_share, created_at)) = cur_opt {
+            cur_share += &qty;
+
+            (cur_share, created_at)
+        } else {
+            (qty.clone(), now)
+        };
+
+        self.kamikaze_shares.insert(to, (share, created_at));
+
+        // adjust total share supply
+        info.total_shares_supply += &qty;
+        info.kamikaze_pool_total_shares =
+            Some(info.kamikaze_pool_total_shares.unwrap_or_default() + qty);
+
+        self.set_info(info);
     }
 
     pub fn mint_share(&mut self, qty: TCycles, to: Principal) {
@@ -159,7 +172,7 @@ impl BurnerState {
     }
 
     // returns true if any winner was determined
-    pub fn lottery_round(&mut self) -> bool {
+    /*     pub fn lottery_round(&mut self) -> bool {
         if self.eligible_for_lottery.is_empty() {
             return false;
         }
@@ -190,10 +203,146 @@ impl BurnerState {
         self.lottery_rounds_won.insert(winner, rounds_won + 1);
 
         true
+    } */
+
+    // returns Some(true) if should be rescheduled, returns Some(false) if round completed, returns None if nobody is in the pool
+    pub fn kamikaze_round_batch(&mut self, batch_size: u64) -> Option<bool> {
+        // only run the protocol if someone is minting
+        if self.kamikaze_shares.len() == 0 {
+            return None;
+        }
+
+        let mut info = self.get_info();
+
+        let mut iter = if let Some(id) = info.next_kamikaze_id {
+            let mut i = self.kamikaze_shares.range(&id..);
+            i.next();
+
+            i
+        } else {
+            self.kamikaze_shares.iter()
+        };
+
+        let random_number = if let Some(random_number) = info.kamikaze_pool_random_number.clone() {
+            random_number
+        } else {
+            let n = info.generate_random_number();
+            info.kamikaze_pool_random_number = Some(n.clone());
+
+            n
+        };
+
+        let mut counter = info.kamikaze_pool_counter.unwrap_or_default();
+
+        let total_shares = info
+            .kamikaze_pool_total_shares
+            .clone()
+            .expect("Total shares should be present");
+
+        let mut i: u64 = 0;
+
+        let should_reschedule = loop {
+            let (pid, (share, _)) = iter.next().expect("The winner should be found!");
+
+            counter += share / &total_shares;
+            info.next_kamikaze_id = Some(pid);
+
+            if counter >= random_number {
+                let cur_reward = &info.current_burn_token_reward / E8s::two(); // only distribute half the block via the lottery
+                let (common_pool_shares, unclaimed_reward) =
+                    self.shares.get(&pid).unwrap_or_default();
+
+                self.shares
+                    .insert(pid, (common_pool_shares, unclaimed_reward + cur_reward));
+
+                let prev_rounds_won = self.kamikaze_rounds_won.get(&pid).unwrap_or_default();
+                self.kamikaze_rounds_won.insert(pid, prev_rounds_won + 1);
+
+                break false;
+            }
+
+            i += 1;
+
+            if i == batch_size {
+                break true;
+            }
+        };
+
+        if should_reschedule {
+            info.kamikaze_pool_counter = Some(counter);
+        } else {
+            info.next_kamikaze_id = None;
+            info.kamikaze_pool_counter = None;
+            info.kamikaze_pool_random_number = None;
+        }
+
+        self.set_info(info);
+
+        Some(should_reschedule)
+    }
+
+    pub fn kamikaze_harakiri_batch(&mut self, now: TimestampNs, batch_size: u64) -> bool {
+        // only run the protocol if someone is minting
+        if self.kamikaze_shares.len() == 0 {
+            return false;
+        }
+
+        let mut info = self.get_info();
+
+        let mut iter = if let Some(id) = info.next_kamikaze_id {
+            let mut i = self.kamikaze_shares.range(&id..);
+            i.next();
+
+            i
+        } else {
+            self.kamikaze_shares.iter()
+        };
+
+        let mut kamikaze_total_supply = info
+            .kamikaze_pool_total_shares
+            .expect("Total supply should be set");
+
+        let mut positions_to_remove = Vec::new();
+        let mut i = 0;
+
+        let should_reschedule = loop {
+            let entry = iter.next();
+            if entry.is_none() {
+                break false;
+            }
+
+            let (pid, (shares, created_at)) = entry.unwrap();
+
+            info.next_kamikaze_id = Some(pid);
+
+            if now - created_at >= KAMIKAZE_POOL_POSITION_LIFESPAN_NS {
+                kamikaze_total_supply -= shares;
+                positions_to_remove.push(pid);
+            }
+
+            i += 1;
+            if i == batch_size {
+                break true;
+            }
+        };
+
+        for pid in positions_to_remove {
+            self.kamikaze_shares.remove(&pid);
+        }
+
+        info.kamikaze_pool_total_shares = Some(kamikaze_total_supply);
+
+        if !should_reschedule {
+            info.next_kamikaze_id = None;
+        }
+
+        self.set_info(info);
+
+        should_reschedule
     }
 
     // return true if the round has completed
-    pub fn pos_round_batch(&mut self, lottery_round_complete: bool, batch_size: u64) -> bool {
+    pub fn pos_round_batch(&mut self, split_reward_in_half: bool, batch_size: u64) -> bool {
         // only run the protocol if someone is minting
         if self.shares.len() == 0 {
             return true;
@@ -219,7 +368,7 @@ impl BurnerState {
             .to_decimals(12)
             .to_const();
 
-        if lottery_round_complete {
+        if split_reward_in_half {
             cur_reward /= ECs::<12>::two(); // only distribute half the block via the pool shares
         }
 
@@ -277,7 +426,7 @@ impl BurnerState {
         completed
     }
 
-    pub fn verify_decide_id(
+    /*     pub fn verify_decide_id(
         &mut self,
         jwt: &str,
         caller: Principal,
@@ -298,7 +447,7 @@ impl BurnerState {
         }
 
         Ok(())
-    }
+    } */
 
     pub fn get_info(&self) -> BurnerStateInfo {
         self.info.get().clone()
@@ -330,13 +479,15 @@ impl BurnerState {
                 let is_lottery_participant = self.eligible_for_lottery.contains_key(&account);
                 let rounds_won = self.lottery_rounds_won.get(&account).unwrap_or_default();
 
-                entries.push((
-                    account,
+                let entry = BurnerInfo {
+                    pid: account,
                     share,
                     unclaimed_reward,
                     is_lottery_participant,
-                    rounds_won,
-                ));
+                    lottery_rounds_won: rounds_won,
+                };
+
+                entries.push(entry);
                 i += 1;
 
                 if i == req.take {
@@ -348,6 +499,46 @@ impl BurnerState {
         }
 
         GetBurnersResponse { entries }
+    }
+
+    pub fn get_kamikazes(&self, req: GetKamikazesRequest) -> GetKamikazesResponse {
+        let mut iter = if let Some(start_from) = req.start {
+            let mut i = self.kamikaze_shares.range(&start_from..);
+            i.next();
+            i
+        } else {
+            self.kamikaze_shares.iter()
+        };
+
+        let mut entries = Vec::new();
+        let mut i = 0;
+
+        loop {
+            let entry = iter.next();
+            if entry.is_none() {
+                break;
+            }
+
+            let (pid, (share, created_at)) = entry.unwrap();
+
+            let rounds_won = self.kamikaze_rounds_won.get(&pid).unwrap_or_default();
+
+            let entry = KamikazeInfo {
+                pid,
+                share,
+                created_at,
+                rounds_won,
+            };
+
+            entries.push(entry);
+            i += 1;
+
+            if i == req.take {
+                break;
+            }
+        }
+
+        GetKamikazesResponse { entries }
     }
 
     pub fn get_total_verified_accounts(&self) -> u32 {
@@ -362,6 +553,13 @@ impl BurnerState {
         let (share, unclaimed_reward) = self.shares.get(caller).unwrap_or_default();
         let verified_via_decide_id = self.verified_via_decide_id.contains_key(caller);
         let eligible_for_lottery = self.eligible_for_lottery.contains_key(caller);
+        let icp_to_cycles_exchange_rate = info.get_icp_to_cycles_exchange_rate();
+
+        let (kamikaze_share, kamikaze_created_at) = self
+            .kamikaze_shares
+            .get(caller)
+            .map(|(share, created_at)| (share, Some(created_at)))
+            .unwrap_or((TCycles::zero(), None));
 
         GetTotalsResponse {
             total_share_supply: info.total_shares_supply,
@@ -374,11 +572,16 @@ impl BurnerState {
             current_share_fee: fee,
             is_lottery_enabled,
 
-            total_burners: self.shares.len(),
+            total_burners: self.shares.len() + self.kamikaze_shares.len(),
             total_verified_accounts: self.verified_via_decide_id.len(),
             total_lottery_participants: self.eligible_for_lottery.len(),
 
+            icp_to_cycles_exchange_rate,
+            total_kamikaze_pool_supply: info.kamikaze_pool_total_shares.unwrap_or_default(),
+
             your_share_tcycles: share,
+            your_kamikaze_share_tcycles: kamikaze_share,
+            your_kamikaze_position_created_at: kamikaze_created_at,
             your_unclaimed_reward_e8s: unclaimed_reward,
             your_decide_id_verification_status: verified_via_decide_id,
             your_lottery_eligibility_status: eligible_for_lottery,

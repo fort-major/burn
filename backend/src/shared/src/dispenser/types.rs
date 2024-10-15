@@ -1,5 +1,5 @@
 use candid::{decode_one, encode_one, CandidType, Nat, Principal};
-use ic_e8s::{c::E8s, d::EDs};
+use ic_e8s::{d::EDs};
 use ic_stable_structures::{storable::Bound, Storable};
 use serde::Deserialize;
 use sha2::Digest;
