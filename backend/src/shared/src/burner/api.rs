@@ -61,9 +61,10 @@ pub struct GetTotalsResponse {
     pub total_verified_accounts: u64,
     pub total_lottery_participants: u64,
 
+    pub total_kamikaze_pool_supply: TCycles,
     pub icp_to_cycles_exchange_rate: TCycles,
 
-    pub total_kamikaze_pool_supply: TCycles,
+    pub is_kamikaze_pool_enabled: bool,
 
     pub your_kamikaze_share_tcycles: TCycles,
     pub your_kamikaze_position_created_at: Option<u64>,

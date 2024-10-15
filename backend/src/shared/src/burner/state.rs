@@ -1,10 +1,6 @@
-
-
 use candid::{decode_one, encode_one, Principal};
 use ic_e8s::c::{E8s, ECs};
 use ic_stable_structures::{storable::Bound, Cell, StableBTreeMap, Storable};
-
-
 
 use super::{
     api::{
@@ -560,6 +556,7 @@ impl BurnerState {
             .get(caller)
             .map(|(share, created_at)| (share, Some(created_at)))
             .unwrap_or((TCycles::zero(), None));
+        let is_kamikaze_pool_enabled = info.is_kamikaze_pool_enabled();
 
         GetTotalsResponse {
             total_share_supply: info.total_shares_supply,
@@ -578,6 +575,7 @@ impl BurnerState {
 
             icp_to_cycles_exchange_rate,
             total_kamikaze_pool_supply: info.kamikaze_pool_total_shares.unwrap_or_default(),
+            is_kamikaze_pool_enabled,
 
             your_share_tcycles: share,
             your_kamikaze_share_tcycles: kamikaze_share,

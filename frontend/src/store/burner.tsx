@@ -28,6 +28,13 @@ export interface ITotals {
   totalVerifiedAccounts: bigint;
   totalLotteryParticipants: bigint;
 
+  totalKamikazePoolSupply: EDs;
+  icpToCyclesExchangeRate: EDs;
+
+  isKamikazePoolEnabled: boolean;
+
+  yourKamikazeShareTcycles: EDs;
+  yourKamikazePositionCreatedAt?: Date;
   yourShareTcycles: EDs;
   yourUnclaimedReward: E8s;
   yourDecideIdVerificationStatus: boolean;
@@ -42,6 +49,13 @@ export interface IPoolMember {
   lotteryRoundsWon: bigint;
 }
 
+export interface IKamikazePoolMember {
+  id: Principal;
+  share: EDs;
+  roundsWon: bigint;
+  createdAtDate: Date;
+}
+
 export interface IBurnerStoreContext {
   totals: Store<{ data?: ITotals }>;
   fetchTotals: () => Promise<void>;
@@ -50,6 +64,7 @@ export interface IBurnerStoreContext {
 
   canStake: () => boolean;
   stake: () => Promise<void>;
+  stakeKamikaze: () => Promise<void>;
 
   canWithdraw: () => boolean;
   withdraw: (to: Principal) => Promise<void>;
@@ -59,6 +74,9 @@ export interface IBurnerStoreContext {
 
   poolMembers: () => IPoolMember[];
   fetchPoolMembers: () => Promise<void>;
+
+  kamikazePoolMembers: () => IKamikazePoolMember[];
+  fetchKamikazePoolMembers: () => Promise<void>;
 
   canMigrateMsqAccount: () => boolean;
   migrateMsqAccount: () => Promise<void>;
@@ -97,6 +115,7 @@ export function BurnerStore(props: IChildren) {
 
   const [totals, setTotals] = createStore<IBurnerStoreContext["totals"]>();
   const [poolMembers, setPoolMembers] = createSignal<IPoolMember[]>([]);
+  const [kamikazePoolMembers, setKamikazePoolMembers] = createSignal<IKamikazePoolMember[]>([]);
   const [int, setInt] = createSignal<NodeJS.Timeout>();
   const [canMigrate, setCanMigrate] = createSignal(false);
 
@@ -144,6 +163,11 @@ export function BurnerStore(props: IChildren) {
     const burner = newBurnerActor(ag);
     const resp = await burner.get_totals();
 
+    const kamikazePositionCreatedAtNs = optUnwrap(resp.your_kamikaze_position_created_at);
+    const kamikazePositionCreatedAtDate = kamikazePositionCreatedAtNs
+      ? new Date(Number(kamikazePositionCreatedAtNs / 1_000_000n))
+      : undefined;
+
     const iTotals: ITotals = {
       totalSharesSupply: EDs.new(resp.total_share_supply, 12),
       totalTcyclesBurned: EDs.new(resp.total_tcycles_burned, 12),
@@ -159,6 +183,13 @@ export function BurnerStore(props: IChildren) {
       totalLotteryParticipants: resp.total_lottery_participants,
       totalVerifiedAccounts: resp.total_verified_accounts,
 
+      totalKamikazePoolSupply: EDs.new(resp.total_kamikaze_pool_supply || 1n, 12),
+      icpToCyclesExchangeRate: EDs.new(resp.icp_to_cycles_exchange_rate, 12),
+
+      isKamikazePoolEnabled: resp.is_kamikaze_pool_enabled,
+
+      yourKamikazeShareTcycles: EDs.new(resp.your_kamikaze_share_tcycles, 12),
+      yourKamikazePositionCreatedAt: kamikazePositionCreatedAtDate,
       yourShareTcycles: EDs.new(resp.your_share_tcycles, 12),
       yourUnclaimedReward: E8s.new(resp.your_unclaimed_reward_e8s),
       yourDecideIdVerificationStatus: resp.your_decide_id_verification_status,
@@ -185,11 +216,11 @@ export function BurnerStore(props: IChildren) {
 
       for (let entry of entries) {
         let iPoolMember: IPoolMember = {
-          id: entry[0],
-          share: EDs.new(entry[1], 12),
-          unclaimedReward: E8s.new(entry[2]),
-          isVerifiedViaDecideID: entry[3],
-          lotteryRoundsWon: entry[4]
+          id: entry.pid,
+          share: EDs.new(entry.share, 12),
+          unclaimedReward: E8s.new(entry.unclaimed_reward),
+          isVerifiedViaDecideID: entry.is_lottery_participant,
+          lotteryRoundsWon: entry.lottery_rounds_won,
         };
 
         members.push(iPoolMember);
@@ -198,6 +229,47 @@ export function BurnerStore(props: IChildren) {
     }
 
     setPoolMembers(
+      members.sort((a, b) => {
+        if (a.share.gt(b.share)) {
+          return -1;
+        } else if (a.share.lt(b.share)) {
+          return 1;
+        } else {
+          return 0;
+        }
+      })
+    );
+  };
+
+  const fetchKamikazePoolMembers: IBurnerStoreContext["fetchKamikazePoolMembers"] = async () => {
+    assertReadyToFetch();
+
+    let start: [] | [Principal] = [];
+    const members = [];
+
+    const burner = newBurnerActor(anonymousAgent()!);
+
+    while (true) {
+      const { entries } = await burner.get_kamikazes({ start, take: 1000 });
+
+      if (entries.length === 0) {
+        break;
+      }
+
+      for (let entry of entries) {
+        let iPoolMember: IKamikazePoolMember = {
+          id: entry.pid,
+          share: EDs.new(entry.share, 12),
+          roundsWon: entry.rounds_won,
+          createdAtDate: new Date(Number(entry.created_at / 1_000_000n)),
+        };
+
+        members.push(iPoolMember);
+        start = [iPoolMember.id];
+      }
+    }
+
+    setKamikazePoolMembers(
       members.sort((a, b) => {
         if (a.share.gt(b.share)) {
           return -1;
@@ -256,7 +328,25 @@ export function BurnerStore(props: IChildren) {
     fetchTotals();
     fetchBalanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount);
 
-    logInfo(`Successfully burned ${E8s.new(b).toString()} ICP`);
+    logInfo(`Successfully pledged ${E8s.new(b).toString()} ICP`);
+  };
+
+  const stakeKamikaze: IBurnerStoreContext["stakeKamikaze"] = async () => {
+    assertAuthorized();
+
+    disable();
+
+    const myDepositAccount = getMyDepositAccount()!;
+    const b = balanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount)!;
+    const burner = newBurnerActor(agent()!);
+    await burner.stake_kamikaze({ qty_e8s_u64: b - 10_000n });
+
+    enable();
+
+    fetchTotals();
+    fetchBalanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount);
+
+    logInfo(`Successfully pledged ${E8s.new(b).toString()} ICP`);
   };
 
   const canWithdraw: IBurnerStoreContext["canWithdraw"] = () => {
@@ -451,6 +541,10 @@ export function BurnerStore(props: IChildren) {
         canWithdraw,
         canClaimReward,
         claimReward,
+
+        kamikazePoolMembers,
+        fetchKamikazePoolMembers,
+        stakeKamikaze,
 
         canMigrateMsqAccount,
         migrateMsqAccount,

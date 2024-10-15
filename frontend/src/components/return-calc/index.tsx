@@ -38,7 +38,9 @@ export const ReturnCalculator = () => {
     const t = totals.data!;
     const shareAbs = E8s.fromPercentNum(poolSharePercent()).divNum(100n);
 
-    return unwrapRewards(b.toBigIntBase(), t.currentPosRound, t.isLotteryEnabled).mul(shareAbs);
+    return unwrapRewards(b.toBigIntBase(), t.currentPosRound, t.isLotteryEnabled || t.isKamikazePoolEnabled).mul(
+      shareAbs
+    );
   };
 
   const handleMyInvestmentChange = eventHandler((e: Event & { target: HTMLInputElement }) => {

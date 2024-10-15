@@ -9,6 +9,7 @@ type ClaimRewardRequest = record { to : principal };
 type ClaimRewardResponse = record { result : Result };
 type GetBurnersRequest = record { take : nat32; start : opt principal };
 type GetBurnersResponse = record { entries : vec BurnerInfo };
+type GetKamikazesResponse = record { entries : vec KamikazeInfo };
 type GetTotalsResponse = record {
   total_lottery_participants : nat64;
   your_lottery_eligibility_status : bool;
@@ -22,6 +23,7 @@ type GetTotalsResponse = record {
   your_share_tcycles : nat;
   your_kamikaze_position_created_at : opt nat64;
   pos_round_delay_ns : nat64;
+  is_kamikaze_pool_enabled : bool;
   total_burn_token_minted : nat;
   icp_to_cycles_exchange_rate : nat;
   total_verified_accounts : nat64;
@@ -30,6 +32,12 @@ type GetTotalsResponse = record {
   is_lottery_enabled : bool;
   current_pos_round : nat64;
   current_share_fee : nat;
+};
+type KamikazeInfo = record {
+  pid : principal;
+  created_at : nat64;
+  share : nat;
+  rounds_won : nat64;
 };
 type Result = variant { Ok : nat; Err : text };
 type Result_1 = variant { Ok : nat64; Err : text };
@@ -46,6 +54,7 @@ service : () -> {
   enable_lottery : () -> ();
   get_account_ids : () -> (vec record { text; blob }) query;
   get_burners : (GetBurnersRequest) -> (GetBurnersResponse) query;
+  get_kamikazes : (GetBurnersRequest) -> (GetKamikazesResponse) query;
   get_totals : () -> (GetTotalsResponse) query;
   migrate_msq_account : (ClaimRewardRequest) -> (record {});
   resume : () -> ();

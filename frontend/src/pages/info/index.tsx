@@ -11,12 +11,13 @@ import { DEFAULT_TOKENS, useTokens } from "@store/tokens";
 import { COLORS } from "@utils/colors";
 import { avatarSrcFromPrincipal } from "@utils/common";
 import { E8s, EDs } from "@utils/math";
+import { ONE_DAY_NS } from "@utils/types";
 import { createEffect, For, on, onMount, Show } from "solid-js";
 
 export const InfoPage = () => {
   const { isReadyToFetch, identity } = useAuth();
   const { icpSwapUsdExchangeRates } = useTokens();
-  const { poolMembers, fetchPoolMembers, totals } = useBurner();
+  const { poolMembers, fetchPoolMembers, kamikazePoolMembers, fetchKamikazePoolMembers, totals } = useBurner();
 
   const burnExchangeRate = () => icpSwapUsdExchangeRates["egjwt-lqaaa-aaaak-qi2aa-cai"] ?? E8s.zero();
   const burnUSDPrice = () =>
@@ -26,15 +27,35 @@ export const InfoPage = () => {
   const totalShareWorth = () =>
     poolMembers()
       .map((it) => it.share)
-      .reduce((prev, cur) => prev.add(cur), EDs.zero(12));
+      .reduce((prev, cur) => prev.add(cur), EDs.zero(12))
+      .mul(tcyclesExchangeRate().toDynamic().toDecimals(12));
+
+  const totalKamikazeShareWorth = () =>
+    kamikazePoolMembers()
+      .map((it) => it.share)
+      .reduce((prev, cur) => prev.add(cur), EDs.zero(12))
+      .mul(tcyclesExchangeRate().toDynamic().toDecimals(12));
+
+  const avgKamikazeShareWorth = () =>
+    kamikazePoolMembers()
+      .map((it) => it.share)
+      .reduce((prev, cur) => prev.add(cur), EDs.zero(12))
+      .div(EDs.fromBigIntBase(BigInt(kamikazePoolMembers().length || 1), 12))
+      .mul(tcyclesExchangeRate().toDynamic().toDecimals(12));
 
   onMount(() => {
-    if (isReadyToFetch()) fetchPoolMembers();
+    if (isReadyToFetch()) {
+      fetchPoolMembers();
+      fetchKamikazePoolMembers();
+    }
   });
 
   createEffect(
     on(isReadyToFetch, (ready) => {
-      if (ready) fetchPoolMembers();
+      if (ready) {
+        fetchPoolMembers();
+        fetchKamikazePoolMembers();
+      }
     })
   );
 
@@ -84,9 +105,98 @@ export const InfoPage = () => {
         <ReturnCalculator />
       </div>
 
+      <Show when={totals.data?.isKamikazePoolEnabled}>
+        <div class="flex flex-col gap-4">
+          <p class="text-white font-semibold text-4xl flex gap-4 items-center">High-Risk Pool Members</p>
+          <div class="flex flex-col gap-4">
+            <div class="mb-2 grid grid-cols-5 md:grid-cols-6 items-start md:items-center gap-3 text-xs font-semibold text-gray-140">
+              <p class="col-span-1 text-right"></p>
+              <p class="col-span-1 text-right hidden md:block">PID</p>
+              <p class="col-span-1 text-right">Minutes Left</p>
+              <p class="col-span-1 text-right">Times Won</p>
+              <p class="col-span-1 text-right">Pool Share</p>
+              <p class="col-span-1 text-right">Share Worth</p>
+            </div>
+
+            <div class="flex flex-col gap-2">
+              <Show when={tcyclesExchangeRate().toBool()}>
+                <For each={kamikazePoolMembers()} fallback={<p class="text-sm text-gray-140">Nothing here yet :(</p>}>
+                  {(member, idx) => {
+                    const now = Date.now();
+                    const harakiriAt = member.createdAtDate.getTime() + 24 * 60 * 60 * 1000; // 24 hours since creation
+                    let minutesLeftStr = "< 1";
+                    if (harakiriAt > now) {
+                      const dif = harakiriAt - now;
+
+                      minutesLeftStr = `${Math.floor(dif / 60 / 1000)}`;
+                    }
+
+                    const poolSharePercent = member.share
+                      .div(totals.data!.totalKamikazePoolSupply)
+                      .toPercent()
+                      .toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 1 });
+
+                    const shareWorth = member.share
+                      .mul(tcyclesExchangeRate().toDynamic().toDecimals(12))
+                      .toShortString({ belowOne: 3, belowThousand: 1, afterThousand: 1 });
+
+                    return (
+                      <div class="grid p-2 grid-cols-5 md:grid-cols-6 items-center gap-3 odd:bg-gray-105 even:bg-black relative">
+                        <div class="flex items-center gap-1 col-span-1">
+                          <p
+                            class="text-xs text-gray-140 font-semibold min-w-7"
+                            classList={{ ["text-white"]: identity()?.getPrincipal().compareTo(member.id) === "eq" }}
+                          >
+                            {idx() + 1}
+                          </p>
+                          <Avatar
+                            url={avatarSrcFromPrincipal(member.id)}
+                            size="sm"
+                            borderColor={
+                              identity()?.getPrincipal().compareTo(member.id) === "eq"
+                                ? COLORS.chartreuse
+                                : COLORS.gray[140]
+                            }
+                          />
+                        </div>
+
+                        <Copyable class="col-span-1 hidden md:flex" text={member.id.toText()} ellipsis />
+
+                        <p class="col-span-1 font-semibold text-gray-140 text-md text-right">{minutesLeftStr}</p>
+
+                        <p class="col-span-1 font-semibold text-gray-140 text-md text-right">
+                          <Show when={totals.data}>{member.roundsWon.toString()}</Show>
+                        </p>
+
+                        <p class="col-span-1 font-semibold text-gray-140 text-md text-right">
+                          <Show when={totals.data && !totals.data.totalKamikazePoolSupply.isZero()}>
+                            {poolSharePercent}%
+                          </Show>
+                        </p>
+
+                        <p class="col-span-1 font-semibold text-gray-140 text-md text-right">
+                          <Show when={totals.data && !totals.data.totalKamikazePoolSupply.isZero()}>${shareWorth}</Show>
+                        </p>
+                      </div>
+                    );
+                  }}
+                </For>
+              </Show>
+            </div>
+
+            <div class="grid px-2 grid-cols-6 items-center gap-3 text-md font-semibold text-gray-190">
+              <p class="col-span-2 text-left">Average</p>
+              <p class="col-span-1 text-right font-semibold">${avgKamikazeShareWorth().toDecimals(2).toString()}</p>
+              <p class="col-span-2 text-left">Total</p>
+              <p class="col-span-1 text-right font-semibold">${totalKamikazeShareWorth().toDecimals(0).toString()}</p>
+            </div>
+          </div>
+        </div>
+      </Show>
+
       <div class="flex flex-col gap-4">
         <p class="text-white font-semibold text-4xl flex gap-4 items-center">
-          Active Pool Members
+          Classic Pool Members
           <Show when={totals.data?.isLotteryEnabled}>
             <Icon kind={EIconKind.Lottery} color={COLORS.orange} />
           </Show>
@@ -109,7 +219,7 @@ export const InfoPage = () => {
                     .div(totals.data!.currentBlockShareFee)
                     .toShortString({ belowOne: 0, belowThousand: 0, afterThousand: 1 });
 
-                  const poolShare = member.share
+                  const poolSharePercent = member.share
                     .div(totals.data!.totalSharesSupply)
                     .toPercent()
                     .toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 1 });
@@ -145,7 +255,7 @@ export const InfoPage = () => {
                       </p>
 
                       <p class="col-span-1 font-semibold text-gray-140 text-md text-right">
-                        <Show when={totals.data && !totals.data.totalSharesSupply.isZero()}>{poolShare}%</Show>
+                        <Show when={totals.data && !totals.data.totalSharesSupply.isZero()}>{poolSharePercent}%</Show>
                       </p>
 
                       <p class="col-span-1 font-semibold text-gray-140 text-md text-right">
@@ -167,7 +277,9 @@ export const InfoPage = () => {
           </div>
 
           <div class="grid px-2 grid-cols-6 items-center gap-3 text-md font-semibold text-gray-190">
-            <p class="col-span-5 text-left">Total</p>
+            <p class="col-span-2 text-left">Average</p>
+            <p class="col-span-1 text-right font-semibold">${avgKamikazeShareWorth().toDecimals(2).toString()}</p>
+            <p class="col-span-2 text-left">Total</p>
             <p class="col-span-1 text-right font-semibold">${totalShareWorth().toDecimals(0).toString()}</p>
           </div>
         </div>

@@ -12,7 +12,8 @@ export type TTextInputValidation =
   | {
       url: "Any" | "Github" | "Notion" | "Figma" | "DfinityForum" | "FortMajorSite" | "Twitter";
     }
-  | { principal: null };
+  | { principal: null }
+  | { not: string[] };
 
 export interface ITextInputProps {
   value: string;
@@ -127,6 +128,12 @@ function isValid(s: string, validations?: TTextInputValidation[]): undefined | s
         Principal.fromText(s);
       } catch (_) {
         result = "Not a Principal ID";
+      }
+    }
+
+    if ("not" in validation) {
+      if (validation.not.includes(s)) {
+        result = "Blacklisted value";
       }
     }
   }

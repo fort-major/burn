@@ -1,6 +1,7 @@
 import { ROOT } from "@/routes";
 import { Avatar } from "@components/avatar";
 import { BalanceOf } from "@components/balance-of";
+import { BooleanInput } from "@components/boolean-input";
 import { Btn } from "@components/btn";
 import { Copyable } from "@components/copyable";
 import { EIconKind, Icon } from "@components/icon";
@@ -19,7 +20,7 @@ import { useAuth } from "@store/auth";
 import { useBurner } from "@store/burner";
 import { DEFAULT_TOKENS, useTokens } from "@store/tokens";
 import { COLORS } from "@utils/colors";
-import { avatarSrcFromPrincipal } from "@utils/common";
+import { avatarSrcFromPrincipal, createLocalStorageSignal } from "@utils/common";
 import { bytesToHex, tokensToStr } from "@utils/encoding";
 import { logInfo } from "@utils/error";
 import { eventHandler } from "@utils/security";
@@ -27,11 +28,13 @@ import { ONE_MIN_NS, Result } from "@utils/types";
 import { batch, createEffect, createResource, createSignal, For, Match, on, onMount, Show, Switch } from "solid-js";
 
 export const PoolPage = () => {
-  const { isAuthorized, identity, agent, assertAuthorized, disable, enable } = useAuth();
-  const { subaccounts, fetchSubaccountOf, balanceOf, fetchBalanceOf, claimLost, canClaimLost } = useTokens();
-  const { canWithdraw, canStake, totals, fetchTotals, canClaimReward, withdraw, stake, claimReward } = useBurner();
+  const { isAuthorized, identity, assertAuthorized } = useAuth();
+  const { subaccounts, fetchSubaccountOf, claimLost, canClaimLost } = useTokens();
+  const { canWithdraw, canStake, totals, fetchTotals, canClaimReward, withdraw, stake, stakeKamikaze, claimReward } =
+    useBurner();
   const navigate = useNavigate();
 
+  const [isKamikazePool, setIsKamikazePool] = createLocalStorageSignal<boolean>("msq-burn-is-kamikaze-pool");
   const [withdrawModalVisible, setWithdrawModalVisible] = createSignal(false);
   const [burnModalVisible, setBurnModalVisible] = createSignal(false);
   const [claimModalVisible, setClaimModalVisible] = createSignal(false);
@@ -58,6 +61,21 @@ export const PoolPage = () => {
     return Number(t.yourShareTcycles.div(t.currentBlockShareFee).toBigIntBase());
   };
 
+  const highRiskMinutesLeft = () => {
+    const t = totals.data;
+    if (!t || !t.yourKamikazePositionCreatedAt) return 0;
+
+    const now = Date.now();
+    const harakiriAt = t.yourKamikazePositionCreatedAt.getTime() + 24 * 60 * 60 * 1000;
+
+    let dif = 0;
+    if (harakiriAt > now) {
+      dif = harakiriAt - now;
+    }
+
+    return Math.floor(dif / 1000 / 60);
+  };
+
   const myShare = () => {
     const t = totals.data;
     if (!t) return undefined;
@@ -67,13 +85,22 @@ export const PoolPage = () => {
     return t.yourShareTcycles.div(t.totalSharesSupply);
   };
 
+  const myHighRiskShare = () => {
+    const t = totals.data;
+    if (!t) return undefined;
+
+    if (!t.totalKamikazePoolSupply.toBool()) return undefined;
+
+    return t.yourKamikazeShareTcycles.div(t.totalKamikazePoolSupply);
+  };
+
   const myBlockCut = () => {
     const t = totals.data;
     if (!t) return undefined;
 
     if (!t.totalSharesSupply.toBool()) return undefined;
 
-    const lotteryEnabled = t.isLotteryEnabled;
+    const lotteryEnabled = t.isLotteryEnabled || t.isKamikazePoolEnabled;
 
     let reward = t.currentBurnTokenReward
       .toDynamic()
@@ -94,7 +121,10 @@ export const PoolPage = () => {
     const t = totals.data;
     if (!t) return "";
 
-    if (t.isLotteryEnabled && t.yourLotteryEligibilityStatus)
+    if (
+      (t.isLotteryEnabled && t.yourLotteryEligibilityStatus) ||
+      (t.isKamikazePoolEnabled && t.yourKamikazePositionCreatedAt)
+    )
       return `+ a chance for ${t.currentBurnTokenReward
         .divNum(2n)
         .toShortString({ belowOne: 4, belowThousand: 0, afterThousand: 0 })} more BURN`;
@@ -151,7 +181,11 @@ export const PoolPage = () => {
           </p>
           <TextInput
             placeholder={import.meta.env.VITE_BURNER_CANISTER_ID}
-            validations={[{ principal: null }, { required: null }]}
+            validations={[
+              { principal: null },
+              { required: null },
+              { not: [import.meta.env.VITE_BURN_TOKEN_CANISTER_ID] },
+            ]}
             value={recepient().unwrap()}
             onChange={setRecepient}
           />
@@ -168,7 +202,12 @@ export const PoolPage = () => {
   };
 
   const handleBurn = async () => {
-    await stake();
+    if (isKamikazePool()) {
+      await stakeKamikaze();
+    } else {
+      await stake();
+    }
+
     handleBurnModalClose();
   };
 
@@ -213,7 +252,11 @@ export const PoolPage = () => {
           </p>
           <TextInput
             placeholder={import.meta.env.VITE_BURNER_CANISTER_ID}
-            validations={[{ principal: null }, { required: null }]}
+            validations={[
+              { principal: null },
+              { required: null },
+              { not: [import.meta.env.VITE_BURN_TOKEN_CANISTER_ID] },
+            ]}
             value={recepient().unwrap()}
             onChange={setRecepient}
           />
@@ -252,7 +295,11 @@ export const PoolPage = () => {
           </p>
           <TextInput
             placeholder={import.meta.env.VITE_BURNER_CANISTER_ID}
-            validations={[{ principal: null }, { required: null }]}
+            validations={[
+              { principal: null },
+              { required: null },
+              { not: [import.meta.env.VITE_BURN_TOKEN_CANISTER_ID] },
+            ]}
             value={recepient().unwrap()}
             onChange={setRecepient}
           />
@@ -307,6 +354,14 @@ export const PoolPage = () => {
               disabled={!canStake()}
               onClick={() => setBurnModalVisible(true)}
             />
+            <Show when={totals.data?.isKamikazePoolEnabled}>
+              <BooleanInput
+                labelOn="High-Risk"
+                labelOff="High-Risk"
+                value={isKamikazePool() || false}
+                onChange={setIsKamikazePool}
+              />
+            </Show>
             <Show when={canWithdraw()}>
               <p
                 class="underline font-normal text-gray-140 cursor-pointer text-center"
@@ -335,8 +390,12 @@ export const PoolPage = () => {
                 Reward per Block: {myBlockCut()?.toString() ?? 0} BURN {lotteryPostfix()}
               </p>
               <p class="text-sm text-gray-140">
-                Pool Share: {myShare()?.toPercent().toDecimals(4).toString() ?? 0}% (
+                Classic Pool Share: {myShare()?.toPercent().toDecimals(4).toString() ?? 0}% (
                 {totals.data?.yourShareTcycles?.toString()} / {totals.data?.totalSharesSupply.toString()})
+              </p>
+              <p class="text-sm text-gray-140">
+                High-Risk Pool Winning Chance: {myHighRiskShare()?.toPercent().toDecimals(4).toString() ?? 0}% (
+                {totals.data?.yourKamikazeShareTcycles?.toString()} / {totals.data?.totalKamikazePoolSupply.toString()})
               </p>
             </div>
 
@@ -367,19 +426,42 @@ export const PoolPage = () => {
       </div>
 
       <div class="flex flex-col gap-4">
-        <Show fallback={<p class={headerClass}>Burn ICP to Continue</p>} when={totals.data && burnoutLeftoverBlocks()!}>
+        <Show
+          fallback={<p class={headerClass}>Burn ICP in High-Risk Pool to Continue</p>}
+          when={totals.data && burnoutLeftoverBlocks()!}
+        >
           <div class="flex flex-row justify-between items-center gap-4">
-            <p class={headerClass}>Minting In Progress</p>
+            <p class={headerClass}>High-Risk Pool Minting In Progress</p>
+          </div>
+          <p>Your position will be removed in {highRiskMinutesLeft()} minutes</p>
+          <div class="flex flex-wrap gap-2">
+            <For each={Array(highRiskMinutesLeft()!).fill(0)}>
+              {(_, idx) => (
+                <Icon
+                  class={idx() === highRiskMinutesLeft() - 1 ? "animate-pulse" : undefined}
+                  kind={EIconKind.BlockEmpty}
+                  color={COLORS.orange}
+                />
+              )}
+            </For>
+          </div>
+        </Show>
+      </div>
+
+      <div class="flex flex-col gap-4">
+        <Show
+          fallback={<p class={headerClass}>Burn ICP in Classic Pool to Continue</p>}
+          when={totals.data && burnoutLeftoverBlocks()!}
+        >
+          <div class="flex flex-row justify-between items-center gap-4">
+            <p class={headerClass}>Classic Pool Minting In Progress</p>
           </div>
           <p>
             Enough fuel for {burnoutLeftoverBlocks()} blocks (approx.{" "}
             {((totals.data!.posRoundDelayNs * BigInt(burnoutLeftoverBlocks()!)) / ONE_MIN_NS).toString()} minutes)
           </p>
           <div class="flex flex-wrap gap-2">
-            <For
-              fallback={<p class="font-semibold text-xs text-gray-125">Burn ICP to join the pool</p>}
-              each={Array(burnoutLeftoverBlocks()!).fill(0)}
-            >
+            <For each={Array(burnoutLeftoverBlocks()!).fill(0)}>
               {(_, idx) => {
                 return idx() < 100 || idx() === burnoutLeftoverBlocks()! - 1 ? (
                   <Icon
@@ -398,12 +480,15 @@ export const PoolPage = () => {
 
       <Switch>
         <Match when={withdrawModalVisible()}>
-          <Modal title="Withdraw ICP from Pool" onClose={handleWithdrawModalClose}>
+          <Modal title="Withdraw unburnt ICP" onClose={handleWithdrawModalClose}>
             {withdrawForm}
           </Modal>
         </Match>
         <Match when={burnModalVisible()}>
-          <Modal title="Burn ICP in the Pool" onClose={handleBurnModalClose}>
+          <Modal
+            title={`Burn ICP in the ${isKamikazePool() ? "High-Risk" : "Classic"} Pool`}
+            onClose={handleBurnModalClose}
+          >
             {burnForm}
           </Modal>
         </Match>

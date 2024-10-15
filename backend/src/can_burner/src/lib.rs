@@ -8,10 +8,7 @@ use ic_ledger_types::{AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs}
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use shared::burner::api::{
-    ClaimRewardRequest, ClaimRewardResponse, GetBurnersRequest, GetBurnersResponse,
-    GetTotalsResponse, MigrateMsqAccountRequest, MigrateMsqAccountResponse, StakeRequest,
-    StakeResponse, VerifyDecideIdRequest, VerifyDecideIdResponse, WithdrawRequest,
-    WithdrawResponse,
+    ClaimRewardRequest, ClaimRewardResponse, GetBurnersRequest, GetBurnersResponse, GetKamikazesRequest, GetKamikazesResponse, GetTotalsResponse, MigrateMsqAccountRequest, MigrateMsqAccountResponse, StakeRequest, StakeResponse, VerifyDecideIdRequest, VerifyDecideIdResponse, WithdrawRequest, WithdrawResponse
 };
 use shared::burner::types::{
     BURNER_DEV_FEE_SUBACCOUNT, BURNER_REDISTRIBUTION_SUBACCOUNT, BURNER_SPIKE_SUBACCOUNT,
@@ -270,6 +267,11 @@ fn decide_id_verified_accounts_count() -> u32 {
 #[query]
 fn get_burners(req: GetBurnersRequest) -> GetBurnersResponse {
     STATE.with_borrow(|s| s.get_burners(req))
+}
+
+#[query]
+fn get_kamikazes(req: GetKamikazesRequest) -> GetKamikazesResponse {
+    STATE.with_borrow(|s| s.get_kamikazes(req))
 }
 
 #[query]
