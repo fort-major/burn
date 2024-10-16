@@ -238,16 +238,25 @@ impl BurnerState {
         let mut i: u64 = 0;
 
         let should_reschedule = loop {
-            let (pid, (share, _)) = iter.next().expect("The winner should be found!");
+            let entry = iter.next();
+
+            // there might be a situation like that, if the precision of the division eats the counter value too much
+            // in that case, just start the loop over
+            if entry.is_none() {
+                iter = self.kamikaze_shares.iter();
+                continue;
+            }
+
+            let (pid, (share, _)) = entry.unwrap();
 
             counter += share / &total_shares;
             info.next_kamikaze_id = Some(pid);
 
             if counter >= random_number {
-                let cur_reward = &info.current_burn_token_reward / E8s::two(); // only distribute half the block via the lottery
+                let cur_reward = &info.current_burn_token_reward / E8s::two(); // only distribute half the block via the kamikaze pool
+
                 let (common_pool_shares, unclaimed_reward) =
                     self.shares.get(&pid).unwrap_or_default();
-
                 self.shares
                     .insert(pid, (common_pool_shares, unclaimed_reward + cur_reward));
 
