@@ -1,9 +1,16 @@
 use candid::Principal;
-use ic_cdk::{api::time, caller, id, init, post_upgrade, query, update};
+use ic_cdk::{
+    api::{
+        call::{msg_cycles_accept128, msg_cycles_available128},
+        canister_balance128, time,
+    },
+    caller, id, init, post_upgrade, query, update,
+};
 use ic_e8s::c::E8s;
 use ic_ledger_types::Subaccount;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use shared::{
+    burner::types::TCycles,
     furnace::{
         api::{
             AddSupportedTokenRequest, AddSupportedTokenResponse, DeployDispenserRequest,
@@ -240,6 +247,24 @@ fn update_dispenser_wasm(mut req: UpdateDispenserWasmRequest) -> UpdateDispenser
     });
 
     UpdateDispenserWasmResponse {}
+}
+
+#[update]
+fn receive_cycles() {
+    let avail_cycles = msg_cycles_available128();
+    msg_cycles_accept128(avail_cycles);
+}
+
+#[query]
+fn get_cycles_balance() -> TCycles {
+    let balance = canister_balance128();
+
+    // erase a piece of information to prevent some attacks and return
+    TCycles::from(balance)
+        .to_dynamic()
+        .to_decimals(1)
+        .to_decimals(12)
+        .to_const()
 }
 
 #[init]

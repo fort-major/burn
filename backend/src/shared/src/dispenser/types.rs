@@ -1,5 +1,6 @@
 use candid::{decode_one, encode_one, CandidType, Nat, Principal};
-use ic_e8s::{d::EDs};
+use garde::Validate;
+use ic_e8s::d::EDs;
 use ic_stable_structures::{storable::Bound, Storable};
 use serde::Deserialize;
 use sha2::Digest;
@@ -11,11 +12,19 @@ use crate::{
 
 pub type DistributionId = u64;
 
-pub const DEFAULT_TICK_DELAY_NS: u64 = ONE_HOUR_NS;
+pub const DISPENSER_DEFAULT_TICK_DELAY_NS: u64 = ONE_HOUR_NS;
 pub const UPDATE_DISPENSER_SEED_DOMAIN: &[u8] = b"msq-burn-dispenser-update-seed";
+pub const DISPENSER_DISTRIBUTION_SUBACCOUNT: [u8; 32] = [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+];
+pub const DISPENSER_ICP_FEE_SUBACCOUNT: [u8; 32] = [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2,
+];
+pub const DISPENSER_ICP_FEE_E8S: u64 = 1_0000_0000;
 
 #[derive(CandidType, Deserialize, Clone, Default)]
 pub struct DispenserInfo {
+    pub initted: bool,
     pub seed: Vec<u8>,
 
     pub token_can_id: Option<Principal>,
@@ -36,21 +45,47 @@ pub struct DispenserInfo {
     pub total_kamikaze_pool_members_weight: TCycles,
 }
 
+#[derive(CandidType, Deserialize)]
+pub struct DispenserInfoPub {
+    pub initted: bool,
+
+    pub token_can_id: Option<Principal>,
+    pub token_decimals: u8,
+    pub token_fee: Nat,
+
+    pub prev_tick_timestamp: TimestampNs,
+    pub tick_delay_ns: u64,
+    pub cur_tick: u64,
+
+    pub is_distributing: bool,
+    pub is_stopped: bool,
+
+    pub tokens_to_burn: EDs,
+}
+
 impl DispenserInfo {
-    pub fn init(
-        &mut self,
-        seed: Vec<u8>,
-        token_can_id: Principal,
-        token_decimals: u8,
-        token_fee: Nat,
-        now: TimestampNs,
-    ) {
+    pub fn to_pub(&self) -> DispenserInfoPub {
+        DispenserInfoPub {
+            initted: self.initted,
+            token_can_id: self.token_can_id,
+            token_decimals: self.token_decimals,
+            token_fee: self.token_fee.clone(),
+            prev_tick_timestamp: self.prev_tick_timestamp,
+            tick_delay_ns: self.tick_delay_ns,
+            cur_tick: self.cur_tick,
+            is_distributing: self.is_distributing,
+            is_stopped: self.is_stopped,
+            tokens_to_burn: self.tokens_to_burn.clone(),
+        }
+    }
+
+    pub fn init(&mut self, seed: Vec<u8>, token_decimals: u8, token_fee: Nat, now: TimestampNs) {
         self.seed = seed;
         self.prev_tick_timestamp = now;
-        self.tick_delay_ns = DEFAULT_TICK_DELAY_NS;
-        self.token_can_id = Some(token_can_id);
+        self.tick_delay_ns = DISPENSER_DEFAULT_TICK_DELAY_NS;
         self.token_decimals = token_decimals;
         self.token_fee = token_fee;
+        self.initted = true;
     }
 
     pub fn start_round(&mut self) {
@@ -59,6 +94,8 @@ impl DispenserInfo {
     }
 
     pub fn complete_round(&mut self, now: TimestampNs) {
+        self.total_common_pool_members_weight = TCycles::zero();
+        self.total_kamikaze_pool_members_weight = TCycles::zero();
         self.prev_tick_timestamp = now;
         self.is_distributing = false;
     }
@@ -109,12 +146,13 @@ impl Storable for DispenserInfo {
 }
 
 #[derive(CandidType, Deserialize, Clone)]
-pub struct ScheduledDistribution {
+pub struct Distribution {
     pub id: DistributionId,
     pub owner: Principal,
     pub name: String,
 
-    pub start_at_tick: u64,
+    pub start_condition: DistributionStartCondition,
+    pub status: DistributionStatus,
     pub duration_ticks: u64,
     pub cur_tick_reward: EDs,
 
@@ -124,7 +162,36 @@ pub struct ScheduledDistribution {
     pub leftover_qty: EDs,
 }
 
-impl Storable for ScheduledDistribution {
+impl Distribution {
+    pub fn try_activate(&mut self) -> bool {
+        match &mut self.start_condition {
+            DistributionStartCondition::AtTickDelay(delay) => {
+                *delay -= 1;
+
+                if *delay == 0 {
+                    self.status = DistributionStatus::InProgress;
+                    true
+                } else {
+                    false
+                }
+            }
+            DistributionStartCondition::AtFurnaceTrigger => false,
+        }
+    }
+
+    pub fn try_complete(&mut self) -> bool {
+        self.leftover_qty -= &self.cur_tick_reward;
+
+        if self.leftover_qty < self.cur_tick_reward {
+            self.status = DistributionStatus::Completed;
+            true
+        } else {
+            false
+        }
+    }
+}
+
+impl Storable for Distribution {
     fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
         std::borrow::Cow::Owned(encode_one(self).expect("Unable to encode"))
     }
@@ -140,6 +207,20 @@ impl Storable for ScheduledDistribution {
 pub enum DistributionScheme {
     Linear,
     Logarithmic,
+}
+
+#[derive(CandidType, Deserialize, Clone, Validate)]
+pub enum DistributionStartCondition {
+    AtTickDelay(#[garde(range(max = 720))] u64),
+    AtFurnaceTrigger,
+}
+
+#[derive(CandidType, Deserialize, Clone, Copy)]
+pub enum DistributionStatus {
+    Scheduled,
+    InProgress,
+    Canceled,
+    Completed,
 }
 
 #[derive(CandidType, Deserialize, Default, Clone)]

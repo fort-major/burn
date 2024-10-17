@@ -57,4 +57,12 @@ impl ICRC1CanisterClient {
 
         self.icrc1_transfer(arg).await
     }
+
+    pub async fn icrc1_decimals(&self) -> CallResult<(u8,)> {
+        call(self.canister_id, "icrc1_decimals", ()).await
+    }
+
+    pub async fn icrc1_fee(&self) -> CallResult<(Nat,)> {
+        call(self.canister_id, "icrc1_fee", ()).await
+    }
 }

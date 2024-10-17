@@ -2,6 +2,7 @@
 members = [
     "backend/src/can_burner",
     "backend/src/can_furnace",
+    "backend/src/can_dispenser",
     "backend/src/shared",
 ]
 resolver = "2"
