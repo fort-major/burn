@@ -1,4 +1,4 @@
-use candid::Principal;
+use candid::{Nat, Principal};
 use ic_cdk::{
     api::{
         call::{msg_cycles_accept128, msg_cycles_available128},
@@ -17,13 +17,13 @@ use shared::{
             DeployDispenserResponse, GetCurRoundPositionsRequest, GetCurRoundPositionsResponse,
             GetWinnersRequest, GetWinnersResponse, PledgeRequest, PledgeResponse,
             RemoveSupportedTokenRequest, RemoveSupportedTokenResponse, SetMaintenanceStatusRequest,
-            SetMaintenanceStatusResponse, UpdateDispenserWasmRequest, UpdateDispenserWasmResponse,
-            VoteTokenXRequest, VoteTokenXResponse, WithdrawRequest, WithdrawResponse,
+            SetMaintenanceStatusResponse, VoteTokenXRequest, VoteTokenXResponse, WithdrawRequest,
+            WithdrawResponse, WithdrawUserTokensRequest, WithdrawUserTokensResponse,
         },
         types::{FurnaceInfoPub, TokenX, TokenXVote, FURNACE_REDISTRIBUTION_SUBACCOUNT},
     },
     icrc1::ICRC1CanisterClient,
-    Guard,
+    Guard, ENV_VARS,
 };
 use utils::{
     deploy_dispenser_for, deposit_cycles, set_fetch_token_prices_timer,
@@ -31,6 +31,8 @@ use utils::{
 };
 
 pub mod utils;
+
+// TODO: add stopped check everywhere !!!!
 
 #[update]
 async fn pledge(mut req: PledgeRequest) -> PledgeResponse {
@@ -140,6 +142,36 @@ fn list_dispensers() -> Vec<(Principal, Principal)> {
     })
 }
 
+#[update]
+async fn withdraw_user_tokens(req: WithdrawUserTokensRequest) -> WithdrawUserTokensResponse {
+    // settings ckBTC's fee as a minimum
+    if req.qty < Nat::from(10u64) {
+        panic!("Amount too small");
+    }
+
+    let token = ICRC1CanisterClient::new(req.token_can_id);
+    let block_idx = token
+        .icrc1_transfer(TransferArg {
+            from_subaccount: Some(subaccount_of(caller()).0),
+            to: req.to,
+            amount: req.qty,
+            fee: None,
+            created_at_time: None,
+            memo: None,
+        })
+        .await
+        .expect("Unable to withdraw")
+        .0
+        .expect("Unable to withdraw");
+
+    WithdrawUserTokensResponse { block_idx }
+}
+
+#[query]
+fn subaccount_of(pid: Principal) -> Subaccount {
+    Subaccount::from(pid)
+}
+
 #[query]
 fn list_supported_tokens() -> Vec<TokenX> {
     STATE.with_borrow(|s| s.list_supported_tokens())
@@ -195,6 +227,25 @@ fn get_cur_round_positions(mut req: GetCurRoundPositionsRequest) -> GetCurRoundP
     })
 }
 
+#[query]
+fn get_cur_round_burn_positions(
+    mut req: GetCurRoundPositionsRequest,
+) -> GetCurRoundPositionsResponse {
+    STATE.with_borrow(|s| {
+        req.validate_and_escape(s, caller(), time())
+            .expect("Invalid request");
+
+        let positions = s
+            .cur_round_burn_positions
+            .iter()
+            .skip(req.skip as usize)
+            .take(req.take)
+            .collect();
+
+        GetCurRoundPositionsResponse { positions }
+    })
+}
+
 #[update]
 fn add_supported_token(mut req: AddSupportedTokenRequest) -> AddSupportedTokenResponse {
     STATE.with_borrow_mut(|s| {
@@ -238,15 +289,15 @@ fn set_maintenance_status(mut req: SetMaintenanceStatusRequest) -> SetMaintenanc
 }
 
 #[update]
-fn update_dispenser_wasm(mut req: UpdateDispenserWasmRequest) -> UpdateDispenserWasmResponse {
+fn update_dispenser_wasm(wasm: Vec<u8>) {
     STATE.with_borrow_mut(|s| {
-        req.validate_and_escape(s, caller(), time())
-            .expect("Invalid request");
+        let info = s.get_furnace_info();
+        if !info.is_dev(&caller()) {
+            panic!("Access denied");
+        }
 
-        s.set_dispenser_wasm(req.wasm);
+        s.set_dispenser_wasm(wasm);
     });
-
-    UpdateDispenserWasmResponse {}
 }
 
 #[update]
@@ -272,6 +323,22 @@ fn init_hook() {
     set_init_canister_one_timer(caller());
     set_fetch_token_prices_timer();
     set_raffle_timer();
+
+    add_supported_token(AddSupportedTokenRequest {
+        tokens: vec![
+            TokenX {
+                can_id: ENV_VARS.burn_token_canister_id,
+                fee: Nat::from(10_000u64),
+                decimals: 8,
+            },
+            TokenX {
+                // set DCD as a default supported token
+                can_id: Principal::from_text("xsi2v-cyaaa-aaaaq-aabfq-cai").unwrap(),
+                fee: Nat::from(10_000u64),
+                decimals: 8,
+            },
+        ],
+    });
 }
 
 #[post_upgrade]

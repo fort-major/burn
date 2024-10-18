@@ -2,11 +2,17 @@ use std::{cell::RefCell, time::Duration};
 
 use candid::{Nat, Principal};
 use ic_cdk::{
-    api::{management_canister::main::raw_rand, time},
+    api::{
+        call::{CallResult, RejectionCode},
+        management_canister::main::raw_rand,
+        time,
+    },
     caller, id, spawn,
 };
 use ic_cdk_timers::set_timer;
-use ic_ledger_types::{transfer, AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs};
+use ic_ledger_types::{
+    transfer, AccountBalanceArgs, AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs,
+};
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager},
     Cell, DefaultMemoryImpl, StableBTreeMap,
@@ -18,6 +24,7 @@ use shared::{
         client::BurnerClient,
         types::TCycles,
     },
+    cmc::{CMCClient, NotifyTopUpError, NotifyTopUpRequest},
     dispenser::{
         state::DispenserState,
         types::{
@@ -26,7 +33,7 @@ use shared::{
         },
     },
     icrc1::ICRC1CanisterClient,
-    ENV_VARS, ICP_FEE, ONE_HOUR_NS, ONE_MINUTE_NS,
+    ENV_VARS, ICP_FEE, MEMO_TOP_UP_CANISTER, ONE_DAY_NS, ONE_HOUR_NS, ONE_MINUTE_NS,
 };
 
 thread_local! {
@@ -344,4 +351,69 @@ pub async fn claim_caller_tokens(
         Ok((Err(e),)) => Err(e.to_string()),
         Err((c, m)) => Err(format!("{:?}: {}", c, m)),
     }
+}
+
+pub fn set_transform_icp_fee_to_cycles_timer() {
+    set_timer(
+        Duration::from_nanos(ONE_DAY_NS),
+        transform_icp_fee_to_cycles,
+    );
+}
+
+fn transform_icp_fee_to_cycles() {
+    spawn(async {
+        let this_canister_id = id();
+        let icp_fee_subaccount = Subaccount(DISPENSER_ICP_FEE_SUBACCOUNT);
+        let icp_fee_account_id = AccountIdentifier::new(&this_canister_id, &icp_fee_subaccount);
+
+        let account_balance_args = AccountBalanceArgs {
+            account: icp_fee_account_id,
+        };
+
+        // check how much ICPs were redistributed for burning
+        let balance_call_result =
+            ic_ledger_types::account_balance(ENV_VARS.icp_token_canister_id, account_balance_args)
+                .await;
+
+        if let Ok(balance) = balance_call_result {
+            if balance.e8s() > ICP_FEE {
+                deposit_cycles(balance.e8s()).await;
+            }
+        }
+    });
+
+    set_transform_icp_fee_to_cycles_timer();
+}
+
+async fn deposit_cycles(qty_e8s_u64: u64) -> CallResult<(Result<Nat, NotifyTopUpError>,)> {
+    let transfer_args = TransferArgs {
+        from_subaccount: Some(Subaccount(DISPENSER_ICP_FEE_SUBACCOUNT)),
+        to: AccountIdentifier::new(
+            &ENV_VARS.cycles_minting_canister_id,
+            &Subaccount::from(id()),
+        ),
+        amount: Tokens::from_e8s(qty_e8s_u64 - ICP_FEE),
+
+        memo: Memo(MEMO_TOP_UP_CANISTER),
+        fee: Tokens::from_e8s(ICP_FEE),
+        created_at_time: None,
+    };
+
+    let transfer_call_result = transfer(ENV_VARS.icp_token_canister_id, transfer_args).await;
+
+    // to work properly this method should not throw
+    if let Ok(transfer_result) = transfer_call_result {
+        if let Ok(block_index) = transfer_result {
+            let cmc = CMCClient(ENV_VARS.cycles_minting_canister_id);
+
+            let notify_args = NotifyTopUpRequest {
+                block_index,
+                canister_id: id(),
+            };
+
+            return cmc.notify_top_up(notify_args).await;
+        }
+    }
+
+    CallResult::Err((RejectionCode::Unknown, String::from("")))
 }

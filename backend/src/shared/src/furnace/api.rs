@@ -117,9 +117,9 @@ impl Guard<FurnaceState> for VoteTokenXRequest {
             return Err(String::from("Too many splits"));
         }
 
-        if !state.cur_round_positions.contains_key(&caller) {
+        if !state.cur_round_burn_positions.contains_key(&caller) {
             return Err(String::from(
-                "Only pledged participants can vote for the next token",
+                "Only participants pledged BURN can vote for the next token",
             ));
         }
 
@@ -127,10 +127,18 @@ impl Guard<FurnaceState> for VoteTokenXRequest {
             return Err(String::from("Already voted this week"));
         }
 
-        for (token_can_id, _) in &self.vote.can_ids_and_normalized_weights {
+        let mut weight_sum = E8s::zero();
+
+        for (token_can_id, weight) in &self.vote.can_ids_and_normalized_weights {
             if state.get_supported_token(token_can_id).is_none() {
                 return Err(String::from("Unsupported token"));
             }
+
+            weight_sum += weight;
+        }
+
+        if weight_sum > E8s::one() {
+            return Err(String::from("Invalid weight sum"));
         }
 
         Ok(())
@@ -270,33 +278,6 @@ pub struct GetCurRoundPositionsResponse {
 }
 
 #[derive(CandidType, Deserialize, Validate)]
-pub struct UpdateDispenserWasmRequest {
-    #[garde(skip)]
-    pub wasm: Vec<u8>,
-}
-
-impl Guard<FurnaceState> for UpdateDispenserWasmRequest {
-    fn validate_and_escape(
-        &mut self,
-        state: &FurnaceState,
-        caller: Principal,
-        _now: TimestampNs,
-    ) -> Result<(), String> {
-        self.validate(&()).map_err(|e| e.to_string())?;
-
-        let info = state.get_furnace_info();
-        if !info.is_dev(&caller) {
-            return Err(String::from("Access denied"));
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(CandidType, Deserialize)]
-pub struct UpdateDispenserWasmResponse {}
-
-#[derive(CandidType, Deserialize, Validate)]
 pub struct DeployDispenserRequest {
     #[garde(skip)]
     pub token_can_id: Principal,
@@ -322,4 +303,16 @@ impl Guard<FurnaceState> for DeployDispenserRequest {
 #[derive(CandidType, Deserialize)]
 pub struct DeployDispenserResponse {
     pub dispenser_can_id: Principal,
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct WithdrawUserTokensRequest {
+    pub qty: Nat,
+    pub to: Account,
+    pub token_can_id: Principal,
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct WithdrawUserTokensResponse {
+    pub block_idx: Nat,
 }

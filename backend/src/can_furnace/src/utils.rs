@@ -41,33 +41,35 @@ thread_local! {
 
     pub static STATE: RefCell<FurnaceState> = RefCell::new(
         FurnaceState {
-            cur_round_positions: StableBTreeMap::init(
+            cur_round_burn_positions: StableBTreeMap::init(
                 MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(0))),
             ),
-            raffle_round_info: Cell::init(MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(1))), None).expect("Unable to create raffle round info cell"),
+            cur_round_positions: StableBTreeMap::init(
+                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(1))),
+            ),
+            raffle_round_info: Cell::init(MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(2))), None).expect("Unable to create raffle round info cell"),
 
             winners: StableBTreeMap::init(
-                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(2))),
+                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(3))),
             ),
-            furnace_info: Cell::init(MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(3))), FurnaceInfo::default()).expect("Unable to create furnace info cell"),
+            furnace_info: Cell::init(MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(4))), FurnaceInfo::default()).expect("Unable to create furnace info cell"),
             token_exchange_rates: StableBTreeMap::init(
-                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(4))),
+                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(5))),
             ),
             supported_tokens: StableBTreeMap::init(
-                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(5))),
+                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(6))),
             ),
 
             next_token_x_alternatives: StableBTreeMap::init(
-                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(6))),
-            ),
-            next_token_x_votes: StableBTreeMap::init(
                 MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(7))),
             ),
-            token_dispensers: StableBTreeMap::init(
+            next_token_x_votes: StableBTreeMap::init(
                 MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(8))),
             ),
-            dispenser_wasm: Cell::init(MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(9))), Vec::new()).expect("Unable to create dispenser wasm cell"),
-
+            token_dispensers: StableBTreeMap::init(
+                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(9))),
+            ),
+            dispenser_wasm: Cell::init(MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(10))), Vec::new()).expect("Unable to create dispenser wasm cell"),
         }
     )
 }
@@ -234,27 +236,6 @@ async fn redistribute_pledged_token(token_x: bool) {
     }
 }
 
-async fn move_prize_fund(icp: ICRC1CanisterClient, prize_fund_cur_round: E8s) -> bool {
-    let res = icp
-        .icrc1_transfer(TransferArg {
-            from_subaccount: None,
-            to: Account {
-                owner: id(),
-                subaccount: Some(FURNACE_ICP_PRIZE_DISTRIBUTION_SUBACCOUNT),
-            },
-            amount: Nat(prize_fund_cur_round.val),
-            fee: None,
-            created_at_time: None,
-            memo: None,
-        })
-        .await;
-
-    match res {
-        Ok((Ok(_),)) => true,
-        _ => false,
-    }
-}
-
 pub fn find_winners() {
     let should_reschedule = STATE.with_borrow_mut(|s| s.find_winners_batch(300));
 
@@ -316,6 +297,27 @@ async fn install_dispenser_code(can_id: Principal, token_can_id: Principal) -> b
     let should_reschedule = call_result.is_err();
 
     should_reschedule
+}
+
+async fn move_prize_fund(icp: ICRC1CanisterClient, prize_fund_cur_round: E8s) -> bool {
+    let res = icp
+        .icrc1_transfer(TransferArg {
+            from_subaccount: None,
+            to: Account {
+                owner: id(),
+                subaccount: Some(FURNACE_ICP_PRIZE_DISTRIBUTION_SUBACCOUNT),
+            },
+            amount: Nat(prize_fund_cur_round.val),
+            fee: None,
+            created_at_time: None,
+            memo: None,
+        })
+        .await;
+
+    match res {
+        Ok((Ok(_),)) => true,
+        _ => false,
+    }
 }
 
 pub async fn deposit_cycles(

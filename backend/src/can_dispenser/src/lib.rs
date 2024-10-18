@@ -8,22 +8,26 @@ use ic_cdk::{
 };
 use ic_e8s::d::EDs;
 use ic_ledger_types::Subaccount;
+use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use shared::{
     burner::types::TCycles,
     dispenser::{
         api::{
             CancelDistributionRequest, CancelDistributionResponse, ClaimTokensRequest,
             ClaimTokensResponse, CreateDistributionRequest, CreateDistributionResponse,
+            FurnaceTriggerDistributionRequest, FurnaceTriggerDistributionResponse,
             GetDistributionsRequest, GetDistributionsResponse, InitArgs, WithdrawCanceledRequest,
-            WithdrawCanceledResponse,
+            WithdrawCanceledResponse, WithdrawUserTokensRequest, WithdrawUserTokensResponse,
         },
         types::{DispenserInfoPub, Distribution, DistributionId},
     },
-    Guard, ENV_VARS,
+    furnace::api::WithdrawResponse,
+    icrc1::ICRC1CanisterClient,
+    Guard, ENV_VARS, ICP_FEE,
 };
 use utils::{
     charge_caller_distribution_creation_fee_icp, charge_caller_tokens, claim_caller_tokens,
-    set_init_canister_one_timer, set_tick_timer, STATE,
+    set_init_canister_one_timer, set_tick_timer, set_transform_icp_fee_to_cycles_timer, STATE,
 };
 
 pub mod utils;
@@ -60,6 +64,38 @@ fn cancel_distribution(mut req: CancelDistributionRequest) -> CancelDistribution
 
         s.cancel_distribution(req)
     })
+}
+
+#[update]
+async fn withdraw_user_tokens(req: WithdrawUserTokensRequest) -> WithdrawUserTokensResponse {
+    let (fee, token_can_id) = if req.icp {
+        (Nat::from(ICP_FEE), ENV_VARS.icp_token_canister_id)
+    } else {
+        let info = STATE.with_borrow(|s| s.get_dispenser_info());
+
+        (info.token_fee, info.token_can_id.unwrap())
+    };
+
+    if req.qty < fee.clone() * Nat::from(2u64) {
+        panic!("Amount too small");
+    }
+
+    let token = ICRC1CanisterClient::new(token_can_id);
+    let block_idx = token
+        .icrc1_transfer(TransferArg {
+            from_subaccount: Some(subaccount_of(caller()).0),
+            to: req.to,
+            amount: req.qty - fee,
+            fee: None,
+            created_at_time: None,
+            memo: None,
+        })
+        .await
+        .expect("Unable to withdraw")
+        .0
+        .expect("Unable to withdraw");
+
+    WithdrawUserTokensResponse { block_idx }
 }
 
 #[update]
@@ -111,6 +147,7 @@ async fn claim_tokens(mut req: ClaimTokensRequest) -> ClaimTokensResponse {
         req.validate_and_escape(s, caller(), time())
             .expect("Invalid request");
 
+        // claiming immediately to prevent re-entrancy
         s.claim_tokens(caller(), req.qty.clone());
 
         s.get_dispenser_info()
@@ -131,6 +168,18 @@ async fn claim_tokens(mut req: ClaimTokensRequest) -> ClaimTokensResponse {
     ClaimTokensResponse {
         result: claim_result,
     }
+}
+
+#[update]
+fn furnace_trigger_distribution(
+    mut req: FurnaceTriggerDistributionRequest,
+) -> FurnaceTriggerDistributionResponse {
+    STATE.with_borrow_mut(|s| {
+        req.validate_and_escape(s, caller(), time())
+            .expect("Invalid request");
+
+        s.furnace_trigger_distribution(req)
+    })
 }
 
 #[update]
@@ -165,10 +214,12 @@ fn init_hook(args: InitArgs) {
     });
 
     set_init_canister_one_timer();
+    set_transform_icp_fee_to_cycles_timer();
     set_tick_timer();
 }
 
 #[post_upgrade]
 fn post_upgrade_hook() {
+    set_transform_icp_fee_to_cycles_timer();
     set_tick_timer();
 }

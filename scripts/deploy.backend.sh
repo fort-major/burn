@@ -18,6 +18,12 @@ source $file_name
 dfx deploy --network=$network burner --argument "()"
 dfx deploy --network=$network furnace --argument "()"
 
+dfx canister build --check dispenser
+dispenser_wasm_path="./target/wasm32-unknown-unknown/release/dispenser.wasm"
+
+# adapted this line from the Internet Identity - https://github.com/dfinity/internet-identity/blob/6c80aa0e30162d1aa09fb7348cbd6e4469cd1836/scripts/deploy-archive#L96
+dfx canister --network=$network call "$CAN_FURNACE_CANISTER_ID" update_dispenser_wasm --argument-file <(echo "(blob \"$(hexdump -ve '1/1 "%.2x"' "$dispenser_wasm_path" | sed 's/../\\&/g')\")")
+
 if [ $mode = dev ]; then
     dfx deploy --network=$network internet_identity 
 

@@ -7,7 +7,8 @@ use crate::burner::types::{Memory, TCycles, TimestampNs};
 use super::{
     api::{
         CancelDistributionRequest, CancelDistributionResponse, CreateDistributionRequest,
-        CreateDistributionResponse, GetDistributionsRequest, GetDistributionsResponse,
+        CreateDistributionResponse, FurnaceTriggerDistributionRequest,
+        FurnaceTriggerDistributionResponse, GetDistributionsRequest, GetDistributionsResponse,
         WithdrawCanceledRequest,
     },
     types::{
@@ -31,6 +32,23 @@ pub struct DispenserState {
 }
 
 impl DispenserState {
+    pub fn furnace_trigger_distribution(
+        &mut self,
+        req: FurnaceTriggerDistributionRequest,
+    ) -> FurnaceTriggerDistributionResponse {
+        let mut distribution = self
+            .scheduled_distributions
+            .get(&req.distribution_id)
+            .unwrap();
+
+        distribution.start_condition = DistributionStartCondition::AtTickDelay(1);
+
+        self.scheduled_distributions
+            .insert(req.distribution_id, distribution);
+
+        FurnaceTriggerDistributionResponse {}
+    }
+
     pub fn claim_tokens(&mut self, caller: Principal, qty: EDs) {
         let prev_val = self.unclaimed_tokens.get(&caller).unwrap_or_default();
 
@@ -54,21 +72,26 @@ impl DispenserState {
             return false;
         };
 
-        let distribution = self
+        let mut distribution = self
             .active_distributions
             .get(&current_distribution_id)
             .unwrap();
 
         let mut info = self.get_dispenser_info();
 
+        let cur_tick_reward_opt = distribution.get_cur_tick_reward(info.token_fee.clone());
+        if cur_tick_reward_opt.is_none() {
+            return false;
+        }
+
         // only half goes to the common pool
-        let kamikaze_pool_reward = distribution.cur_tick_reward / EDs::two(info.token_decimals);
+        let kamikaze_pool_reward = cur_tick_reward_opt.unwrap() / EDs::two(info.token_decimals);
 
-        // if nobody is in the pool, simply mark the distributed tokens for burning
+        // if nobody is in the pool, reschedule those tokens to the next week
         if self.kamikaze_pool_members.is_empty() {
-            info.tokens_to_burn += kamikaze_pool_reward;
-
-            self.set_dispenser_info(info);
+            distribution.leftover_qty += kamikaze_pool_reward;
+            self.active_distributions
+                .insert(current_distribution_id, distribution);
 
             return false;
         }
@@ -146,21 +169,26 @@ impl DispenserState {
             return false;
         };
 
-        let distribution = self
+        let mut distribution = self
             .active_distributions
             .get(&current_distribution_id)
             .unwrap();
 
-        let mut info = self.get_dispenser_info();
+        let info = self.get_dispenser_info();
+
+        let cur_tick_reward_opt = distribution.get_cur_tick_reward(info.token_fee.clone());
+        if cur_tick_reward_opt.is_none() {
+            return false;
+        }
 
         // only half goes to the common pool
-        let common_pool_reward = distribution.cur_tick_reward / EDs::two(info.token_decimals);
+        let common_pool_reward = cur_tick_reward_opt.unwrap() / EDs::two(info.token_decimals);
 
         // if nobody is in the pool, simply mark the distributed tokens for burning
         if self.common_pool_members.is_empty() {
-            info.tokens_to_burn += common_pool_reward;
-
-            self.set_dispenser_info(info);
+            distribution.leftover_qty += common_pool_reward;
+            self.active_distributions
+                .insert(current_distribution_id, distribution);
 
             return false;
         }
@@ -244,6 +272,7 @@ impl DispenserState {
             self.active_distributions.iter()
         };
 
+        let info = self.get_dispenser_info();
         let mut distributions_to_remove = Vec::new();
 
         let mut i = 0;
@@ -257,7 +286,7 @@ impl DispenserState {
 
             distribution_info.distribution_id = Some(id);
 
-            let is_complete_now = distribution.try_complete();
+            let is_complete_now = distribution.try_complete(info.token_fee.clone());
 
             if is_complete_now {
                 distributions_to_remove.push(id);

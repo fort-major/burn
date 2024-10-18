@@ -36,6 +36,8 @@ pub struct FurnaceInfo {
     pub cur_token_x: TokenX,
 
     pub cur_round_pledged_usd: E8s,
+    pub cur_round_pledged_burn_usd: E8s,
+
     pub total_pledged_usd: E8s,
     pub winner_icp_threshold: E8s,
 
@@ -54,6 +56,7 @@ pub struct FurnaceInfoPub {
     pub cur_token_x: TokenX,
 
     pub cur_round_pledged_usd: E8s,
+    pub cur_round_pledged_burn_usd: E8s,
     pub total_pledged_usd: E8s,
     pub winner_icp_threshold: E8s,
 
@@ -81,6 +84,7 @@ impl FurnaceInfo {
             cur_token_x: self.cur_token_x.clone(),
 
             cur_round_pledged_usd: self.cur_round_pledged_usd.clone(),
+            cur_round_pledged_burn_usd: self.cur_round_pledged_burn_usd.clone(),
             total_pledged_usd: self.total_pledged_usd.clone(),
             winner_icp_threshold: self.winner_icp_threshold.clone(),
 
@@ -94,9 +98,13 @@ impl FurnaceInfo {
         &self.dev_pid.unwrap() == pid
     }
 
-    pub fn note_pledged_usd(&mut self, qty: E8s) {
-        self.cur_round_pledged_usd += &qty;
+    pub fn note_pledged_usd(&mut self, qty: &E8s) {
+        self.cur_round_pledged_usd += qty;
         self.total_pledged_usd += qty;
+    }
+
+    pub fn note_pledged_burn_usd(&mut self, qty: &E8s) {
+        self.cur_round_pledged_burn_usd += qty;
     }
 
     pub fn update_token_x(&mut self, token_x: TokenX) {
@@ -107,9 +115,12 @@ impl FurnaceInfo {
         self.current_round += 1;
         self.prev_round_timestamp = now;
         self.cur_round_pledged_usd = E8s::zero();
+        self.cur_round_pledged_burn_usd = E8s::zero();
 
         self.update_seed();
     }
+
+    // TODO: make burn into voting power
 
     // returns decimal point position if true
     pub fn get_decimals(&self, can_id: &Principal) -> Option<u8> {

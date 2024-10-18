@@ -4,7 +4,7 @@ use ic_e8s::d::EDs;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Deserialize;
 
-use crate::{utils::escape_script_tag, Guard};
+use crate::{utils::escape_script_tag, Guard, ENV_VARS};
 
 use super::{
     state::DispenserState,
@@ -74,6 +74,15 @@ impl Guard<DispenserState> for CancelDistributionRequest {
         if let Some(distribution) = state.scheduled_distributions.get(&self.distribution_id) {
             if distribution.owner != caller {
                 return Err(String::from("Access denied"));
+            }
+
+            match distribution.start_condition {
+                DistributionStartCondition::AtTickDelay(d) => {
+                    if d < 3 {
+                        return Err(String::from("Too late"));
+                    }
+                }
+                _ => {}
             }
         } else {
             return Err(String::from(
@@ -183,6 +192,56 @@ pub struct GetDistributionsRequest {
 #[derive(CandidType, Deserialize)]
 pub struct GetDistributionsResponse {
     pub distributions: Vec<Distribution>,
+}
+
+#[derive(CandidType, Deserialize, Validate)]
+pub struct FurnaceTriggerDistributionRequest {
+    #[garde(skip)]
+    pub distribution_id: DistributionId,
+}
+
+impl Guard<DispenserState> for FurnaceTriggerDistributionRequest {
+    fn validate_and_escape(
+        &mut self,
+        state: &DispenserState,
+        caller: Principal,
+        _now: crate::burner::types::TimestampNs,
+    ) -> Result<(), String> {
+        self.validate(&()).map_err(|e| e.to_string())?;
+
+        if caller != ENV_VARS.furnace_canister_id {
+            return Err(String::from("Access denied"));
+        }
+
+        let distribution = state
+            .scheduled_distributions
+            .get(&self.distribution_id)
+            .ok_or(String::from("Distribution not found or in invalid state"))?;
+
+        if !matches!(
+            distribution.start_condition,
+            DistributionStartCondition::AtFurnaceTrigger
+        ) {
+            return Err(String::from("Distribution can't be triggered"));
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct FurnaceTriggerDistributionResponse {}
+
+#[derive(CandidType, Deserialize)]
+pub struct WithdrawUserTokensRequest {
+    pub qty: Nat,
+    pub to: Account,
+    pub icp: bool,
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct WithdrawUserTokensResponse {
+    pub block_idx: Nat,
 }
 
 #[derive(CandidType, Deserialize)]

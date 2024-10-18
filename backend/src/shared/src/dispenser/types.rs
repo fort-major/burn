@@ -7,7 +7,7 @@ use sha2::Digest;
 
 use crate::{
     burner::types::{TCycles, TimestampNs},
-    ONE_HOUR_NS,
+    ONE_DAY_NS, ONE_HOUR_NS,
 };
 
 pub type DistributionId = u64;
@@ -21,6 +21,7 @@ pub const DISPENSER_ICP_FEE_SUBACCOUNT: [u8; 32] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2,
 ];
 pub const DISPENSER_ICP_FEE_E8S: u64 = 1_0000_0000;
+pub const DISPENSER_ICP_FEE_TRANSFORM_DELAY_NS: u64 = ONE_DAY_NS;
 
 #[derive(CandidType, Deserialize, Clone, Default)]
 pub struct DispenserInfo {
@@ -40,7 +41,6 @@ pub struct DispenserInfo {
     pub is_distributing: bool,
     pub is_stopped: bool,
 
-    pub tokens_to_burn: EDs,
     pub total_common_pool_members_weight: TCycles,
     pub total_kamikaze_pool_members_weight: TCycles,
 }
@@ -59,8 +59,6 @@ pub struct DispenserInfoPub {
 
     pub is_distributing: bool,
     pub is_stopped: bool,
-
-    pub tokens_to_burn: EDs,
 }
 
 impl DispenserInfo {
@@ -75,7 +73,6 @@ impl DispenserInfo {
             cur_tick: self.cur_tick,
             is_distributing: self.is_distributing,
             is_stopped: self.is_stopped,
-            tokens_to_burn: self.tokens_to_burn.clone(),
         }
     }
 
@@ -163,6 +160,16 @@ pub struct Distribution {
 }
 
 impl Distribution {
+    pub fn get_cur_tick_reward(&self, fee: Nat) -> Option<EDs> {
+        if self.leftover_qty.val < fee.0 {
+            None
+        } else if self.leftover_qty < self.cur_tick_reward {
+            Some(self.leftover_qty.clone())
+        } else {
+            Some(self.cur_tick_reward.clone())
+        }
+    }
+
     pub fn try_activate(&mut self) -> bool {
         match &mut self.start_condition {
             DistributionStartCondition::AtTickDelay(delay) => {
@@ -179,14 +186,19 @@ impl Distribution {
         }
     }
 
-    pub fn try_complete(&mut self) -> bool {
-        self.leftover_qty -= &self.cur_tick_reward;
+    pub fn try_complete(&mut self, fee: Nat) -> bool {
+        if let Some(cur_reward) = self.get_cur_tick_reward(fee) {
+            self.leftover_qty -= &cur_reward;
 
-        if self.leftover_qty < self.cur_tick_reward {
+            if self.leftover_qty < self.cur_tick_reward {
+                self.status = DistributionStatus::Completed;
+                true
+            } else {
+                false
+            }
+        } else {
             self.status = DistributionStatus::Completed;
             true
-        } else {
-            false
         }
     }
 }

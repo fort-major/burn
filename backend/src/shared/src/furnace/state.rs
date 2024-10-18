@@ -21,6 +21,7 @@ pub struct FurnaceState {
     pub token_exchange_rates: StableBTreeMap<Principal, ICPSwapTokenInfo, Memory>,
     pub winners: StableBTreeMap<TimestampNs, FurnaceWinnerHistoryEntry, Memory>,
 
+    pub cur_round_burn_positions: StableBTreeMap<Principal, E8s, Memory>,
     pub cur_round_positions: StableBTreeMap<Principal, E8s, Memory>,
     pub raffle_round_info: Cell<Option<RaffleRoundInfo>, Memory>,
 
@@ -86,13 +87,14 @@ impl FurnaceState {
         req: VoteTokenXRequest,
         caller: Principal,
     ) -> VoteTokenXResponse {
-        let voting_power = self.cur_round_positions.get(&caller).unwrap();
+        let voting_power = self.cur_round_burn_positions.get(&caller).unwrap();
 
         for (token_can_id, weight) in &req.vote.can_ids_and_normalized_weights {
             let prev_votes = self
                 .next_token_x_alternatives
                 .get(token_can_id)
                 .unwrap_or_default();
+
             let add_votes = &voting_power * weight;
 
             self.next_token_x_alternatives
@@ -181,13 +183,25 @@ impl FurnaceState {
     pub fn pledge(&mut self, req: PledgeRequest) -> PledgeResponse {
         let mut info = self.get_furnace_info();
 
-        let decimals = info.get_decimals(&req.token_can_id).unwrap();
+        let usd_value = if req.token_can_id == info.cur_token_x.can_id {
+            self.get_usd_value(&req.token_can_id, req.qty, info.cur_token_x.decimals)
+        } else {
+            let usd_value = self.get_usd_value(&ENV_VARS.burn_token_canister_id, req.qty, 8)
+                * E8s::from(9500_0000u64);
 
-        let usd_value = info.burn_token_discount(
-            &req.token_can_id,
-            self.get_usd_value(&req.token_can_id, req.qty, decimals),
-        );
-        info.note_pledged_usd(usd_value.clone());
+            info.note_pledged_burn_usd(&usd_value);
+
+            let prev_burn_usd_value = self
+                .cur_round_burn_positions
+                .get(&req.pid)
+                .unwrap_or_default();
+            self.cur_round_burn_positions
+                .insert(req.pid, prev_burn_usd_value + &usd_value);
+
+            usd_value
+        };
+
+        info.note_pledged_usd(&usd_value);
 
         let prev_usd_value = self.cur_round_positions.get(&req.pid).unwrap_or_default();
 

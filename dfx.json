@@ -10,6 +10,11 @@
       "package": "burner",
       "type": "rust"
     },
+    "dispenser": {
+      "candid": "backend/src/can_dispenser/can.did",
+      "package": "dispenser",
+      "type": "rust"
+    },
     "furnace": {
       "candid": "backend/src/can_furnace/can.did",
       "package": "furnace",
