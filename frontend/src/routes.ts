@@ -3,6 +3,7 @@ import { useLocation } from "@solidjs/router";
 import { HomePage } from "@pages/home";
 import { PoolPage } from "@pages/pool";
 import { InfoPage } from "@pages/info";
+import { BonfirePage } from "@pages/bonfire";
 
 export interface IRoute {
   parent?: IRoute;
@@ -25,6 +26,9 @@ export const ROOT = route({
     }),
     pool: route({
       component: PoolPage,
+    }),
+    bonfire: route({
+      component: BonfirePage,
     }),
     info: route({
       component: InfoPage,

@@ -114,7 +114,9 @@ pub struct WithdrawRequest {
 }
 
 #[derive(CandidType, Deserialize)]
-pub struct WithdrawResponse {}
+pub struct WithdrawResponse {
+    pub block_idx: Nat,
+}
 
 #[derive(CandidType, Deserialize)]
 pub struct VerifyDecideIdRequest {

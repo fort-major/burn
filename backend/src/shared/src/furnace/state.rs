@@ -9,7 +9,9 @@ use crate::{
 };
 
 use super::{
-    api::{PledgeRequest, PledgeResponse, VoteTokenXRequest, VoteTokenXResponse},
+    api::{
+        ClaimRewardICPRequest, PledgeRequest, PledgeResponse, VoteTokenXRequest, VoteTokenXResponse,
+    },
     types::{
         FurnaceInfo, FurnaceWinner, FurnaceWinnerHistoryEntry, RaffleRoundInfo, TokenX, TokenXVote,
     },
@@ -21,15 +23,17 @@ pub struct FurnaceState {
     pub token_exchange_rates: StableBTreeMap<Principal, ICPSwapTokenInfo, Memory>,
     pub winners: StableBTreeMap<TimestampNs, FurnaceWinnerHistoryEntry, Memory>,
 
-    pub cur_round_burn_positions: StableBTreeMap<Principal, E8s, Memory>,
-    pub cur_round_positions: StableBTreeMap<Principal, E8s, Memory>,
+    pub cur_round_burn_positions: StableBTreeMap<Principal, EDs, Memory>,
+    pub cur_round_positions: StableBTreeMap<Principal, EDs, Memory>,
     pub raffle_round_info: Cell<Option<RaffleRoundInfo>, Memory>,
 
-    pub next_token_x_alternatives: StableBTreeMap<Principal, E8s, Memory>,
+    pub next_token_x_alternatives: StableBTreeMap<Principal, EDs, Memory>,
     pub next_token_x_votes: StableBTreeMap<Principal, TokenXVote, Memory>,
 
-    pub token_dispensers: StableBTreeMap<Principal, Principal, Memory>,
+    pub token_dispensers: StableBTreeMap<Principal, Option<Principal>, Memory>,
     pub dispenser_wasm: Cell<Vec<u8>, Memory>,
+
+    pub total_burned_tokens: StableBTreeMap<Principal, EDs, Memory>,
 }
 
 impl FurnaceState {
@@ -38,6 +42,35 @@ impl FurnaceState {
         furnace_info.init(dev_pid, seed, now);
 
         self.set_furnace_info(furnace_info);
+    }
+
+    pub fn claim_reward(&mut self, req: ClaimRewardICPRequest) -> E8s {
+        let mut entry = self.winners.get(&req.winning_entry_timestamp_ns).unwrap();
+        let winner = entry.winners.get_mut(req.winner_idx as usize).unwrap();
+
+        winner.claimed = true;
+        let prize = winner.prize_icp.clone();
+
+        self.winners.insert(req.winning_entry_timestamp_ns, entry);
+
+        prize
+    }
+
+    pub fn revert_claim_reward(&mut self, req: ClaimRewardICPRequest) {
+        let mut entry = self.winners.get(&req.winning_entry_timestamp_ns).unwrap();
+        let winner = entry.winners.get_mut(req.winner_idx as usize).unwrap();
+
+        winner.claimed = false;
+
+        self.winners.insert(req.winning_entry_timestamp_ns, entry);
+    }
+
+    pub fn note_burned_token(&mut self, token_can_id: Principal, qty: &EDs) {
+        let prev = self
+            .total_burned_tokens
+            .get(&token_can_id)
+            .unwrap_or_default();
+        self.total_burned_tokens.insert(token_can_id, prev + qty);
     }
 
     pub fn set_dispenser_wasm(&mut self, wasm: Vec<u8>) {
@@ -71,15 +104,29 @@ impl FurnaceState {
     }
 
     pub fn list_token_x_alternatives(&self) -> Vec<(Principal, E8s)> {
-        self.next_token_x_alternatives.iter().collect()
+        self.next_token_x_alternatives
+            .iter()
+            .map(|(p, e)| (p, e.to_const::<8>()))
+            .collect()
     }
 
-    pub fn dispenser_of(&self, token_can_id: &Principal) -> Option<Principal> {
+    pub fn dispenser_of(&self, token_can_id: &Principal) -> Option<Option<Principal>> {
         return self.token_dispensers.get(token_can_id);
     }
 
+    /// return true, if marked successfully, return false if already exists
+    pub fn mark_dispenser_deploying(&mut self, token_can_id: Principal) -> bool {
+        if self.dispenser_of(&token_can_id).is_none() {
+            self.token_dispensers.insert(token_can_id, None);
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn add_dispenser(&mut self, token_can_id: Principal, dispenser_can_id: Principal) {
-        self.token_dispensers.insert(token_can_id, dispenser_can_id);
+        self.token_dispensers
+            .insert(token_can_id, Some(dispenser_can_id));
     }
 
     pub fn vote_token_x(
@@ -87,18 +134,23 @@ impl FurnaceState {
         req: VoteTokenXRequest,
         caller: Principal,
     ) -> VoteTokenXResponse {
-        let voting_power = self.cur_round_burn_positions.get(&caller).unwrap();
+        let voting_power = self
+            .cur_round_burn_positions
+            .get(&caller)
+            .unwrap()
+            .to_const::<8>();
 
         for (token_can_id, weight) in &req.vote.can_ids_and_normalized_weights {
             let prev_votes = self
                 .next_token_x_alternatives
                 .get(token_can_id)
-                .unwrap_or_default();
+                .unwrap_or_default()
+                .to_const::<8>();
 
             let add_votes = &voting_power * weight;
 
             self.next_token_x_alternatives
-                .insert(*token_can_id, prev_votes + add_votes);
+                .insert(*token_can_id, (prev_votes + add_votes).to_dynamic());
         }
 
         self.next_token_x_votes.insert(caller, req.vote);
@@ -107,7 +159,7 @@ impl FurnaceState {
     }
 
     // not batching this method, because the number of possible tokens is very limited
-    pub fn select_next_token_x(&mut self) {
+    pub fn select_next_token_x(&mut self) -> Principal {
         let mut info = self.get_furnace_info();
 
         // if no token was elected - fallback to BURN
@@ -119,7 +171,7 @@ impl FurnaceState {
             });
             self.set_furnace_info(info);
 
-            return;
+            return ENV_VARS.burn_token_canister_id;
         }
 
         let random_num = info.generate_random_numbers(1).remove(0);
@@ -131,7 +183,7 @@ impl FurnaceState {
             let entry = iter.next();
 
             if let Some((_, votes)) = entry {
-                total_votes += votes;
+                total_votes += votes.to_const();
             } else {
                 break;
             }
@@ -141,7 +193,7 @@ impl FurnaceState {
         iter = self.next_token_x_alternatives.iter();
 
         let result = loop {
-            let entry = iter.next();
+            let entry = iter.next().map(|(p, e)| (p, e.to_const()));
 
             if let Some((token_x_can_id, votes)) = entry {
                 to += votes / &total_votes;
@@ -157,9 +209,12 @@ impl FurnaceState {
         let token_x = self
             .get_supported_token(&result)
             .expect("Only supported tokens can be elected");
+
         info.update_token_x(token_x);
 
         self.set_furnace_info(info);
+
+        result
     }
 
     pub fn complete_token_x_voting(&mut self, token_x: TokenX) {
@@ -194,34 +249,42 @@ impl FurnaceState {
             let prev_burn_usd_value = self
                 .cur_round_burn_positions
                 .get(&req.pid)
-                .unwrap_or_default();
+                .unwrap_or_default()
+                .to_decimals(8)
+                .to_const();
+
             self.cur_round_burn_positions
-                .insert(req.pid, prev_burn_usd_value + &usd_value);
+                .insert(req.pid, (prev_burn_usd_value + &usd_value).to_dynamic());
 
             usd_value
         };
 
         info.note_pledged_usd(&usd_value);
 
-        let prev_usd_value = self.cur_round_positions.get(&req.pid).unwrap_or_default();
+        let prev_usd_value = self
+            .cur_round_positions
+            .get(&req.pid)
+            .unwrap_or_default()
+            .to_decimals(8)
+            .to_const();
 
         let new_usd_value = if req.downvote {
             if prev_usd_value < usd_value {
                 E8s::zero()
             } else {
-                prev_usd_value - usd_value
+                prev_usd_value - &usd_value
             }
         } else {
-            prev_usd_value + usd_value
+            prev_usd_value + &usd_value
         };
 
         self.cur_round_positions
-            .insert(req.pid, new_usd_value.clone());
+            .insert(req.pid, new_usd_value.to_dynamic());
 
         self.set_furnace_info(info);
 
         PledgeResponse {
-            pledge_value_usd: new_usd_value,
+            pledge_value_usd: usd_value,
         }
     }
 
@@ -315,7 +378,7 @@ impl FurnaceState {
                 continue;
             }
 
-            let (position_id, votes) = entry_opt.unwrap();
+            let (position_id, votes) = entry_opt.map(|(p, e)| (p, e.to_const())).unwrap();
             to += &votes / &furnace_info.cur_round_pledged_usd;
 
             raffle_round_info.match_winner(&to, position_id);

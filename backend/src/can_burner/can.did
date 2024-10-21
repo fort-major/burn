@@ -44,6 +44,7 @@ type Result_1 = variant { Ok : nat64; Err : text };
 type StakeRequest = record { qty_e8s_u64 : nat64 };
 type VerifyDecideIdRequest = record { jwt : text };
 type WithdrawRequest = record { to : principal; qty_e8s : nat };
+type WithdrawResponse = record { block_idx : nat };
 service : () -> {
   can_migrate_msq_account : () -> (bool) query;
   claim_reward : (ClaimRewardRequest) -> (ClaimRewardResponse);
@@ -63,6 +64,6 @@ service : () -> {
   stop : () -> ();
   subaccount_of : (principal) -> (blob) query;
   verify_decide_id : (VerifyDecideIdRequest) -> (record {});
-  withdraw : (WithdrawRequest) -> (record {});
+  withdraw : (WithdrawRequest) -> (WithdrawResponse);
   withdraw_dev_fee_icp : (nat64, blob) -> (Result_1);
 }

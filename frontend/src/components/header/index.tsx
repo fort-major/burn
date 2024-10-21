@@ -105,6 +105,17 @@ export function Header(props: IHeaderProps) {
               onClick={eventHandler(() => {
                 setExpanded(false);
               })}
+              href={ROOT.$.bonfire.path}
+            >
+              Bonfire
+            </A>
+
+            <A
+              activeClass="underline"
+              class="hover:underline"
+              onClick={eventHandler(() => {
+                setExpanded(false);
+              })}
               href={ROOT.$.info.path}
             >
               Info

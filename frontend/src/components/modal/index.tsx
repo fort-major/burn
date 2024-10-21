@@ -34,7 +34,13 @@ export function Modal(props: IModalProps) {
       <div class="flex flex-col gap-4 rounded-3xl p-6 text-white bg-gray-110 md:mt-36 min-w-[300px] md:min-w-[550px]">
         <div class="flex items-center justify-between">
           <p class="font-primary font-bold text-xl md:text-2xl">{props.title ?? "Dialog"}</p>
-          <Icon kind={EIconKind.CancelCircle} color={COLORS.gray[150]} onClick={handleClose} class="cursor-pointer" />
+          <Icon
+            kind={EIconKind.CancelCircle}
+            color={COLORS.gray[150]}
+            hoverColor={COLORS.errorRed}
+            onClick={handleClose}
+            class="cursor-pointer"
+          />
         </div>
         {props.children}
       </div>

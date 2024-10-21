@@ -1,5 +1,5 @@
 use candid::{decode_one, encode_one, Principal};
-use ic_cdk::print;
+
 use ic_e8s::c::{E8s, ECs};
 use ic_stable_structures::{storable::Bound, Cell, StableBTreeMap, Storable};
 

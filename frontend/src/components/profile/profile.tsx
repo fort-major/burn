@@ -157,11 +157,7 @@ export function ProfileMini(props: IProfileProps) {
       />
       <div class="flex flex-col text-white gap-1">
         <p class="font-primary text-xs font-bold">{pseudonym()}</p>
-        <BalanceOf
-          tokenId={DEFAULT_TOKENS.burn}
-          onRefreshOverride={fetchTotals}
-          balance={totals.data?.yourUnclaimedReward?.toBigIntRaw()}
-        />
+        <Copyable text={identity()!.getPrincipal().toText()} ellipsis ellipsisSymbols={20} />
       </div>
     </div>
   );

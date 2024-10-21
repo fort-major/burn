@@ -8,6 +8,10 @@ import { ErrorCode } from "./utils/error";
 import { Header } from "@components/header";
 import { TokensStore } from "@store/tokens";
 import { BurnerStore } from "@store/burner";
+import { WalletStore } from "@store/wallet";
+import { FurnaceStore } from "@store/furnace";
+import { DispensersStore } from "@store/dispensers";
+import { Wallet } from "@components/wallet";
 
 const AppRoot = (props: IChildren) => (
   <>
@@ -20,10 +24,17 @@ const AppRoot = (props: IChildren) => (
     >
       <AuthStore>
         <TokensStore>
-          <BurnerStore>
-            <Header />
-            <main class="flex flex-col flex-grow self-stretch pt-12 lg:pt-[80px]">{props.children}</main>
-          </BurnerStore>
+          <WalletStore>
+            <BurnerStore>
+              <FurnaceStore>
+                <DispensersStore>
+                  <Header />
+                  <main class="flex flex-col flex-grow self-stretch pt-12 lg:pt-[80px]">{props.children}</main>
+                  <Wallet />
+                </DispensersStore>
+              </FurnaceStore>
+            </BurnerStore>
+          </WalletStore>
         </TokensStore>
       </AuthStore>
     </ErrorBoundary>

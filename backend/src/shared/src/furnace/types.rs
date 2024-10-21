@@ -12,7 +12,7 @@ pub const DEFAULT_ROUND_DELAY_NS: u64 = ONE_WEEK_NS;
 pub const UPDATE_FURNACE_SEED_DOMAIN: &[u8] = b"msq-burn-furnace-update-seed";
 pub const GEN_FURNACE_POSITION_ID_DOMAIN: &[u8] = b"msq-burn-furnace-position-id";
 pub const DEFAULT_WINNER_ICP_THRESHOLD: u64 = 1_000_0000_0000; // 1k ICP ~ $10k
-pub const MIN_ALLOWED_USD_POSITION_QTY_E8S: u64 = 1_00_0000; // 1 cent
+pub const MIN_ALLOWED_USD_POSITION_QTY_E8S: u64 = 10_0000; // 0.1 cent
 
 pub const FURNACE_REDISTRIBUTION_SUBACCOUNT: [u8; 32] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,

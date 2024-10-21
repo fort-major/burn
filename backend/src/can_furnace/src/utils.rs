@@ -10,10 +10,10 @@ use ic_cdk::{
         },
         time,
     },
-    id, spawn,
+    id, print, spawn,
 };
 use ic_cdk_timers::set_timer;
-use ic_e8s::c::E8s;
+use ic_e8s::{c::E8s, d::EDs};
 use ic_ledger_types::{transfer, AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs};
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager},
@@ -22,6 +22,7 @@ use ic_stable_structures::{
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use shared::{
     cmc::{CMCClient, NotifyTopUpError, NotifyTopUpRequest},
+    dispenser::api::InitArgs,
     furnace::{
         state::FurnaceState,
         types::{
@@ -70,6 +71,10 @@ thread_local! {
                 MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(9))),
             ),
             dispenser_wasm: Cell::init(MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(10))), Vec::new()).expect("Unable to create dispenser wasm cell"),
+
+            total_burned_tokens: StableBTreeMap::init(
+                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(11))),
+            ),
         }
     )
 }
@@ -128,7 +133,8 @@ fn handle_prize_fund_icp() {
             .await;
 
         if let Ok((balance,)) = call_result {
-            let prize_fund_cur_round = balance * E8s::from(8500_0000u64); // reserve 15% for the next round to keep the fund accumulating
+            let balance_e8s = E8s::new(balance.0);
+            let prize_fund_cur_round = balance_e8s * E8s::from(8500_0000u64); // reserve 15% for the next round to keep the fund accumulating
 
             let prize_fund_moved = move_prize_fund(icp, prize_fund_cur_round.clone()).await;
 
@@ -179,21 +185,16 @@ async fn redistribute_pledged_token(token_x: bool) {
         .await;
 
     if let Ok((balance,)) = balance_call_result {
-        let burn_share = &balance * E8s::from(4750_0000u64);
-        let pool_share = &balance * E8s::from(5000_0000u64);
-        let dev_fee_share = &balance * E8s::from(0250_0000u64);
+        let balance_eds = EDs::new(balance.0, token_x_info.decimals);
 
-        let token_dispenser_opt = STATE.with_borrow(|s| s.dispenser_of(&token_x_info.can_id));
+        let burn_share = &balance_eds * EDs::from((4750_0000u64, token_x_info.decimals));
+        let pool_share = &balance_eds * EDs::from((5000_0000u64, token_x_info.decimals));
+        let dev_fee_share = &balance_eds * EDs::from((0250_0000u64, token_x_info.decimals));
 
-        let token_dispenser = if token_dispenser_opt.is_none() {
-            let dispenser_id = deploy_dispenser_for(token_x_info.can_id).await;
-
-            STATE.with_borrow_mut(|s| s.add_dispenser(token_x_info.can_id, dispenser_id));
-
-            dispenser_id
-        } else {
-            token_dispenser_opt.unwrap()
-        };
+        let token_dispenser = STATE
+            .with_borrow(|s| s.dispenser_of(&token_x_info.can_id))
+            .expect("Token dispenser was not scheduled for deployment")
+            .expect("Token dispenser was deployed badly");
 
         let _ = token
             .icrc1_transfer(TransferArg {
@@ -208,6 +209,8 @@ async fn redistribute_pledged_token(token_x: bool) {
                 memo: None,
             })
             .await;
+
+        STATE.with_borrow_mut(|s| s.note_burned_token(token_x_info.can_id, &burn_share));
 
         let _ = token
             .icrc1_furnace_burn(
@@ -248,8 +251,9 @@ pub fn find_winners() {
 }
 
 pub fn select_next_token_x() {
-    STATE.with_borrow_mut(|s| s.select_next_token_x());
+    let token_can_id = STATE.with_borrow_mut(|s| s.select_next_token_x());
 
+    set_deploy_dispenser_timer(token_can_id);
     set_timer(Duration::from_nanos(0), complete_raffle);
 }
 
@@ -261,14 +265,38 @@ pub fn complete_raffle() {
     });
 }
 
-pub async fn deploy_dispenser_for(token_can_id: Principal) -> Principal {
-    if let Some(can_id) = deploy_canister().await {
-        install_dispenser_code(can_id, token_can_id).await;
+pub fn set_deploy_dispenser_timer(token_can_id: Principal) {
+    set_timer(Duration::from_nanos(ONE_MINUTE_NS), move || {
+        deploy_dispenser_for(token_can_id);
+    });
+}
 
-        return can_id;
+pub fn deploy_dispenser_for(token_can_id: Principal) -> bool {
+    let is_free = STATE.with_borrow_mut(|s| s.mark_dispenser_deploying(token_can_id));
+
+    if !is_free {
+        return false;
     }
 
-    unreachable!("The canister should always have enough cycles to deploy a dispenser");
+    spawn(async move {
+        if let Some(can_id) = deploy_canister().await {
+            STATE.with_borrow_mut(|s| s.add_dispenser(token_can_id, can_id));
+
+            set_timer(Duration::from_nanos(0), move || {
+                install_dispenser_code(can_id, token_can_id);
+            });
+        } else {
+            set_deploy_dispenser_timer(token_can_id);
+        }
+    });
+
+    true
+}
+
+fn set_install_dispenser_code_timer(can_id: Principal, token_can_id: Principal) {
+    set_timer(Duration::from_nanos(ONE_MINUTE_NS), move || {
+        install_dispenser_code(can_id, token_can_id)
+    });
 }
 
 async fn deploy_canister() -> Option<Principal> {
@@ -285,18 +313,25 @@ async fn deploy_canister() -> Option<Principal> {
 }
 
 /// returns true if should re-schedule
-async fn install_dispenser_code(can_id: Principal, token_can_id: Principal) -> bool {
-    let call_result = install_code(InstallCodeArgument {
-        mode: CanisterInstallMode::Install,
-        canister_id: can_id,
-        wasm_module: STATE.with_borrow(|s| s.get_dispenser_wasm().to_vec()),
-        arg: encode_args((token_can_id,)).expect("Unable to encode args"),
-    })
-    .await;
+fn install_dispenser_code(can_id: Principal, token_can_id: Principal) {
+    spawn(async move {
+        let call_result = install_code(InstallCodeArgument {
+            mode: CanisterInstallMode::Install,
+            canister_id: can_id,
+            wasm_module: STATE.with_borrow(|s| s.get_dispenser_wasm().to_vec()),
+            arg: encode_args((InitArgs { token_can_id },)).expect("Unable to encode args"),
+        })
+        .await;
 
-    let should_reschedule = call_result.is_err();
+        if let Err((c, m)) = call_result {
+            print(format!(
+                "Unable to install dispenser code, retrying - {:?}: {}",
+                c, m
+            ));
 
-    should_reschedule
+            set_install_dispenser_code_timer(can_id, token_can_id);
+        }
+    });
 }
 
 async fn move_prize_fund(icp: ICRC1CanisterClient, prize_fund_cur_round: E8s) -> bool {

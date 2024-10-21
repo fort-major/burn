@@ -1,0 +1,82 @@
+type Account = record { owner : principal; subaccount : opt blob };
+type CancelDistributionRequest = record { distribution_id : nat64 };
+type ClaimTokensRequest = record { to : Account; qty : EDs };
+type ClaimTokensResponse = record { result : Result };
+type CreateDistributionRequest = record {
+  qty : nat;
+  scheme : DistributionScheme;
+  name : text;
+  duration_ticks : nat64;
+  start_condition : DistributionStartCondition;
+};
+type DispenserInfoPub = record {
+  is_stopped : bool;
+  tick_delay_ns : nat64;
+  prev_tick_timestamp : nat64;
+  is_distributing : bool;
+  cur_tick : nat64;
+  token_fee : nat;
+  token_decimals : nat8;
+  initted : bool;
+  token_can_id : opt principal;
+};
+type Distribution = record {
+  id : nat64;
+  leftover_qty : EDs;
+  status : DistributionStatus;
+  owner : principal;
+  scheme : DistributionScheme;
+  cur_tick_reward : EDs;
+  scheduled_qty : EDs;
+  name : text;
+  duration_ticks : nat64;
+  start_condition : DistributionStartCondition;
+};
+type DistributionScheme = variant { Linear; Logarithmic };
+type DistributionStartCondition = variant {
+  AtFurnaceTrigger;
+  AtTickDelay : nat64;
+};
+type DistributionStatus = variant {
+  Scheduled;
+  InProgress;
+  Completed;
+  Canceled;
+};
+type EDs = record { val : nat; decimals : nat8 };
+type GetDistributionsRequest = record {
+  status : DistributionStatus;
+  skip : opt nat64;
+  take : nat64;
+};
+type GetDistributionsResponse = record { distributions : vec Distribution };
+type InitArgs = record { token_can_id : principal };
+type Result = variant { Ok : nat; Err : text };
+type WithdrawCanceledRequest = record {
+  to : Account;
+  qty : nat;
+  distribution_id : nat64;
+};
+type WithdrawUserTokensRequest = record { to : Account; icp : bool; qty : nat };
+type WithdrawUserTokensResponse = record { block_idx : nat };
+service : (InitArgs) -> {
+  cancel_distribution : (CancelDistributionRequest) -> (record {});
+  claim_tokens : (ClaimTokensRequest) -> (ClaimTokensResponse);
+  create_distribution : (CreateDistributionRequest) -> (
+      CancelDistributionRequest,
+    );
+  furnace_trigger_distribution : (CancelDistributionRequest) -> (record {});
+  get_cycles_balance : () -> (nat) query;
+  get_distribution : (nat64) -> (opt Distribution) query;
+  get_distributions : (GetDistributionsRequest) -> (
+      GetDistributionsResponse,
+    ) query;
+  get_info : () -> (DispenserInfoPub) query;
+  get_unclaimed_tokens : () -> (EDs) query;
+  receive_cycles : () -> ();
+  subaccount_of : (principal) -> (blob) query;
+  withdraw_canceled_funds : (WithdrawCanceledRequest) -> (ClaimTokensResponse);
+  withdraw_user_tokens : (WithdrawUserTokensRequest) -> (
+      WithdrawUserTokensResponse,
+    );
+}

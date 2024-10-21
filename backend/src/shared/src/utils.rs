@@ -11,7 +11,7 @@ pub fn f64_to_e8s(n: f64) -> E8s {
 
     let n_u128 = (n * 1_0000_0000.0) as u128;
 
-    E8s::from(n_u128 / 1_0000_0000)
+    E8s::from(n_u128)
 }
 
 fn next_sunday_15_utc(now: TimestampNs) -> u64 {

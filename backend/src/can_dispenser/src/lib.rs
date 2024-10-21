@@ -4,11 +4,11 @@ use ic_cdk::{
         call::{msg_cycles_accept128, msg_cycles_available128},
         canister_balance128, time,
     },
-    caller, init, post_upgrade, query, update,
+    caller, export_candid, init, post_upgrade, query, update,
 };
 use ic_e8s::d::EDs;
 use ic_ledger_types::Subaccount;
-use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
+use icrc_ledger_types::icrc1::transfer::TransferArg;
 use shared::{
     burner::types::TCycles,
     dispenser::{
@@ -21,7 +21,6 @@ use shared::{
         },
         types::{DispenserInfoPub, Distribution, DistributionId},
     },
-    furnace::api::WithdrawResponse,
     icrc1::ICRC1CanisterClient,
     Guard, ENV_VARS, ICP_FEE,
 };
@@ -223,3 +222,5 @@ fn post_upgrade_hook() {
     set_transform_icp_fee_to_cycles_timer();
     set_tick_timer();
 }
+
+export_candid!();

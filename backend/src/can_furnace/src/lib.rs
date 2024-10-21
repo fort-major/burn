@@ -4,29 +4,34 @@ use ic_cdk::{
         call::{msg_cycles_accept128, msg_cycles_available128},
         canister_balance128, time,
     },
-    caller, id, init, post_upgrade, query, update,
+    caller, export_candid, id, init, post_upgrade, query, update,
 };
-use ic_e8s::c::E8s;
+use ic_e8s::{c::E8s, d::EDs};
 use ic_ledger_types::Subaccount;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use shared::{
     burner::types::TCycles,
     furnace::{
         api::{
-            AddSupportedTokenRequest, AddSupportedTokenResponse, DeployDispenserRequest,
-            DeployDispenserResponse, GetCurRoundPositionsRequest, GetCurRoundPositionsResponse,
-            GetWinnersRequest, GetWinnersResponse, PledgeRequest, PledgeResponse,
-            RemoveSupportedTokenRequest, RemoveSupportedTokenResponse, SetMaintenanceStatusRequest,
+            AddSupportedTokenRequest, AddSupportedTokenResponse, ClaimRewardICPRequest,
+            ClaimRewardICPResponse, DeployDispenserRequest, DeployDispenserResponse,
+            GetCurRoundPositionsRequest, GetCurRoundPositionsResponse, GetWinnersRequest,
+            GetWinnersResponse, PledgeRequest, PledgeResponse, RemoveSupportedTokenRequest,
+            RemoveSupportedTokenResponse, SetMaintenanceStatusRequest,
             SetMaintenanceStatusResponse, VoteTokenXRequest, VoteTokenXResponse, WithdrawRequest,
-            WithdrawResponse, WithdrawUserTokensRequest, WithdrawUserTokensResponse,
+            WithdrawResponse,
         },
-        types::{FurnaceInfoPub, TokenX, TokenXVote, FURNACE_REDISTRIBUTION_SUBACCOUNT},
+        types::{
+            FurnaceInfoPub, TokenX, TokenXVote, FURNACE_ICP_PRIZE_DISTRIBUTION_SUBACCOUNT,
+            FURNACE_REDISTRIBUTION_SUBACCOUNT,
+        },
     },
+    icpswap::ICPSwapTokenInfo,
     icrc1::ICRC1CanisterClient,
-    Guard, ENV_VARS,
+    CanisterMode, Guard, ENV_VARS, ICP_FEE,
 };
 use utils::{
-    deploy_dispenser_for, deposit_cycles, set_fetch_token_prices_timer,
+    deploy_dispenser_for, deposit_cycles, set_deploy_dispenser_timer, set_fetch_token_prices_timer,
     set_init_canister_one_timer, set_raffle_timer, STATE,
 };
 
@@ -102,35 +107,65 @@ fn vote_token_x(mut req: VoteTokenXRequest) -> VoteTokenXResponse {
 }
 
 #[update]
-async fn deploy_dispenser(mut req: DeployDispenserRequest) -> DeployDispenserResponse {
-    STATE.with_borrow(|s| {
+async fn claim_reward_icp(mut req: ClaimRewardICPRequest) -> ClaimRewardICPResponse {
+    let qty = STATE.with_borrow_mut(|s| {
         req.validate_and_escape(s, caller(), time())
-            .expect("Invalid request")
+            .expect("Invalid request");
+
+        // preventing re-entrancy
+        s.claim_reward(req)
     });
 
-    deposit_cycles(caller(), 9999_0000u64)
-        .await
-        .expect("Unable to collect the fee")
-        .0
-        .expect("Unable to collect the fee");
+    let icp = ICRC1CanisterClient::new(ENV_VARS.icp_token_canister_id);
 
-    let dispenser_can_id = deploy_dispenser_for(req.token_can_id).await;
+    let call_result = icp
+        .icrc1_transfer(TransferArg {
+            from_subaccount: Some(FURNACE_ICP_PRIZE_DISTRIBUTION_SUBACCOUNT),
+            to: req.to,
+            amount: Nat(qty.val) - Nat::from(ICP_FEE),
+            fee: Some(Nat::from(ICP_FEE)),
+            created_at_time: None,
+            memo: None,
+        })
+        .await;
 
-    let prev_dispenser_opt = STATE.with_borrow(|s| s.dispenser_of(&req.token_can_id));
-    // check for race conditions
-    if let Some(prev_dispenser) = prev_dispenser_opt {
-        DeployDispenserResponse {
-            dispenser_can_id: prev_dispenser,
-        }
-    } else {
-        STATE.with_borrow_mut(|s| s.add_dispenser(req.token_can_id, dispenser_can_id));
+    let result = match call_result {
+        Ok((Ok(block_idx),)) => Ok(block_idx),
+        Ok((Err(e),)) => Err(e.to_string()),
+        Err((c, m)) => Err(format!("{:?} {}", c, m)),
+    };
 
-        DeployDispenserResponse { dispenser_can_id }
+    if result.is_err() {
+        STATE.with_borrow_mut(|s| s.revert_claim_reward(req));
     }
+
+    ClaimRewardICPResponse { result }
+}
+
+#[update]
+async fn deploy_dispenser(mut req: DeployDispenserRequest) -> DeployDispenserResponse {
+    let info = STATE.with_borrow(|s| {
+        req.validate_and_escape(s, caller(), time())
+            .expect("Invalid request");
+
+        s.get_furnace_info()
+    });
+
+    if !info.is_dev(&caller()) {
+        deposit_cycles(caller(), 9999_0000u64)
+            .await
+            .expect("Unable to collect the fee")
+            .0
+            .expect("Unable to collect the fee");
+    }
+
+    deploy_dispenser_for(req.token_can_id);
+
+    DeployDispenserResponse {}
 }
 
 #[query]
-fn list_dispensers() -> Vec<(Principal, Principal)> {
+fn list_dispensers() -> Vec<(Principal, Option<Principal>)> {
     STATE.with_borrow(|s| {
         let mut result = Vec::new();
 
@@ -140,31 +175,6 @@ fn list_dispensers() -> Vec<(Principal, Principal)> {
 
         result
     })
-}
-
-#[update]
-async fn withdraw_user_tokens(req: WithdrawUserTokensRequest) -> WithdrawUserTokensResponse {
-    // settings ckBTC's fee as a minimum
-    if req.qty < Nat::from(10u64) {
-        panic!("Amount too small");
-    }
-
-    let token = ICRC1CanisterClient::new(req.token_can_id);
-    let block_idx = token
-        .icrc1_transfer(TransferArg {
-            from_subaccount: Some(subaccount_of(caller()).0),
-            to: req.to,
-            amount: req.qty,
-            fee: None,
-            created_at_time: None,
-            memo: None,
-        })
-        .await
-        .expect("Unable to withdraw")
-        .0
-        .expect("Unable to withdraw");
-
-    WithdrawUserTokensResponse { block_idx }
 }
 
 #[query]
@@ -180,6 +190,32 @@ fn list_supported_tokens() -> Vec<TokenX> {
 #[query]
 fn get_my_vote_token_x() -> Option<TokenXVote> {
     STATE.with_borrow(|s| s.get_vote_token_x_of(&caller()))
+}
+
+#[query]
+fn get_total_burned_tokens() -> Vec<(Principal, EDs)> {
+    STATE.with_borrow(|s| s.total_burned_tokens.iter().collect())
+}
+
+#[query]
+fn get_my_cur_round_positions() -> (E8s, E8s) {
+    STATE.with_borrow(|s| {
+        let usd = s
+            .cur_round_positions
+            .get(&caller())
+            .unwrap_or_default()
+            .to_decimals(8)
+            .to_const();
+
+        let usd_burn = s
+            .cur_round_burn_positions
+            .get(&caller())
+            .unwrap_or_default()
+            .to_decimals(8)
+            .to_const();
+
+        (usd, usd_burn)
+    })
 }
 
 #[query]
@@ -216,12 +252,25 @@ fn get_cur_round_positions(mut req: GetCurRoundPositionsRequest) -> GetCurRoundP
         req.validate_and_escape(s, caller(), time())
             .expect("Invalid request");
 
-        let positions = s
-            .cur_round_positions
-            .iter()
-            .skip(req.skip as usize)
-            .take(req.take)
-            .collect();
+        let mut iter = if let Some(skip) = req.skip {
+            let mut iter = s.cur_round_positions.range(skip..);
+            iter.next();
+
+            iter
+        } else {
+            s.cur_round_positions.iter()
+        };
+
+        let mut positions = Vec::new();
+
+        for _ in 0..req.take {
+            let entry = iter.next().map(|(p, e)| (p, e.to_const()));
+            if entry.is_none() {
+                break;
+            }
+
+            positions.push(entry.unwrap());
+        }
 
         GetCurRoundPositionsResponse { positions }
     })
@@ -235,12 +284,25 @@ fn get_cur_round_burn_positions(
         req.validate_and_escape(s, caller(), time())
             .expect("Invalid request");
 
-        let positions = s
-            .cur_round_burn_positions
-            .iter()
-            .skip(req.skip as usize)
-            .take(req.take)
-            .collect();
+        let mut iter = if let Some(skip) = req.skip {
+            let mut iter = s.cur_round_burn_positions.range(skip..);
+            iter.next();
+
+            iter
+        } else {
+            s.cur_round_burn_positions.iter()
+        };
+
+        let mut positions = Vec::new();
+
+        for _ in 0..req.take {
+            let entry = iter.next().map(|(p, e)| (p, e.to_const()));
+            if entry.is_none() {
+                break;
+            }
+
+            positions.push(entry.unwrap());
+        }
 
         GetCurRoundPositionsResponse { positions }
     })
@@ -307,6 +369,21 @@ fn receive_cycles() {
 }
 
 #[query]
+fn list_exchange_rates() -> Vec<(Principal, ICPSwapTokenInfo)> {
+    STATE.with_borrow(|s| {
+        let mut res = Vec::new();
+
+        for (token_can_id, _) in s.supported_tokens.iter() {
+            let rate = s.token_exchange_rates.get(&token_can_id).unwrap();
+
+            res.push((token_can_id, rate));
+        }
+
+        res
+    })
+}
+
+#[query]
 fn get_cycles_balance() -> TCycles {
     let balance = canister_balance128();
 
@@ -322,27 +399,40 @@ fn get_cycles_balance() -> TCycles {
 fn init_hook() {
     set_init_canister_one_timer(caller());
     set_fetch_token_prices_timer();
-    set_raffle_timer();
 
-    add_supported_token(AddSupportedTokenRequest {
-        tokens: vec![
-            TokenX {
-                can_id: ENV_VARS.burn_token_canister_id,
-                fee: Nat::from(10_000u64),
-                decimals: 8,
-            },
-            TokenX {
+    STATE.with_borrow_mut(|s| {
+        s.add_supported_token(TokenX {
+            can_id: ENV_VARS.burn_token_canister_id,
+            fee: Nat::from(10_000u64),
+            decimals: 8,
+        });
+
+        if matches!(ENV_VARS.mode, CanisterMode::IC) {
+            s.add_supported_token(TokenX {
                 // set DCD as a default supported token
                 can_id: Principal::from_text("xsi2v-cyaaa-aaaaq-aabfq-cai").unwrap(),
                 fee: Nat::from(10_000u64),
                 decimals: 8,
-            },
-        ],
+            });
+        } else {
+            s.add_supported_token(TokenX {
+                can_id: ENV_VARS.icp_token_canister_id,
+                fee: Nat::from(10_000u64),
+                decimals: 8,
+            });
+        }
     });
+
+    // set_deploy_dispenser_timer(ENV_VARS.burn_token_canister_id);
+    // set_raffle_timer();
 }
 
 #[post_upgrade]
 fn post_upgrade_hook() {
     set_fetch_token_prices_timer();
-    set_raffle_timer();
+
+    // set_deploy_dispenser_timer(ENV_VARS.burn_token_canister_id);
+    // set_raffle_timer();
 }
+
+export_candid!();

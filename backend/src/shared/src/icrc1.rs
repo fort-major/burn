@@ -1,6 +1,6 @@
 use candid::{Nat, Principal};
 use ic_cdk::{api::call::CallResult, call};
-use ic_e8s::c::E8s;
+
 use icrc_ledger_types::{
     icrc1::{
         account::Account,
@@ -18,7 +18,7 @@ impl ICRC1CanisterClient {
         Self { canister_id }
     }
 
-    pub async fn icrc1_balance_of(&self, arg: Account) -> CallResult<(E8s,)> {
+    pub async fn icrc1_balance_of(&self, arg: Account) -> CallResult<(Nat,)> {
         call(self.canister_id, "icrc1_balance_of", (arg,)).await
     }
 

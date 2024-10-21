@@ -8,7 +8,10 @@ use ic_ledger_types::{AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs}
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use shared::burner::api::{
-    ClaimRewardRequest, ClaimRewardResponse, GetBurnersRequest, GetBurnersResponse, GetKamikazesRequest, GetKamikazesResponse, GetTotalsResponse, MigrateMsqAccountRequest, MigrateMsqAccountResponse, StakeRequest, StakeResponse, VerifyDecideIdRequest, VerifyDecideIdResponse, WithdrawRequest, WithdrawResponse
+    ClaimRewardRequest, ClaimRewardResponse, GetBurnersRequest, GetBurnersResponse,
+    GetKamikazesRequest, GetKamikazesResponse, GetTotalsResponse, MigrateMsqAccountRequest,
+    MigrateMsqAccountResponse, StakeRequest, StakeResponse, VerifyDecideIdRequest,
+    VerifyDecideIdResponse, WithdrawRequest, WithdrawResponse,
 };
 use shared::burner::types::{
     BURNER_DEV_FEE_SUBACCOUNT, BURNER_REDISTRIBUTION_SUBACCOUNT, BURNER_SPIKE_SUBACCOUNT,
@@ -30,7 +33,7 @@ async fn withdraw(req: WithdrawRequest) -> WithdrawResponse {
     let c = caller();
     let icp_can = ICRC1CanisterClient::new(ENV_VARS.icp_token_canister_id);
 
-    icp_can
+    let block_idx = icp_can
         .icrc1_transfer(TransferArg {
             from_subaccount: Some(subaccount_of(c).0),
             to: Account {
@@ -47,7 +50,7 @@ async fn withdraw(req: WithdrawRequest) -> WithdrawResponse {
         .0
         .expect("Unable to transfer ICP");
 
-    WithdrawResponse {}
+    WithdrawResponse { block_idx }
 }
 
 #[update]
