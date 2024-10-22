@@ -19,7 +19,7 @@ pub mod utils;
 
 pub const MEMO_TOP_UP_CANISTER: u64 = 1347768404_u64;
 pub const ICP_FEE: u64 = 10_000u64;
-pub const MIN_ICP_STAKE_E8S_U64: u64 = 5000_0000;
+pub const MIN_ICP_STAKE_E8S_U64: u64 = 1000_0000;
 
 pub const ONE_MINUTE_NS: u64 = 1_000_000_000 * 60;
 pub const ONE_HOUR_NS: u64 = ONE_MINUTE_NS * 60;

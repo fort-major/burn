@@ -1,515 +1,350 @@
-import { ROOT } from "@/routes";
-import { Avatar } from "@components/avatar";
 import { BalanceOf } from "@components/balance-of";
-import { BooleanInput } from "@components/boolean-input";
+import { Bento } from "@components/bento";
 import { Btn } from "@components/btn";
-import { Copyable } from "@components/copyable";
-import { EIconKind, Icon } from "@components/icon";
+import { EIconKind } from "@components/icon";
 import { Modal } from "@components/modal";
 import { Page } from "@components/page";
-import { getAvatarSrc, getPseudonym, ProfileFull } from "@components/profile/profile";
-import { Spoiler } from "@components/spoiler";
-import { TextInput } from "@components/text-input";
-import { AccountIdentifier, SubAccount } from "@dfinity/ledger-icp";
-import { IcrcLedgerCanister } from "@dfinity/ledger-icrc";
+import { PledgeForm } from "@components/pledge-form";
+import { ProfileFull } from "@components/profile/profile";
+import { Timer } from "@components/timer";
 import { Principal } from "@dfinity/principal";
-import { MsqClient } from "@fort-major/msq-client";
-import { areWeOnMobile } from "@pages/home";
-import { useNavigate } from "@solidjs/router";
 import { useAuth } from "@store/auth";
 import { useBurner } from "@store/burner";
 import { DEFAULT_TOKENS, useTokens } from "@store/tokens";
+import { useWallet } from "@store/wallet";
 import { COLORS } from "@utils/colors";
-import { avatarSrcFromPrincipal, createLocalStorageSignal } from "@utils/common";
-import { bytesToHex, tokensToStr } from "@utils/encoding";
-import { logInfo } from "@utils/error";
-import { eventHandler } from "@utils/security";
-import { ONE_MIN_NS, Result } from "@utils/types";
-import { batch, createEffect, createResource, createSignal, For, Match, on, onMount, Show, Switch } from "solid-js";
+import { createLocalStorageSignal } from "@utils/common";
+import { E8s, EDs } from "@utils/math";
+import { ONE_DAY_NS } from "@utils/types";
+import { createSignal, Match, Show, Switch } from "solid-js";
 
 export const PoolPage = () => {
-  const { isAuthorized, identity, assertAuthorized } = useAuth();
-  const { subaccounts, fetchSubaccountOf, claimLost, canClaimLost } = useTokens();
-  const { canWithdraw, canStake, totals, fetchTotals, canClaimReward, withdraw, stake, stakeKamikaze, claimReward } =
-    useBurner();
-  const navigate = useNavigate();
+  const { isAuthorized } = useAuth();
+  const { icpSwapUsdExchangeRates } = useTokens();
+  const { totals, fetchTotals, canPledgePool, pledgePool } = useBurner();
+  const { pid, claimPoolBurnReward } = useWallet();
 
-  const [isKamikazePool, setIsKamikazePool] = createLocalStorageSignal<boolean>("msq-burn-is-kamikaze-pool");
-  const [withdrawModalVisible, setWithdrawModalVisible] = createSignal(false);
-  const [burnModalVisible, setBurnModalVisible] = createSignal(false);
-  const [claimModalVisible, setClaimModalVisible] = createSignal(false);
-  const [claimLostModalVisible, setClaimLostModalVisible] = createSignal(false);
-  const [recepient, setRecepient] = createSignal(Result.Err<string>(""));
+  const [isKamikazePool, setIsKamikazePool] = createSignal(false);
+  const [pledgeModalOpen, setPledgeModalOpen] = createSignal(false);
 
-  const myPrincipal = () => {
-    if (!isAuthorized()) return undefined;
-
-    return identity()!.getPrincipal();
-  };
-
-  const mySubaccount = () => {
-    const p = myPrincipal();
-    if (!p) return undefined;
-
-    return subaccounts[p.toText()];
-  };
-
-  const burnoutLeftoverBlocks = () => {
+  const myClassicPoolShare = () => {
     const t = totals.data;
-    if (!t) return 0;
+    if (!t) return E8s.zero();
 
-    return Number(t.yourShareTcycles.div(t.currentBlockShareFee).toBigIntBase());
+    if (t.totalSharesSupply.isZero()) return E8s.zero();
+
+    return t.yourShareTcycles.div(t.totalSharesSupply).toDecimals(8).toE8s();
   };
 
-  const highRiskMinutesLeft = () => {
+  const myKamikazePoolShare = () => {
     const t = totals.data;
-    if (!t || !t.yourKamikazePositionCreatedAt) return 0;
+    if (!t) return E8s.zero();
 
-    const now = Date.now();
-    const harakiriAt = t.yourKamikazePositionCreatedAt.getTime() + 24 * 60 * 60 * 1000;
+    if (t.totalKamikazePoolSupply.isZero()) return E8s.zero();
 
-    let dif = 0;
-    if (harakiriAt > now) {
-      dif = harakiriAt - now;
-    }
-
-    return Math.floor(dif / 1000 / 60);
+    return t.yourKamikazeShareTcycles.div(t.totalKamikazePoolSupply).toDecimals(8).toE8s();
   };
 
-  const myShare = () => {
+  const myClassicPoolCut = () => {
     const t = totals.data;
+
     if (!t) return undefined;
-
-    if (!t.totalSharesSupply.toBool()) return undefined;
-
-    return t.yourShareTcycles.div(t.totalSharesSupply);
-  };
-
-  const myHighRiskShare = () => {
-    const t = totals.data;
-    if (!t) return undefined;
-
-    if (!t.totalKamikazePoolSupply.toBool()) return undefined;
-
-    return t.yourKamikazeShareTcycles.div(t.totalKamikazePoolSupply);
-  };
-
-  const myBlockCut = () => {
-    const t = totals.data;
-    if (!t) return undefined;
-
-    if (!t.totalSharesSupply.toBool()) return undefined;
+    if (t.totalSharesSupply.isZero()) return undefined;
+    if (t.yourShareTcycles.isZero()) return undefined;
 
     const lotteryEnabled = t.isLotteryEnabled || t.isKamikazePoolEnabled;
 
-    let reward = t.currentBurnTokenReward
-      .toDynamic()
-      .toDecimals(12)
-      .mul(t.yourShareTcycles)
-      .div(t.totalSharesSupply)
-      .toDecimals(8)
-      .toE8s();
+    const share = t.yourShareTcycles.div(t.totalSharesSupply).toDecimals(8).toE8s();
+    const burnPerHour = t.currentBurnTokenReward.mulNum(30n).divNum(2n);
+
+    let rewardPerHour = share.mul(burnPerHour);
 
     if (lotteryEnabled) {
-      reward = reward.divNum(2n);
+      rewardPerHour = rewardPerHour.divNum(2n);
     }
 
-    return reward;
+    return rewardPerHour;
   };
 
-  const lotteryPostfix = () => {
+  const myKamikazePoolCut = () => {
     const t = totals.data;
-    if (!t) return "";
 
-    if (
-      (t.isLotteryEnabled && t.yourLotteryEligibilityStatus) ||
-      (t.isKamikazePoolEnabled && t.yourKamikazePositionCreatedAt)
-    )
-      return `+ a chance for ${t.currentBurnTokenReward
-        .divNum(2n)
-        .toShortString({ belowOne: 4, belowThousand: 0, afterThousand: 0 })} more BURN`;
+    if (!t) return undefined;
+    if (!t.isKamikazePoolEnabled) return undefined;
+    if (t.totalKamikazePoolSupply.isZero()) return undefined;
+    if (t.yourKamikazeShareTcycles.isZero()) return undefined;
 
-    return "";
+    const minShare = t.yourKamikazeShareTcycles.div(t.totalKamikazePoolSupply).divNum(2n).toDecimals(8).toE8s();
+    const maxShare = t.yourKamikazeShareTcycles.div(t.totalKamikazePoolSupply).mulNum(2n).toDecimals(8).toE8s();
+
+    const burnPerHour = t.currentBurnTokenReward.mulNum(30n).divNum(2n);
+
+    const min = minShare.mul(burnPerHour);
+    const max = maxShare.mul(burnPerHour);
+
+    return { min, max };
   };
 
-  onMount(() => {
-    if (!isAuthorized()) {
-      navigate(ROOT.path);
-      return;
-    }
+  const poolCut = () => {
+    const classic = () => myClassicPoolCut();
+    const highRisk = () => myKamikazePoolCut();
 
-    fetchSubaccountOf(myPrincipal()!);
-  });
+    const value = () => {
+      const c = classic();
+      const h = highRisk();
 
-  createEffect(
-    on(isAuthorized, (ready) => {
-      if (!ready) {
-        navigate(ROOT.path);
+      if (c && h) {
+        return { min: h.min.add(c), max: h.max.add(c) };
+      } else if (c) {
+        return { min: c, max: c };
+      } else if (h) {
+        return h;
+      } else {
+        return undefined;
       }
-    })
-  );
+    };
 
-  createEffect(
-    on(myPrincipal, (p) => {
-      if (!p) return;
-
-      fetchSubaccountOf(p);
-    })
-  );
-
-  const headerClass = "font-semibold text-2xl";
-
-  const handleWithdrawModalClose = () => {
-    batch(() => {
-      setRecepient(Result.Err<string>(""));
-      setWithdrawModalVisible(false);
-    });
+    return (
+      <Show when={value()}>
+        <Switch>
+          <Match when={value()!.min.eq(value()!.max)}>
+            <div class="flex items-center gap-1">
+              <span class="text-2xl font-semibold">~</span>
+              <p class="font-semibold sm:text-[4rem] leading-[3.5rem]">
+                {value()!.min.toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })}
+              </p>
+            </div>
+          </Match>
+          <Match when={!value()!.min.eq(value()!.max)}>
+            <div class="flex items-center gap-1">
+              <span class="text-2xl font-semibold">~</span>
+              <p class="font-semibold sm:text-[4rem] leading-[3.5rem]">
+                {value()!.min.toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })}
+              </p>
+              <span class="text-2xl font-semibold">-</span>
+              <p class="font-semibold sm:text-[4rem] leading-[3.5rem]">
+                {value()!.max.toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })}
+              </p>
+            </div>
+          </Match>
+        </Switch>
+      </Show>
+    );
   };
 
-  const handleWithdraw = async () => {
-    await withdraw(Principal.fromText(recepient().unwrapOk()));
-    handleWithdrawModalClose();
+  const tcyclesExchangeRate = () => icpSwapUsdExchangeRates["aanaa-xaaaa-aaaah-aaeiq-cai"] ?? E8s.zero();
+
+  const classicPoolUsd = () => {
+    const t = totals.data;
+
+    if (!t) return E8s.zero();
+
+    return t.yourShareTcycles.toDecimals(8).toE8s().mul(tcyclesExchangeRate());
   };
 
-  const withdrawForm = (
-    <div class="flex flex-col gap-8">
-      <div class="flex flex-col gap-4">
-        <p class="font-normal text-lg text-white">Are you sure you want to withdraw all ICP from the Pool?</p>
-        <div class="flex flex-col gap-2">
-          <p class="font-semibold text-sm text-gray-140">
-            Recepient Principal ID <span class="text-errorRed">*</span>
-          </p>
-          <TextInput
-            placeholder={import.meta.env.VITE_BURNER_CANISTER_ID}
-            validations={[
-              { principal: null },
-              { required: null },
-              { not: [import.meta.env.VITE_BURN_TOKEN_CANISTER_ID] },
-            ]}
-            value={recepient().unwrap()}
-            onChange={setRecepient}
-          />
-        </div>
-      </div>
-      <Btn text="Confirm" bgColor={COLORS.orange} disabled={recepient().isErr()} onClick={handleWithdraw} />
-    </div>
-  );
+  const classicPoolLifespan = () => {
+    const t = totals.data;
+    if (!t) return { days: 0, hours: 0, minutes: 0 };
 
-  const handleBurnModalClose = () => {
-    batch(() => {
-      setBurnModalVisible(false);
-    });
+    const speedMinutes = t.currentBlockShareFee.divNum(2n);
+    let minutes = Number(t.yourShareTcycles.div(speedMinutes).toDecimals(0));
+
+    const days = Math.floor(minutes / 1440);
+    const hours = Math.floor((minutes / 60) % 24);
+    minutes = minutes % 60;
+
+    return { days, hours, minutes };
   };
 
-  const handleBurn = async () => {
-    if (isKamikazePool()) {
-      await stakeKamikaze();
-    } else {
-      await stake();
-    }
+  const kamikazePoolUsd = () => {
+    const t = totals.data;
 
-    handleBurnModalClose();
+    if (!t) return E8s.zero();
+
+    return t.yourKamikazeShareTcycles.toDecimals(8).toE8s().mul(tcyclesExchangeRate());
   };
 
-  const burnForm = (
-    <div class="flex flex-col gap-8">
-      <div class="flex flex-col gap-4">
-        <p class="font-normal text-lg text-white">Are you sure you want to burn all deposited ICP?</p>
-        <p class="font-semibold text-orange">
-          This operation takes a significant amount of time! Please, wait patiently after pressing "Yes".
-        </p>
-      </div>
-      <div class="flex gap-2">
-        <Btn text="No" class="flex-grow" bgColor={COLORS.gray[105]} onClick={handleBurnModalClose} />
-        <Btn text="Yes" class="flex-grow" bgColor={COLORS.orange} onClick={handleBurn} />
-      </div>
-    </div>
-  );
+  const kamikazePoolLifespan = () => {
+    const t = totals.data;
+    if (!t) return { days: 0, hours: 0, minutes: 0 };
 
-  const handleClaimModalClose = () => {
-    batch(() => {
-      setRecepient(Result.Err<string>(""));
-      setClaimModalVisible(false);
-    });
+    const now = Date.now();
+    const then = (t.yourKamikazePositionCreatedAt?.getTime() ?? now) + Number(ONE_DAY_NS / 1000000n);
+
+    const ms = then - now;
+
+    let minutes = Math.floor(ms / 1000 / 60);
+
+    const days = Math.floor(minutes / 1440);
+    const hours = Math.floor((minutes / 60) % 24);
+    minutes = minutes % 60;
+
+    return { days, hours, minutes };
+  };
+
+  const canClaim = () => {
+    const t = totals.data;
+    if (!t) return false;
+
+    if (t.yourUnclaimedReward.isZero()) return false;
+
+    return true;
   };
 
   const handleClaim = async () => {
-    await claimReward(Principal.fromText(recepient().unwrapOk()));
-    handleClaimModalClose();
+    await claimPoolBurnReward();
+    fetchTotals();
   };
 
-  const claimForm = (
-    <div class="flex flex-col gap-8">
-      <div class="flex flex-col gap-4">
-        <p class="font-normal text-lg text-white">Mint all unclaimed BURN tokens?</p>
-        <div class="flex flex-col gap-2">
-          <p class="font-normal text-sm text-white">
-            $BURN is supported by an absolute majority of wallets. We still would like to kindly ask you to{" "}
-            <span class="font-bold">check if the wallet you send to supports $BURN</span>.
-          </p>
-          <p class="font-semibold text-sm text-gray-140">
-            Recepient Principal ID <span class="text-errorRed">*</span>
-          </p>
-          <TextInput
-            placeholder={import.meta.env.VITE_BURNER_CANISTER_ID}
-            validations={[
-              { principal: null },
-              { required: null },
-              { not: [import.meta.env.VITE_BURN_TOKEN_CANISTER_ID] },
-            ]}
-            value={recepient().unwrap()}
-            onChange={setRecepient}
-          />
-        </div>
-      </div>
-      <Btn text="Confirm" bgColor={COLORS.orange} disabled={recepient().isErr()} onClick={handleClaim} />
-    </div>
-  );
-
-  const handleClaimLostModalClose = () => {
-    batch(() => {
-      setRecepient(Result.Err<string>(""));
-      setClaimLostModalVisible(false);
-    });
+  const handlePledgeModalOpenClick = (isKamikaze: boolean) => {
+    setIsKamikazePool(isKamikaze);
+    setPledgeModalOpen(true);
   };
 
-  const handleClaimLost = async () => {
-    assertAuthorized();
+  const handlePledge = async (_: Principal, qty: bigint) => {
+    const isKamikaze = isKamikazePool();
 
-    await claimLost(Principal.fromText(recepient().unwrapOk()));
+    await pledgePool(isKamikaze, qty);
+    fetchTotals();
 
-    handleClaimLostModalClose();
+    handlePledgeModalCloseClick();
   };
 
-  const claimLostForm = (
-    <div class="flex flex-col gap-8">
-      <div class="flex flex-col gap-4">
-        <p class="font-normal text-lg text-white">Your lost assets we were able to find:</p>
-        <div class="flex flex-col gap-2">
-          <BalanceOf tokenId={DEFAULT_TOKENS.burn} owner={identity()?.getPrincipal()} />
-          <BalanceOf tokenId={DEFAULT_TOKENS.icp} owner={identity()?.getPrincipal()} />
-        </div>
-        <div class="flex flex-col gap-2">
-          <p class="font-semibold text-sm text-gray-140">
-            Recepient Principal ID <span class="text-errorRed">*</span>
-          </p>
-          <TextInput
-            placeholder={import.meta.env.VITE_BURNER_CANISTER_ID}
-            validations={[
-              { principal: null },
-              { required: null },
-              { not: [import.meta.env.VITE_BURN_TOKEN_CANISTER_ID] },
-            ]}
-            value={recepient().unwrap()}
-            onChange={setRecepient}
-          />
-        </div>
-      </div>
-      <Btn
-        text="Re-claim Lost Assets"
-        bgColor={COLORS.orange}
-        disabled={recepient().isErr() || !canClaimLost()}
-        onClick={handleClaimLost}
-      />
-    </div>
-  );
+  const handlePledgeModalCloseClick = () => {
+    setPledgeModalOpen(false);
+  };
 
   return (
     <Page slim>
-      <ProfileFull />
+      <div class="grid grid-cols-4 gap-6">
+        <Show when={isAuthorized()}>
+          <Bento class="col-span-4 flex-row justify-between items-center gap-2" id={1}>
+            <ProfileFull />
+          </Bento>
+        </Show>
 
-      <div class="flex flex-col gap-4">
-        <p class={headerClass}>Deposited ICP</p>
-        <div class="flex flex-col md:flex-row md:justify-between gap-10 md:gap-4">
-          <Show when={mySubaccount()}>
-            <div class="flex flex-col gap-3">
-              <div class="flex flex-col gap-2">
-                <p class="font-semibold text-gray-140 text-sm">Send ICP here to deposit (1 ICP minimum)</p>
+        <Bento class="col-span-2 flex-col" id={2}>
+          <div class="flex flex-col gap-8">
+            <p class="font-semibold text-xl">Classic Pool</p>
 
-                <div class="flex flex-col gap-1">
-                  <p class="font-semibold text-md">Account ID</p>
-                  <Copyable
-                    text={AccountIdentifier.fromPrincipal({
-                      principal: Principal.fromText(import.meta.env.VITE_BURNER_CANISTER_ID),
-                      subAccount: SubAccount.fromBytes(mySubaccount()!) as SubAccount,
-                    }).toHex()}
-                    ellipsis={areWeOnMobile() ? true : false}
-                    ellipsisSymbols={areWeOnMobile() ? 30 : undefined}
-                  />
+            <Show when={isAuthorized()}>
+              <div class="flex flex-col gap-4">
+                <div class="flex gap-4 justify-between items-baseline">
+                  <p class="font-bold text-6xl">
+                    ${classicPoolUsd().toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })}
+                  </p>
+                  <p class="text-gray-140">pledged worth of ICP</p>
+                </div>
+
+                <div class="flex gap-4 justify-between items-baseline">
+                  <p class="font-bold text-4xl">
+                    {myClassicPoolShare()
+                      .toPercent()
+                      .toShortString({ belowOne: 4, belowThousand: 2, afterThousand: 2 })}
+                    %
+                  </p>
+                  <p class="text-gray-140">pool share</p>
+                </div>
+
+                <div class="flex gap-4 justify-between items-baseline">
+                  <Timer {...classicPoolLifespan()} class="text-xl" descriptionClass="text-md" />
+                  <p class="text-gray-140">till removed</p>
                 </div>
               </div>
-              <BalanceOf
-                tokenId={DEFAULT_TOKENS.icp}
-                owner={Principal.fromText(import.meta.env.VITE_BURNER_CANISTER_ID)}
-                subaccount={mySubaccount()!}
-              />
-            </div>
-          </Show>
-          <div class="flex flex-col md:items-center gap-4">
-            <div class="flex flex-col md:items-center gap-0">
-              <Show when={totals.data?.isKamikazePoolEnabled}>
-                <BooleanInput
-                  labelOn="High-Risk"
-                  labelOff="High-Risk"
-                  value={isKamikazePool() || false}
-                  onChange={setIsKamikazePool}
-                />
-              </Show>
+
               <Btn
-                text="Burn"
-                class="md:w-[200px]"
+                text="Pledge ICP to Classic Pool"
                 bgColor={COLORS.orange}
-                icon={EIconKind.FlameBW}
-                disabled={!canStake()}
-                onClick={() => setBurnModalVisible(true)}
+                class="w-full font-semibold"
+                iconColor={COLORS.white}
+                disabled={!canPledgePool()}
+                onClick={() => handlePledgeModalOpenClick(false)}
               />
-            </div>
-            <Show when={canWithdraw()}>
-              <p
-                class="underline font-normal text-gray-140 cursor-pointer text-center"
-                onClick={eventHandler(() => {
-                  setWithdrawModalVisible(true);
-                })}
-              >
-                Withdraw
-              </p>
             </Show>
           </div>
-        </div>
-      </div>
+        </Bento>
 
-      <div class="flex flex-col gap-4">
-        <p class={headerClass}>Unclaimed BURN</p>
-        <div class="flex flex-col md:flex-row md:justify-between gap-10 md:gap-4">
-          <Show when={totals.data}>
-            <div class="flex flex-col gap-1">
-              <BalanceOf
-                tokenId={DEFAULT_TOKENS.burn}
-                onRefreshOverride={fetchTotals}
-                balance={totals.data!.yourUnclaimedReward.toBigIntRaw()}
-              />
-              <p class="text-sm text-gray-140">
-                Reward per Block: {myBlockCut()?.toString() ?? 0} BURN {lotteryPostfix()}
-              </p>
-              <p class="text-sm text-gray-140">
-                Classic Pool Share: {myShare()?.toPercent().toDecimals(4).toString() ?? 0}% (
-                {totals.data?.yourShareTcycles?.toString()} / {totals.data?.totalSharesSupply.toString()})
-              </p>
-              <Show when={totals.data?.isKamikazePoolEnabled}>
-                <p class="text-sm text-gray-140">
-                  High-Risk Pool Winning Chance: {myHighRiskShare()?.toPercent().toDecimals(4).toString() ?? 0}% (
-                  {totals.data?.yourKamikazeShareTcycles?.toString()} /{" "}
-                  {totals.data?.totalKamikazePoolSupply.toString()})
-                </p>
-              </Show>
-            </div>
+        <Bento class="col-span-2 flex-col" id={3}>
+          <div class="flex flex-col gap-8">
+            <p class="font-semibold text-xl">High-Risk Pool</p>
 
-            <div class="flex flex-col md:items-center gap-4">
+            <Show when={isAuthorized()}>
+              <div class="flex flex-col gap-4">
+                <div class="flex gap-4 justify-between items-baseline">
+                  <p class="font-bold text-6xl">
+                    ${kamikazePoolUsd().toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })}
+                  </p>
+                  <p class="text-gray-140">pledged worth of ICP</p>
+                </div>
+
+                <div class="flex gap-4 justify-between items-baseline">
+                  <p class="font-bold text-4xl">
+                    {myKamikazePoolShare()
+                      .toPercent()
+                      .toShortString({ belowOne: 4, belowThousand: 2, afterThousand: 2 })}
+                    %
+                  </p>
+                  <p class="text-gray-140">chance to draw</p>
+                </div>
+
+                <div class="flex gap-4 justify-between items-baseline">
+                  <Timer {...kamikazePoolLifespan()} class="text-xl" descriptionClass="text-md" />
+                  <p class="text-gray-140">till removed</p>
+                </div>
+              </div>
+
               <Btn
-                text="Claim"
-                icon={EIconKind.ArrowUpRight}
-                class="md:w-[200px]"
+                text="Pledge ICP to High-Risk Pool"
                 bgColor={COLORS.orange}
-                iconClass="rotate-180"
+                class="w-full font-semibold"
                 iconColor={COLORS.white}
-                disabled={!canClaimReward()}
-                onClick={() => setClaimModalVisible(true)}
+                disabled={!canPledgePool()}
+                onClick={() => handlePledgeModalOpenClick(true)}
               />
-              <Show when={canClaimLost()}>
-                <p
-                  class="underline font-normal text-gray-140 cursor-pointer text-center"
-                  onClick={eventHandler(() => {
-                    setClaimLostModalVisible(true);
-                  })}
-                >
-                  Re-claim Lost
-                </p>
-              </Show>
-            </div>
-          </Show>
-        </div>
+            </Show>
+          </div>
+        </Bento>
       </div>
 
-      <Show when={totals.data && totals.data.isKamikazePoolEnabled}>
-        <div class="flex flex-col gap-4">
-          <Show
-            fallback={<p class={headerClass}>Burn ICP in High-Risk Pool to Continue</p>}
-            when={highRiskMinutesLeft()!}
-          >
-            <div class="flex flex-row justify-between items-center gap-4">
-              <p class={headerClass}>High-Risk Pool Minting In Progress</p>
+      <div class="grid grid-cols-4 gap-6">
+        <Bento class="col-span-3 flex-col justify-end" id={5}>
+          <div class="flex flex-row gap-4 items-end justify-between">
+            <div class="flex flex-col gap-4">
+              <p class="text-gray-165 font-semibold text-xl">Burn Minting</p>
+              <div class="col-span-5">{poolCut()}</div>
             </div>
-            <p>Your position will be removed in {highRiskMinutesLeft()} minutes</p>
-            <div class="flex flex-wrap gap-2">
-              <For each={Array(highRiskMinutesLeft()!).fill(0)}>
-                {(_, idx) => (
-                  <Icon
-                    class={idx() === highRiskMinutesLeft() - 1 ? "animate-pulse" : undefined}
-                    kind={EIconKind.BlockEmpty}
-                    color={COLORS.orange}
-                  />
-                )}
-              </For>
-            </div>
-          </Show>
-        </div>
-      </Show>
+            <p class="flex flex-row gap-1 text-lg col-span-2">
+              <span class="text-orange font-semibold">$BURN</span> <span>/</span> <span>hour</span>
+            </p>
+          </div>
+        </Bento>
+        <Bento class="col-span-1 flex-col justify-center items-center gap-2" id={4}>
+          <BalanceOf
+            tokenId={DEFAULT_TOKENS.burn}
+            onRefreshOverride={fetchTotals}
+            balance={totals.data!.yourUnclaimedReward.toBigIntRaw()}
+          />
+          <Btn
+            text="Claim"
+            icon={EIconKind.ArrowUpRight}
+            bgColor={COLORS.orange}
+            class="w-full font-semibold"
+            iconClass="rotate-180"
+            iconColor={COLORS.white}
+            disabled={!canClaim()}
+            onClick={handleClaim}
+          />
+        </Bento>
+      </div>
 
-      <div class="flex flex-col gap-4">
-        <Show
-          fallback={<p class={headerClass}>Burn ICP in Classic Pool to Continue</p>}
-          when={totals.data && burnoutLeftoverBlocks()!}
+      <Show when={pledgeModalOpen()}>
+        <Modal
+          onClose={handlePledgeModalCloseClick}
+          title={`Pledge ICP to ${isKamikazePool() ? "High-Risk" : "Classic"} Pool`}
         >
-          <div class="flex flex-row justify-between items-center gap-4">
-            <p class={headerClass}>Classic Pool Minting In Progress</p>
-          </div>
-          <p>
-            Enough fuel for {burnoutLeftoverBlocks()} blocks (approx.{" "}
-            {((totals.data!.posRoundDelayNs * BigInt(burnoutLeftoverBlocks()!)) / ONE_MIN_NS).toString()} minutes)
-          </p>
-          <div class="flex flex-wrap gap-2">
-            <For each={Array(burnoutLeftoverBlocks()!).fill(0)}>
-              {(_, idx) => {
-                return idx() < 100 || idx() === burnoutLeftoverBlocks()! - 1 ? (
-                  <Icon
-                    class={idx() === burnoutLeftoverBlocks() - 1 ? "animate-pulse" : undefined}
-                    kind={EIconKind.BlockFilled}
-                    color={COLORS.orange}
-                  />
-                ) : idx() === 100 ? (
-                  <p class="w-6 text-center">...</p>
-                ) : undefined;
-              }}
-            </For>
-          </div>
-        </Show>
-      </div>
-
-      <Switch>
-        <Match when={withdrawModalVisible()}>
-          <Modal title="Withdraw unburnt ICP" onClose={handleWithdrawModalClose}>
-            {withdrawForm}
-          </Modal>
-        </Match>
-        <Match when={burnModalVisible()}>
-          <Modal
-            title={`Burn ICP in the ${isKamikazePool() ? "High-Risk" : "Classic"} Pool`}
-            onClose={handleBurnModalClose}
-          >
-            {burnForm}
-          </Modal>
-        </Match>
-        <Match when={claimModalVisible()}>
-          <Modal title="Claim BURN" onClose={handleClaimModalClose}>
-            {claimForm}
-          </Modal>
-        </Match>
-        <Match when={claimLostModalVisible()}>
-          <Modal title="Claim Lost Tokens" onClose={handleClaimLostModalClose}>
-            {claimLostForm}
-          </Modal>
-        </Match>
-      </Switch>
+          <PledgeForm min={EDs.new(1000_0000n, 8)} tokenCanId={DEFAULT_TOKENS.icp} onPledge={handlePledge} />
+        </Modal>
+      </Show>
     </Page>
   );
 };

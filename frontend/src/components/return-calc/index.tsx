@@ -103,7 +103,7 @@ export const ReturnCalculator = () => {
   );
 };
 
-function unwrapRewards(blocksLeft: bigint, curBlock: bigint, lotteryEnabled: boolean): E8s {
+export function unwrapRewards(blocksLeft: bigint, curBlock: bigint, lotteryEnabled: boolean): E8s {
   const epoch = curBlock / 5040n;
   let curBlockReward = 1024_0000_0000n / 2n ** epoch;
 

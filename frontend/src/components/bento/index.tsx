@@ -12,7 +12,7 @@ export function Bento(props: IBentoProps) {
 
   return (
     <div
-      class="flex flex-col p-6 rounded-3xl gap-4"
+      class="flex p-6 rounded-3xl gap-4"
       classList={{ [props.class!]: !!props.class }}
       style={{ "background-color": bg() }}
     >

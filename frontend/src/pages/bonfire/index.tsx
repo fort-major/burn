@@ -6,6 +6,7 @@ import { Copyable } from "@components/copyable";
 import { EIconKind, Icon } from "@components/icon";
 import { Page } from "@components/page";
 import { QtyInput } from "@components/qty-input";
+import { Timer } from "@components/timer";
 import { Principal } from "@dfinity/principal";
 import { useAuth } from "@store/auth";
 import { useFurnace } from "@store/furnace";
@@ -69,30 +70,6 @@ export function BonfirePage() {
     })
   );
 
-  const timer = () => {
-    const { hours, days, minutes } = getTimeUntilNextSunday15UTC();
-
-    return (
-      <div class="flex gap-3 items-center font-semibold text-6xl">
-        <Show when={days > 0}>
-          <p>
-            {days} <span class="text-2xl">days</span>
-          </p>
-        </Show>
-        <Show when={hours > 0}>
-          <p>
-            {hours} <span class="text-2xl">hours</span>
-          </p>
-        </Show>
-        <Show when={minutes > 0} fallback={<p>few seconds</p>}>
-          <p>
-            {minutes} <span class="text-2xl">minutes</span>
-          </p>
-        </Show>
-      </div>
-    );
-  };
-
   const canPledgeBurn = () => qtyToPledge().isOk();
 
   const handlePledgeBurn = async () => {
@@ -109,18 +86,14 @@ export function BonfirePage() {
     });
   };
 
-  const handleMaxClick = eventHandler(() => {
-    setQtyToPledge(Result.Ok<EDs, string>(EDs.new(pidBalance(DEFAULT_TOKENS.burn)!, 8).sub(burnMetadata()!.fee)));
-  });
-
   return (
     <Page slim>
       <div class="flex gap-5 flex-col justify-center items-center">
         <p class="text-xl sm:text-4xl">This Week's Prize Fund</p>
         <div class="flex gap-4 sm:gap-6 items-center">
-          <Icon kind={EIconKind.ICP} color="white" size={window.innerWidth > 800 ? 180 : 60} />
+          <Icon kind={EIconKind.ICP} color="white" size={window.innerWidth > 800 ? 120 : 60} />
           <h2 class="font-semibold leading-[70px] text-[70px] sm:leading-[200px] sm:text-[200px]">
-            {prizeFund().toShortString({ belowOne: 2, belowThousand: 2, afterThousand: 2 })}{" "}
+            {prizeFund().toShortString({ belowOne: 1, belowThousand: 1, afterThousand: 2 })}{" "}
             <span class="text-xl italic font-normal">ICP</span>
           </h2>
         </div>
@@ -154,11 +127,6 @@ export function BonfirePage() {
                     },
                   ]}
                 />
-                <Show when={pidBalance(DEFAULT_TOKENS.burn)}>
-                  <p class="self-end text-sm italic underline text-gray-140 cursor-pointer" onClick={handleMaxClick}>
-                    max
-                  </p>
-                </Show>
               </div>
 
               <Btn text="Pledge $BURN" bgColor={COLORS.orange} disabled={!canPledgeBurn()} onClick={handlePledgeBurn} />
@@ -186,7 +154,7 @@ export function BonfirePage() {
         </div>
         <div class="grid grid-cols-1">
           <Bento id={3}>
-            {timer()}
+            <Timer {...getTimeUntilNextSunday15UTC()} class="text-6xl" descriptionClass="text-2xl" />
             <p class="text-gray-140">Before the winner is selected</p>
           </Bento>
         </div>

@@ -96,9 +96,13 @@ export function FurnaceStore(props: IChildren) {
   const { assertReadyToFetch, assertAuthorized, anonymousAgent, agent, disable, enable } = useAuth();
   const { fetchBonfireBalance } = useWallet();
 
-  const [supportedTokens, setSupportedTokens] = createSignal<Principal[]>([]);
   const [curRoundPositions, setCurRoundPositions] = createSignal<IPosition[]>([]);
+  const [fetchingPositions, setFetchingPositions] = createSignal(false);
+
   const [curRoundBurnPositions, setCurRoundBurnPositions] = createSignal<IPosition[]>([]);
+  const [fetchingBurnPositions, setFetchingBurnPositions] = createSignal(false);
+
+  const [supportedTokens, setSupportedTokens] = createSignal<Principal[]>([]);
   const [info, setInfo] = createSignal<IFurnaceInfo>();
   const [winners, setWinners] = createSignal<IFurnaceWinnerHistoryEntry[]>([]);
   const [tokenXVotingAlternatives, setTokenXVotingAlternatives] = createSignal<ITokenXAlternative[]>([]);
@@ -114,6 +118,12 @@ export function FurnaceStore(props: IChildren) {
 
   const fetchCurRoundPositions: IFurnaceStoreContext["fetchCurRoundPositions"] = async () => {
     assertReadyToFetch();
+
+    if (fetchingPositions()) {
+      return;
+    } else {
+      setFetchingPositions(true);
+    }
 
     setCurRoundPositions([]);
 
@@ -139,10 +149,18 @@ export function FurnaceStore(props: IChildren) {
         break;
       }
     }
+
+    setFetchingPositions(false);
   };
 
   const fetchCurRoundBurnPositions: IFurnaceStoreContext["fetchCurRoundBurnPositions"] = async () => {
     assertReadyToFetch();
+
+    if (fetchingBurnPositions()) {
+      return;
+    } else {
+      setFetchingBurnPositions(true);
+    }
 
     setCurRoundBurnPositions([]);
 
@@ -169,6 +187,8 @@ export function FurnaceStore(props: IChildren) {
         break;
       }
     }
+
+    setFetchingBurnPositions(false);
   };
 
   const fetchInfo: IFurnaceStoreContext["fetchInfo"] = async () => {

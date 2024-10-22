@@ -6,6 +6,7 @@ import { ProfileMini } from "@components/profile/profile";
 import { QtyInput } from "@components/qty-input";
 import { TextInput } from "@components/text-input";
 import { Principal } from "@dfinity/principal";
+import { useAuth } from "@store/auth";
 import { DEFAULT_TOKENS, useTokens } from "@store/tokens";
 import { useWallet } from "@store/wallet";
 import { optUnwrap } from "@utils/backend";
@@ -13,12 +14,12 @@ import { COLORS } from "@utils/colors";
 import { createLocalStorageSignal } from "@utils/common";
 import { logInfo } from "@utils/error";
 import { EDs } from "@utils/math";
+import { eventHandler } from "@utils/security";
 import { Result } from "@utils/types";
 import { batch, createEffect, createSignal, For, on, Show } from "solid-js";
 
 export function Wallet() {
-  const { pid, poolAccount, bonfireAccount, withdrawIcpFromPoolAccount, withdrawFromBonfireAccount, transfer } =
-    useWallet();
+  const { pid, poolAccount, bonfireAccount, transfer } = useWallet();
   const { balanceOf, fetchBalanceOf, metadata } = useTokens();
 
   const [isExpanded, setExpanded] = createLocalStorageSignal<boolean>("msq-burn-wallet-expanded");
@@ -40,34 +41,6 @@ export function Wallet() {
         fetchBalanceOf(DEFAULT_TOKENS.icp, a.owner, optUnwrap(a.subaccount) as Uint8Array | undefined);
       }
     })
-  );
-
-  createEffect(
-    on(
-      () => poolBalance(DEFAULT_TOKENS.icp),
-      async () => {
-        const b = poolBalance(DEFAULT_TOKENS.icp);
-        if (!b) return;
-
-        if (b > 10_000n) {
-          await withdrawIcpFromPoolAccount(b);
-        }
-      }
-    )
-  );
-
-  createEffect(
-    on(
-      () => bonfireBalance(DEFAULT_TOKENS.burn),
-      async () => {
-        const b = poolBalance(DEFAULT_TOKENS.burn);
-        if (!b) return;
-
-        if (b > 10_000n) {
-          await withdrawFromBonfireAccount(DEFAULT_TOKENS.burn, b);
-        }
-      }
-    )
   );
 
   const bonfireBalance = (tokenCanId: Principal) => {
@@ -109,7 +82,7 @@ export function Wallet() {
   return (
     <Show when={pid() && poolAccount() && bonfireAccount()}>
       <Show when={isExpanded()} fallback={<CollapsedWallet onClick={() => setExpanded(true)} />}>
-        <div class="fixed text-white p-6 rounded-3xl right-0 left-0 bottom-0 sm:left-auto sm:right-10 sm:bottom-6 flex flex-col gap-6 w-full sm:w-80 bg-gray-110 shadow-md shadow-black">
+        <div class="fixed z-20 text-white p-6 rounded-3xl right-0 left-0 bottom-0 sm:left-auto sm:right-10 sm:bottom-6 flex flex-col gap-6 w-full sm:w-80 bg-gray-110 shadow-md shadow-black">
           <div class="flex flex-row gap-4 items-center justify-between">
             <div class="flex flex-row gap-2 items-center">
               <Icon kind={EIconKind.Wallet} color="white" />
@@ -130,19 +103,7 @@ export function Wallet() {
 
           <div class="flex flex-col gap-4">
             <For each={Object.values(DEFAULT_TOKENS)}>
-              {(token) => (
-                <div class="flex gap-4 items-center justify-between">
-                  <BalanceOf tokenId={token} owner={pid()!} />
-                  <Icon
-                    kind={EIconKind.ArrowUpRight}
-                    color="white"
-                    hoverColor={balanceOf(token, pid()!) == 0n ? COLORS.gray[150] : COLORS.chartreuse}
-                    onClick={() => handleTransferModalOpen(token)}
-                    disabled={balanceOf(token, pid()!) == 0n}
-                    class={balanceOf(token, pid()!) == 0n ? "" : "cursor-pointer"}
-                  />
-                </div>
-              )}
+              {(token) => <Token tokenCanId={token} onTrasnferClick={handleTransferModalOpen} />}
             </For>
           </div>
         </div>
@@ -156,11 +117,124 @@ export function Wallet() {
   );
 }
 
+function Token(props: { tokenCanId: Principal; onTrasnferClick: (tokenCanId: Principal) => void }) {
+  const { isReadyToFetch, disabled } = useAuth();
+  const { metadata } = useTokens();
+  const {
+    pid,
+    pidBalance,
+    bonfireAccount,
+    fetchBonfireBalance,
+    bonfireBalance,
+    poolAccount,
+    fetchPoolBalance,
+    poolBalance,
+    withdrawFromBonfireAccount,
+    withdrawIcpFromPoolAccount,
+  } = useWallet();
+
+  createEffect(() => {
+    if (bonfireAccount() && isReadyToFetch()) {
+      fetchBonfireBalance(props.tokenCanId);
+    }
+  });
+
+  createEffect(() => {
+    if (poolAccount() && isReadyToFetch()) {
+      fetchPoolBalance(props.tokenCanId);
+    }
+  });
+
+  const pidTokenBalance = () => pidBalance(props.tokenCanId);
+  const bonfireTokenBalance = () => bonfireBalance(props.tokenCanId);
+  const poolTokenBalance = () => poolBalance(props.tokenCanId);
+
+  const transferDisabled = () => {
+    const b = pidTokenBalance();
+    if (!b) return true;
+
+    const m = metadata[props.tokenCanId.toText()];
+    if (!m) return true;
+
+    const bEds = EDs.new(b, m.fee.decimals);
+
+    return bEds.le(m.fee);
+  };
+
+  const canClaimLost = () => {
+    if (disabled()) return false;
+
+    const m = metadata[props.tokenCanId.toText()];
+    if (!m) return false;
+
+    const b1 = bonfireTokenBalance();
+    if (b1) {
+      const b1Eds = EDs.new(b1, m.fee.decimals);
+      if (b1Eds.ge(m.fee)) return true;
+    }
+
+    if (props.tokenCanId.compareTo(DEFAULT_TOKENS.icp) !== "eq") return false;
+
+    const b2 = poolTokenBalance();
+    if (!b2) return false;
+
+    const b2Eds = EDs.new(b2, m.fee.decimals);
+    return b2Eds.ge(m.fee);
+  };
+
+  const claimLost = eventHandler(() => {
+    const m = metadata[props.tokenCanId.toText()];
+    if (!m) return;
+
+    const b1 = bonfireTokenBalance();
+    if (b1) {
+      const b1Eds = EDs.new(b1, m.fee.decimals);
+      if (b1Eds.ge(m.fee)) {
+        withdrawFromBonfireAccount(props.tokenCanId, b1Eds.sub(m.fee).toBigIntRaw());
+      }
+    }
+
+    if (props.tokenCanId.compareTo(DEFAULT_TOKENS.icp) !== "eq") return;
+
+    const b2 = poolTokenBalance();
+    if (!b2) return;
+
+    const b2Eds = EDs.new(b2, m.fee.decimals);
+    if (b2Eds.ge(m.fee)) {
+      withdrawIcpFromPoolAccount(b2Eds.sub(m.fee).toBigIntRaw());
+    }
+  });
+
+  return (
+    <div class="flex gap-4 items-center justify-between">
+      <BalanceOf tokenId={props.tokenCanId} owner={pid()!} />
+      <div class="flex items-center gap-1">
+        <Show when={canClaimLost()}>
+          <div class="flex gap-4 items-center justify-between">
+            <p class="text-xs text-gray-140 italic underline cursor-pointer" onClick={claimLost}>
+              Claim Lost
+            </p>
+          </div>
+        </Show>
+
+        <Icon
+          kind={EIconKind.ArrowUpRight}
+          color="white"
+          hoverColor={transferDisabled() ? COLORS.gray[150] : COLORS.chartreuse}
+          onClick={() => props.onTrasnferClick(props.tokenCanId)}
+          disabled={transferDisabled()}
+          class={transferDisabled() ? "" : "cursor-pointer"}
+        />
+      </div>
+    </div>
+  );
+}
+
 function CollapsedWallet(props: { onClick: () => void }) {
   return (
     <div
       onClick={props.onClick}
-      class="fixed z-10 cursor-pointer px-6 py-4 rounded-tl-[24px] rounded-tr-[24px] rotate-0 sm:-rotate-90 bottom-0 left-0 right-0 sm:bottom-[100px] sm:right-[-80px] sm:left-auto w-full sm:w-auto flex flex-col justify-center items-center bg-chartreuse shadow-md shadow-black"
+      class="fixed z-20 cursor-pointer px-6 py-4 rounded-tl-[24px] rounded-tr-[24px] rotate-0 sm:-rotate-90 bottom-0 left-0 right-0 sm:bottom-[100px] sm:right-[-80px] sm:left-auto w-full sm:w-auto flex flex-col justify-center items-center bg-chartreuse shadow-md shadow-black"
     >
       <div class="flex flex-row gap-4 items-center">
         <Icon kind={EIconKind.Wallet} />
@@ -196,7 +270,6 @@ function TransferForm(props: ITransferFormProps) {
     const recepient = Principal.fromText(transferRecepient().unwrapOk());
     const qty = transferQty().unwrapOk();
 
-    console.log(props.tokenCanId.toText(), recepient.toText(), qty.toString());
     await props.onTransfer(props.tokenCanId, recepient, qty.val);
 
     logInfo(`Successfully trasnferred ${qty.toString()} ${meta()!.ticker}`);
@@ -228,11 +301,12 @@ function TransferForm(props: ITransferFormProps) {
             value={transferQty()}
             onChange={setTransferQty}
             decimals={meta()!.fee.decimals}
+            fee={meta()!.fee}
             validations={[
               { required: null },
               {
                 min: meta()!.fee,
-                max: EDs.new((pidBalance(props.tokenCanId) || meta()!.fee.val) - meta()!.fee.val, meta()!.fee.decimals),
+                max: EDs.new(pidBalance(props.tokenCanId) || meta()!.fee.val, meta()!.fee.decimals),
               },
             ]}
             symbol={meta()!.ticker}

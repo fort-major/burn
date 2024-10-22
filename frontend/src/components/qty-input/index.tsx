@@ -10,6 +10,7 @@ export type TQtyInputValidation = { required: null } | { min: EDs } | { max: EDs
 export interface IQtyInputProps {
   value: Result<EDs, string>;
   decimals: number;
+  fee?: EDs;
   onChange: (v: Result<EDs, string>) => void;
   symbol: string;
   validations?: TQtyInputValidation[];
@@ -47,20 +48,47 @@ export function QtyInput(props: IQtyInputProps) {
     }
   };
 
+  const max = () => {
+    const m = props.validations?.find((it) => "max" in it);
+    if (!m) return;
+
+    return m.max;
+  };
+
+  const handleMaxClick = () => {
+    let m = max()!;
+
+    if (props.fee) {
+      m = m.sub(props.fee);
+    }
+
+    props.onChange(Result.Ok(m));
+  };
+
   return (
-    <div class="flex flex-col gap-1 min-w-52 bg-black border-b-[1px] border-gray-140">
-      <div class="flex items-center justify-between p-2 gap-1">
-        <input
-          class="font-primary italic text-md font-medium leading-6 text-white bg-black focus:outline-none flex-grow"
-          placeholder="Amount..."
-          type="text"
-          value={props.value.unwrap().toString()}
-          onChange={handleChange}
-          disabled={d()}
-        />
-        <p class="font-primary text-md font-normal leading-6 text-gray-150">{props.symbol}</p>
+    <div class="flex flex-col gap-1">
+      <div class="flex flex-col gap-1 min-w-52 bg-black border-b-[1px] border-gray-140">
+        <div class="flex items-center justify-between p-2 gap-1">
+          <input
+            class="font-primary italic text-md font-medium leading-6 text-white bg-black focus:outline-none flex-grow"
+            placeholder="Amount..."
+            type="text"
+            value={props.value.unwrap().toString()}
+            onChange={handleChange}
+            disabled={d()}
+          />
+          <p class="font-primary text-md font-normal leading-6 text-gray-150">{props.symbol}</p>
+        </div>
+        <ValidationError error={error()} />
       </div>
-      <ValidationError error={error()} />
+      <Show when={max()}>
+        <div
+          class="flex flex-col items-end text-xs text-gray-140 underline italic cursor-pointer px-2"
+          onClick={handleMaxClick}
+        >
+          max
+        </div>
+      </Show>
     </div>
   );
 }

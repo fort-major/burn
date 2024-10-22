@@ -1,6 +1,6 @@
 import { Account } from "@dfinity/ledger-icp";
 import { Principal } from "@dfinity/principal";
-import { err, ErrorCode } from "@utils/error";
+import { err, ErrorCode, logInfo } from "@utils/error";
 import { Fetcher, IChildren, TTimestamp } from "@utils/types";
 import { Accessor, createContext, createEffect, on, onMount, useContext } from "solid-js";
 import { useAuth } from "./auth";
@@ -18,6 +18,9 @@ export interface IWalletStoreContext {
 
   bonfireBalance: (tokenCanId: Principal) => bigint | undefined;
   fetchBonfireBalance: (tokenCanId: Principal) => Promise<void>;
+
+  poolBalance: (tokenCanId: Principal) => bigint | undefined;
+  fetchPoolBalance: (tokenCanId: Principal) => Promise<void>;
 
   transfer: (tokenCanId: Principal, to: Account, qty: bigint) => Promise<bigint>;
 
@@ -115,6 +118,20 @@ export function WalletStore(props: IChildren) {
     return fetchBalanceOf(tokenCanId, a.owner, optUnwrap(a.subaccount) as Uint8Array);
   };
 
+  const poolBalance: IWalletStoreContext["poolBalance"] = (tokenCanId) => {
+    let p = poolAccount();
+    if (!p) return undefined;
+
+    return balanceOf(tokenCanId, p.owner, optUnwrap(p.subaccount) as Uint8Array);
+  };
+
+  const fetchPoolBalance: IWalletStoreContext["fetchPoolBalance"] = (tokenCanId) => {
+    const a = poolAccount();
+    if (!a) return Promise.resolve();
+
+    return fetchBalanceOf(tokenCanId, a.owner, optUnwrap(a.subaccount) as Uint8Array);
+  };
+
   const transfer: IWalletStoreContext["transfer"] = async (tokenCanId, to, qty) => {
     assertAuthorized();
 
@@ -133,7 +150,8 @@ export function WalletStore(props: IChildren) {
       return blockIdx;
     } finally {
       fetchBalanceOf(tokenCanId, to.owner, optUnwrap(to.subaccount) as Uint8Array | undefined);
-      fetchBalanceOf(tokenCanId, pid()!);
+      fetchPidBalance(tokenCanId);
+
       enable();
     }
   };
@@ -154,7 +172,10 @@ export function WalletStore(props: IChildren) {
       return response.result.Ok;
     } finally {
       fetchBalanceOf(DEFAULT_TOKENS.burn, pid()!);
+
       enable();
+
+      logInfo("Successfully claimed $BURN to the wallet!");
     }
   };
 
@@ -181,7 +202,10 @@ export function WalletStore(props: IChildren) {
       return response.result.Ok;
     } finally {
       fetchBalanceOf(DEFAULT_TOKENS.icp, pid()!);
+
       enable();
+
+      logInfo("Successfully claimed $ICP to the wallet!");
     }
   };
 
@@ -279,6 +303,9 @@ export function WalletStore(props: IChildren) {
 
         bonfireBalance,
         fetchBonfireBalance,
+
+        poolBalance,
+        fetchPoolBalance,
 
         transfer,
 

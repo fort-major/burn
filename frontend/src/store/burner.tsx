@@ -12,6 +12,7 @@ import {
   requestVerifiablePresentation,
   VerifiablePresentationResponse,
 } from "@dfinity/verifiable-credentials/request-verifiable-presentation";
+import { useWallet } from "./wallet";
 
 export interface ITotals {
   totalSharesSupply: EDs;
@@ -60,17 +61,8 @@ export interface IBurnerStoreContext {
   totals: Store<{ data?: ITotals }>;
   fetchTotals: () => Promise<void>;
 
-  getMyDepositAccount: () => { owner: Principal; subaccount?: Uint8Array } | undefined;
-
-  canStake: () => boolean;
-  stake: () => Promise<void>;
-  stakeKamikaze: () => Promise<void>;
-
-  canWithdraw: () => boolean;
-  withdraw: (to: Principal) => Promise<void>;
-
-  canClaimReward: () => boolean;
-  claimReward: (to: Principal) => Promise<void>;
+  canPledgePool: () => boolean;
+  pledgePool: (isKamikaze: boolean, qty: bigint) => Promise<void>;
 
   poolMembers: () => IPoolMember[];
   fetchPoolMembers: () => Promise<void>;
@@ -111,13 +103,16 @@ export function BurnerStore(props: IChildren) {
     iiClient,
     deauthorize,
   } = useAuth();
-  const { subaccounts, fetchSubaccountOf, balanceOf, fetchBalanceOf } = useTokens();
+  const { fetchSubaccountOf, balanceOf, fetchBalanceOf } = useTokens();
+  const { pidBalance, fetchPidBalance, fetchPoolBalance, moveIcpToPoolAccount } = useWallet();
 
   const [totals, setTotals] = createStore<IBurnerStoreContext["totals"]>();
   const [poolMembers, setPoolMembers] = createSignal<IPoolMember[]>([]);
   const [kamikazePoolMembers, setKamikazePoolMembers] = createSignal<IKamikazePoolMember[]>([]);
   const [int, setInt] = createSignal<NodeJS.Timeout>();
   const [canMigrate, setCanMigrate] = createSignal(false);
+  const [fetchingPoolMembers, setFetchingPoolMembers] = createSignal(false);
+  const [fetchingKamikazePoolMembers, setFetchingKamikazePoolMembers] = createSignal(false);
 
   onMount(() => {
     const t = setInterval(() => {
@@ -202,15 +197,22 @@ export function BurnerStore(props: IChildren) {
   const fetchPoolMembers: IBurnerStoreContext["fetchPoolMembers"] = async () => {
     assertReadyToFetch();
 
+    if (fetchingPoolMembers()) {
+      return;
+    } else {
+      setFetchingPoolMembers(true);
+    }
+
     let start: [] | [Principal] = [];
-    const members = [];
+    setPoolMembers([]);
 
     const burner = newBurnerActor(anonymousAgent()!);
 
     while (true) {
       const { entries } = await burner.get_burners({ start, take: 1000 });
+      const members: IPoolMember[] = [];
 
-      if (entries.length === 0) {
+      if (entries.length < 1000) {
         break;
       }
 
@@ -226,33 +228,42 @@ export function BurnerStore(props: IChildren) {
         members.push(iPoolMember);
         start = [iPoolMember.id];
       }
+
+      setPoolMembers((m) => {
+        return [...m, ...members].sort((a, b) => {
+          if (a.share.gt(b.share)) {
+            return -1;
+          } else if (a.share.lt(b.share)) {
+            return 1;
+          } else {
+            return 0;
+          }
+        });
+      });
     }
 
-    setPoolMembers(
-      members.sort((a, b) => {
-        if (a.share.gt(b.share)) {
-          return -1;
-        } else if (a.share.lt(b.share)) {
-          return 1;
-        } else {
-          return 0;
-        }
-      })
-    );
+    setFetchingPoolMembers(false);
   };
 
   const fetchKamikazePoolMembers: IBurnerStoreContext["fetchKamikazePoolMembers"] = async () => {
     assertReadyToFetch();
 
+    if (fetchingKamikazePoolMembers()) {
+      return;
+    } else {
+      setFetchingKamikazePoolMembers(true);
+    }
+
     let start: [] | [Principal] = [];
-    const members = [];
+    setKamikazePoolMembers([]);
 
     const burner = newBurnerActor(anonymousAgent()!);
 
     while (true) {
       const { entries } = await burner.get_kamikazes({ start, take: 1000 });
+      const members: IKamikazePoolMember[] = [];
 
-      if (entries.length === 0) {
+      if (entries.length < 1000) {
         break;
       }
 
@@ -267,148 +278,55 @@ export function BurnerStore(props: IChildren) {
         members.push(iPoolMember);
         start = [iPoolMember.id];
       }
+
+      setKamikazePoolMembers((m) => {
+        return [...m, ...members].sort((a, b) => {
+          if (a.share.gt(b.share)) {
+            return -1;
+          } else if (a.share.lt(b.share)) {
+            return 1;
+          } else {
+            return 0;
+          }
+        });
+      });
     }
 
-    setKamikazePoolMembers(
-      members.sort((a, b) => {
-        if (a.share.gt(b.share)) {
-          return -1;
-        } else if (a.share.lt(b.share)) {
-          return 1;
-        } else {
-          return 0;
-        }
-      })
-    );
+    setFetchingKamikazePoolMembers(false);
   };
 
-  const getMyDepositAccount: IBurnerStoreContext["getMyDepositAccount"] = () => {
-    if (!isAuthorized()) return undefined;
-
-    const mySubaccount = subaccounts[identity()!.getPrincipal().toText()];
-    if (!mySubaccount) return undefined;
-
-    return { owner: Principal.fromText(import.meta.env.VITE_BURNER_CANISTER_ID), subaccount: mySubaccount };
-  };
-
-  createEffect(
-    on(getMyDepositAccount, (acc) => {
-      if (!acc) return;
-
-      fetchBalanceOf(DEFAULT_TOKENS.icp, acc.owner, acc.subaccount);
-    })
-  );
-
-  const canStake: IBurnerStoreContext["canStake"] = () => {
-    if (!isAuthorized()) return false;
-
-    const myDepositAccount = getMyDepositAccount();
-    if (!myDepositAccount) return false;
-
-    const b = balanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount);
+  const canPledgePool: IBurnerStoreContext["canPledgePool"] = () => {
+    const b = pidBalance(DEFAULT_TOKENS.icp);
     if (!b) return false;
-
-    if (E8s.new(b).le(E8s.f0_5())) return false;
+    if (b < 1000_0000n) return false;
 
     return true;
   };
 
-  const stake: IBurnerStoreContext["stake"] = async () => {
+  const pledgePool: IBurnerStoreContext["pledgePool"] = async (isKamikaze: boolean, qty: bigint) => {
     assertAuthorized();
 
     disable();
 
-    const myDepositAccount = getMyDepositAccount()!;
-    const b = balanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount)!;
-    const burner = newBurnerActor(agent()!);
-    await burner.stake({ qty_e8s_u64: b - 10_000n });
+    try {
+      await moveIcpToPoolAccount(qty);
 
-    enable();
+      const burner = newBurnerActor(agent()!);
 
-    fetchTotals();
-    fetchBalanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount);
+      if (isKamikaze) {
+        await burner.stake_kamikaze({ qty_e8s_u64: qty - 10_000n });
+      } else {
+        await burner.stake({ qty_e8s_u64: qty - 10_000n });
+      }
+    } finally {
+      fetchTotals();
+      fetchPidBalance(DEFAULT_TOKENS.icp);
+      fetchPoolBalance(DEFAULT_TOKENS.icp);
 
-    logInfo(`Successfully pledged ${E8s.new(b).toString()} ICP`);
-  };
+      logInfo(`Successfully pledged ${E8s.new(qty).toString()} ICP`);
 
-  const stakeKamikaze: IBurnerStoreContext["stakeKamikaze"] = async () => {
-    assertAuthorized();
-
-    disable();
-
-    const myDepositAccount = getMyDepositAccount()!;
-    const b = balanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount)!;
-    const burner = newBurnerActor(agent()!);
-    await burner.stake_kamikaze({ qty_e8s_u64: b - 10_000n });
-
-    enable();
-
-    fetchTotals();
-    fetchBalanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount);
-
-    logInfo(`Successfully pledged ${E8s.new(b).toString()} ICP`);
-  };
-
-  const canWithdraw: IBurnerStoreContext["canWithdraw"] = () => {
-    if (!isAuthorized()) return false;
-
-    const myDepositAccount = getMyDepositAccount();
-    if (!myDepositAccount) return false;
-
-    const b = balanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount);
-    if (!b) return false;
-
-    // min withdraw amount is 0.1 ICP
-    if (E8s.new(b).le(E8s.new(10_0000n))) return false;
-
-    return true;
-  };
-
-  const withdraw: IBurnerStoreContext["withdraw"] = async (to) => {
-    assertAuthorized();
-
-    disable();
-
-    const myDepositAccount = getMyDepositAccount()!;
-    const b = balanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount)!;
-
-    const burner = newBurnerActor(agent()!);
-    await burner.withdraw({ qty_e8s: b - 10_000n, to });
-
-    enable();
-
-    fetchTotals();
-    fetchBalanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount);
-    logInfo(`Successfully withdrawn ${E8s.new(b).toString()} ICP`);
-  };
-
-  const canClaimReward: IBurnerStoreContext["canClaimReward"] = () => {
-    if (!isAuthorized()) return false;
-
-    if (!totals.data) return false;
-
-    return totals.data.yourUnclaimedReward.gt(E8s.zero());
-  };
-
-  const claimReward: IBurnerStoreContext["claimReward"] = async (to) => {
-    assertAuthorized();
-
-    disable();
-
-    const burner = newBurnerActor(agent()!);
-    const result = await burner.claim_reward({ to });
-
-    if ("Err" in result) {
-      logErr(ErrorCode.UNKNOWN, debugStringify(result.Err));
       enable();
-
-      return;
     }
-
-    enable();
-
-    fetchTotals();
-    logInfo(`Successfully claimed all BURN!`);
   };
 
   const fetchCanMigrateMsqAccount = async () => {
@@ -532,19 +450,15 @@ export function BurnerStore(props: IChildren) {
       value={{
         totals,
         fetchTotals,
+
         poolMembers,
         fetchPoolMembers,
-        getMyDepositAccount,
-        stake,
-        canStake,
-        withdraw,
-        canWithdraw,
-        canClaimReward,
-        claimReward,
 
         kamikazePoolMembers,
         fetchKamikazePoolMembers,
-        stakeKamikaze,
+
+        canPledgePool,
+        pledgePool,
 
         canMigrateMsqAccount,
         migrateMsqAccount,
