@@ -212,10 +212,6 @@ export function BurnerStore(props: IChildren) {
       const { entries } = await burner.get_burners({ start, take: 1000 });
       const members: IPoolMember[] = [];
 
-      if (entries.length < 1000) {
-        break;
-      }
-
       for (let entry of entries) {
         let iPoolMember: IPoolMember = {
           id: entry.pid,
@@ -240,6 +236,10 @@ export function BurnerStore(props: IChildren) {
           }
         });
       });
+
+      if (entries.length < 1000) {
+        break;
+      }
     }
 
     setFetchingPoolMembers(false);
@@ -262,10 +262,6 @@ export function BurnerStore(props: IChildren) {
     while (true) {
       const { entries } = await burner.get_kamikazes({ start, take: 1000 });
       const members: IKamikazePoolMember[] = [];
-
-      if (entries.length < 1000) {
-        break;
-      }
 
       for (let entry of entries) {
         let iPoolMember: IKamikazePoolMember = {
@@ -290,6 +286,10 @@ export function BurnerStore(props: IChildren) {
           }
         });
       });
+
+      if (entries.length < 1000) {
+        break;
+      }
     }
 
     setFetchingKamikazePoolMembers(false);

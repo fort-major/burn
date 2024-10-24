@@ -1,16 +1,17 @@
 use std::{cell::RefCell, time::Duration};
 
 use candid::{encode_args, Nat, Principal};
+use futures::future::join_all;
 use ic_cdk::{
     api::{
-        call::{CallResult, RejectionCode},
+        call::{call_raw, notify_raw, CallResult, RejectionCode},
         management_canister::main::{
             create_canister, install_code, raw_rand, CanisterInstallMode, CreateCanisterArgument,
             InstallCodeArgument,
         },
         time,
     },
-    id, print, spawn,
+    call, id, notify, print, spawn,
 };
 use ic_cdk_timers::set_timer;
 use ic_e8s::{c::E8s, d::EDs};
@@ -22,11 +23,15 @@ use ic_stable_structures::{
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use shared::{
     cmc::{CMCClient, NotifyTopUpError, NotifyTopUpRequest},
-    dispenser::api::InitArgs,
+    dispenser::{
+        api::{CreateDistributionRequest, FurnaceTriggerDistributionRequest, InitArgs},
+        client::DispenserClient,
+        types::{DistributionScheme, DistributionStartCondition},
+    },
     furnace::{
         state::FurnaceState,
         types::{
-            FurnaceInfo, TokenX, FURNACE_DEV_FEE_SUBACCOUNT,
+            DistributionTriggerKind, FurnaceInfo, TokenX, FURNACE_DEV_FEE_SUBACCOUNT,
             FURNACE_ICP_PRIZE_DISTRIBUTION_SUBACCOUNT, FURNACE_REDISTRIBUTION_SUBACCOUNT,
         },
     },
@@ -74,6 +79,10 @@ thread_local! {
 
             total_burned_tokens: StableBTreeMap::init(
                 MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(11))),
+            ),
+
+            distribution_triggers: StableBTreeMap::init(
+                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(12))),
             ),
         }
     )
@@ -164,6 +173,7 @@ fn redistirbute_pledged_tokens() {
     });
 }
 
+// TODO: check all the responses and react to errors
 async fn redistribute_pledged_token(token_x: bool) {
     let token_x_info = if token_x {
         STATE.with_borrow(|s| s.get_furnace_info().cur_token_x)
@@ -196,6 +206,8 @@ async fn redistribute_pledged_token(token_x: bool) {
             .expect("Token dispenser was not scheduled for deployment")
             .expect("Token dispenser was deployed badly");
 
+        let dispenser_qty = Nat(pool_share.val) - token_x_info.fee.clone();
+
         let _ = token
             .icrc1_transfer(TransferArg {
                 from_subaccount: Some(FURNACE_REDISTRIBUTION_SUBACCOUNT),
@@ -203,14 +215,25 @@ async fn redistribute_pledged_token(token_x: bool) {
                     owner: token_dispenser,
                     subaccount: Some(Subaccount::from(id()).0),
                 },
-                amount: Nat(pool_share.val) - token_x_info.fee.clone(),
+                amount: dispenser_qty.clone(),
                 fee: None,
                 created_at_time: None,
                 memo: None,
             })
             .await;
 
-        STATE.with_borrow_mut(|s| s.note_burned_token(token_x_info.can_id, &burn_share));
+        let dispenser = DispenserClient(token_dispenser);
+        let _ = dispenser
+            .create_distribution(CreateDistributionRequest {
+                qty: dispenser_qty - token_x_info.fee.clone(),
+                start_condition: DistributionStartCondition::AtTickDelay(0),
+                duration_ticks: 168, // ~1 week
+                name: format!("Bonfire Distribution #{}", time()),
+                scheme: DistributionScheme::Linear,
+                hidden: false,
+                distribute_to_bonfire: false,
+            })
+            .await;
 
         let _ = token
             .icrc1_furnace_burn(
@@ -219,9 +242,11 @@ async fn redistribute_pledged_token(token_x: bool) {
                     subaccount: None,
                 },
                 Some(FURNACE_REDISTRIBUTION_SUBACCOUNT),
-                Nat(burn_share.val),
+                Nat(burn_share.val.clone()),
             )
             .await;
+
+        STATE.with_borrow_mut(|s| s.note_burned_token(token_x_info.can_id, &burn_share));
 
         let _ = token
             .icrc1_transfer(TransferArg {
@@ -254,7 +279,41 @@ pub fn select_next_token_x() {
     let token_can_id = STATE.with_borrow_mut(|s| s.select_next_token_x());
 
     set_deploy_dispenser_timer(token_can_id);
-    set_timer(Duration::from_nanos(0), complete_raffle);
+    set_timer(Duration::from_nanos(0), process_next_token_x_triggers);
+}
+
+pub fn process_next_token_x_triggers() {
+    let (triggers_to_execute_opt, should_reschedule) = STATE.with_borrow_mut(|s| {
+        let token_x_can_id = s.get_furnace_info().cur_token_x.can_id;
+        let trigger_kind = DistributionTriggerKind::TokenXVotingWinner(token_x_can_id);
+
+        s.process_triggers_batch(50, trigger_kind)
+    });
+
+    if let Some(triggers_to_execute) = triggers_to_execute_opt {
+        for trigger in triggers_to_execute {
+            let dispenser_id = STATE.with_borrow(|s| {
+                s.dispenser_of(&trigger.dispenser_token_can_id)
+                    .unwrap()
+                    .unwrap()
+            });
+
+            // ignore results
+            let _ = notify(
+                dispenser_id,
+                "furnace_trigger_distribution",
+                (FurnaceTriggerDistributionRequest {
+                    distribution_id: trigger.distribution_id,
+                },),
+            );
+        }
+    }
+
+    if should_reschedule {
+        set_timer(Duration::from_nanos(0), process_next_token_x_triggers);
+    } else {
+        set_timer(Duration::from_nanos(0), complete_raffle);
+    }
 }
 
 pub fn complete_raffle() {

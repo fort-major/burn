@@ -8,7 +8,10 @@ use crate::{burner::types::TimestampNs, Guard};
 
 use super::{
     state::FurnaceState,
-    types::{FurnaceWinnerHistoryEntry, TokenX, TokenXVote, MIN_ALLOWED_USD_POSITION_QTY_E8S},
+    types::{
+        DistributionTrigger, DistributionTriggerKind, FurnaceWinnerHistoryEntry, TokenX,
+        TokenXVote, MIN_ALLOWED_USD_POSITION_QTY_E8S,
+    },
 };
 
 #[derive(CandidType, Deserialize, Validate)]
@@ -323,8 +326,15 @@ impl Guard<FurnaceState> for GetCurRoundPositionsRequest {
 }
 
 #[derive(CandidType, Deserialize)]
+pub struct Position {
+    pub pid: Principal,
+    pub usd: E8s,
+    pub vp: E8s,
+}
+
+#[derive(CandidType, Deserialize)]
 pub struct GetCurRoundPositionsResponse {
-    pub positions: Vec<(Principal, E8s)>,
+    pub positions: Vec<Position>,
 }
 
 #[derive(CandidType, Deserialize, Validate)]
@@ -352,3 +362,45 @@ impl Guard<FurnaceState> for DeployDispenserRequest {
 
 #[derive(CandidType, Deserialize)]
 pub struct DeployDispenserResponse {}
+
+#[derive(CandidType, Deserialize, Validate)]
+pub struct CreateDistributionTriggerRequest {
+    #[garde(skip)]
+    pub trigger: DistributionTrigger,
+}
+
+impl Guard<FurnaceState> for CreateDistributionTriggerRequest {
+    fn validate_and_escape(
+        &mut self,
+        state: &FurnaceState,
+        _caller: Principal,
+        _now: TimestampNs,
+    ) -> Result<(), String> {
+        self.validate(&()).map_err(|e| e.to_string())?;
+
+        let dispenser = state.dispenser_of(&self.trigger.dispenser_token_can_id);
+
+        let found = match dispenser {
+            None => false,
+            Some(None) => false,
+            _ => true,
+        };
+
+        if !found {
+            return Err(String::from("Dispenser not found"));
+        }
+
+        match self.trigger.kind {
+            DistributionTriggerKind::TokenXVotingWinner(token_can_id) => {
+                if state.get_supported_token(&token_can_id).is_none() {
+                    return Err(String::from("Dependent token is not supported"));
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(CandidType, Deserialize, Validate)]
+pub struct CreateDistributionTriggerResponse {}

@@ -16,15 +16,18 @@ import { logInfo } from "@utils/error";
 import { EDs } from "@utils/math";
 import { eventHandler } from "@utils/security";
 import { Result } from "@utils/types";
-import { batch, createEffect, createSignal, For, on, Show } from "solid-js";
+import { batch, createEffect, createSignal, For, Match, on, Show, Switch } from "solid-js";
+import { Portal } from "solid-js/web";
+
+export type TWalletPage = "index" | "import-token" | "transfer";
 
 export function Wallet() {
-  const { pid, poolAccount, bonfireAccount, transfer } = useWallet();
+  const { pid, poolAccount, bonfireAccount, transfer, savedTokens, isWalletExpanded, setWalletExpanded } = useWallet();
   const { balanceOf, fetchBalanceOf, metadata } = useTokens();
 
-  const [isExpanded, setExpanded] = createLocalStorageSignal<boolean>("msq-burn-wallet-expanded");
-  const [transferModalVisible, setTransferModalVisible] = createSignal(false);
   const [transferringToken, setTransferringToken] = createSignal<Principal>();
+
+  const [walletPage, setWalletPage] = createSignal<TWalletPage>("index");
 
   const poolBalance = (tokenCanId: Principal) => {
     const a = poolAccount();
@@ -54,7 +57,7 @@ export function Wallet() {
     on(bonfireAccount, (a) => {
       if (!a) return;
 
-      for (let token of Object.values(DEFAULT_TOKENS)) {
+      for (let token of savedTokens()) {
         if (bonfireBalance(token) === undefined) {
           fetchBalanceOf(token, a.owner, optUnwrap(a.subaccount) as Uint8Array | undefined);
         }
@@ -62,57 +65,101 @@ export function Wallet() {
     })
   );
 
-  const handleTransferModalClose = () => {
-    setTransferModalVisible(false);
-  };
+  const handleTransferGoBack = eventHandler(() => {
+    setWalletPage("index");
+  });
 
-  const handleTransferModalOpen = (tokenCanId: Principal) => {
+  const handleGoToTransfer = (tokenCanId: Principal) => {
     batch(() => {
       setTransferringToken(tokenCanId);
-      setTransferModalVisible(true);
+      setWalletPage("transfer");
     });
   };
 
   const handleTransfer = async (tokenCanId: Principal, recepient: Principal, qty: bigint) => {
     await transfer(tokenCanId, { owner: recepient, subaccount: [] }, qty);
 
-    handleTransferModalClose();
+    setWalletPage("index");
+  };
+
+  const handleImportOpen = () => {
+    setWalletPage("import-token");
+  };
+
+  const handleImportClose = () => {
+    setWalletPage("index");
   };
 
   return (
     <Show when={pid() && poolAccount() && bonfireAccount()}>
-      <Show when={isExpanded()} fallback={<CollapsedWallet onClick={() => setExpanded(true)} />}>
-        <div class="fixed z-20 text-white p-6 rounded-3xl right-0 left-0 bottom-0 sm:left-auto sm:right-10 sm:bottom-6 flex flex-col gap-6 w-full sm:w-80 bg-gray-110 shadow-md shadow-black">
-          <div class="flex flex-row gap-4 items-center justify-between">
-            <div class="flex flex-row gap-2 items-center">
-              <Icon kind={EIconKind.Wallet} color="white" />
-              <p class="font-semibold text-lg">Your Wallet</p>
-            </div>
-            <Icon
-              kind={EIconKind.ChevronDown}
-              color="white"
-              hoverColor={COLORS.gray[140]}
-              onClick={() => setExpanded(false)}
-              class="cursor-pointer"
-            />
-          </div>
+      <Portal mount={document.getElementById("wallet-portal")!}>
+        <Show when={isWalletExpanded()} fallback={<CollapsedWallet onClick={() => setWalletExpanded(true)} />}>
+          <div class="text-white p-6 rounded-3xl flex flex-col gap-6 bg-gray-110 shadow-md shadow-black">
+            <Switch>
+              <Match when={walletPage() === "index"}>
+                <div class="flex flex-row gap-4 items-center justify-between">
+                  <div class="flex flex-row gap-2 items-center">
+                    <Icon kind={EIconKind.Wallet} color="white" />
+                    <p class="font-semibold text-lg">Your Wallet</p>
+                  </div>
+                  <Icon
+                    kind={EIconKind.ChevronDown}
+                    color="white"
+                    hoverColor={COLORS.gray[140]}
+                    onClick={() => setWalletExpanded(false)}
+                    class="cursor-pointer"
+                  />
+                </div>
 
-          <div class="flex">
-            <ProfileMini />
-          </div>
+                <div class="flex">
+                  <ProfileMini />
+                </div>
 
-          <div class="flex flex-col gap-4">
-            <For each={Object.values(DEFAULT_TOKENS)}>
-              {(token) => <Token tokenCanId={token} onTrasnferClick={handleTransferModalOpen} />}
-            </For>
+                <div class="flex flex-col gap-4">
+                  <For each={savedTokens()}>
+                    {(token) => <Token tokenCanId={token} onTrasnferClick={handleGoToTransfer} />}
+                  </For>
+                </div>
+
+                <p
+                  class="flex flex-row gap-2 items-center text-gray-140 justify-end text-xs underline cursor-pointer hover:text-white"
+                  onClick={handleImportOpen}
+                >
+                  Import
+                </p>
+              </Match>
+
+              <Match when={walletPage() === "transfer"}>
+                <div class="flex flex-row gap-2 justify-between items-center">
+                  <p
+                    class="flex gap-2 items-center text-xs cursor-pointer text-gray-140 hover:text-white underline"
+                    onClick={handleTransferGoBack}
+                  >
+                    <Icon kind={EIconKind.ArrowRight} color="white" size={15} class="rotate-180" /> Back
+                  </p>
+                  <p class="font-semibold text-lg">Transfer {metadata[transferringToken()!.toText()]!.ticker}</p>
+                </div>
+
+                <TransferForm tokenCanId={transferringToken()!} onTransfer={handleTransfer} />
+              </Match>
+
+              <Match when={walletPage() === "import-token"}>
+                <div class="flex flex-row gap-2 justify-between items-center">
+                  <p
+                    class="flex gap-2 items-center text-xs cursor-pointer text-gray-140 hover:text-white underline"
+                    onClick={handleTransferGoBack}
+                  >
+                    <Icon kind={EIconKind.ArrowRight} color="white" size={15} class="rotate-180" /> Back
+                  </p>
+                  <p class="font-semibold text-lg">Import Token</p>
+                </div>
+
+                <ImportTokenForm onClose={handleImportClose} />
+              </Match>
+            </Switch>
           </div>
-        </div>
-      </Show>
-      <Show when={transferModalVisible()}>
-        <Modal title={`Transfer ${metadata[transferringToken()!.toText()]!.ticker}`} onClose={handleTransferModalClose}>
-          <TransferForm tokenCanId={transferringToken()!} onTransfer={handleTransfer} />
-        </Modal>
-      </Show>
+        </Show>
+      </Portal>
     </Show>
   );
 }
@@ -234,7 +281,7 @@ function CollapsedWallet(props: { onClick: () => void }) {
   return (
     <div
       onClick={props.onClick}
-      class="fixed z-20 cursor-pointer px-6 py-4 rounded-tl-[24px] rounded-tr-[24px] rotate-0 sm:-rotate-90 bottom-0 left-0 right-0 sm:bottom-[100px] sm:right-[-80px] sm:left-auto w-full sm:w-auto flex flex-col justify-center items-center bg-chartreuse shadow-md shadow-black"
+      class="fixed z-60 cursor-pointer px-6 py-4 rounded-tl-[24px] rounded-tr-[24px] rotate-0 sm:-rotate-90 bottom-0 left-0 right-0 sm:bottom-[100px] sm:right-[-80px] sm:left-auto w-full sm:w-auto flex flex-col justify-center items-center bg-chartreuse shadow-md shadow-black"
     >
       <div class="flex flex-row gap-4 items-center">
         <Icon kind={EIconKind.Wallet} />
@@ -260,7 +307,7 @@ function TransferForm(props: ITransferFormProps) {
   const meta = () => metadata[props.tokenCanId.toText()];
 
   const [transferRecepient, setTransferRecepient] = createSignal<Result<string>>(Result.Err(""));
-  const [transferQty, setTransferQty] = createSignal<Result<EDs, string>>(Result.Err("0"));
+  const [transferQty, setTransferQty] = createSignal<Result<EDs, string>>(Result.Err(""));
 
   const canTransfer = () => {
     return meta() && pidBalance(props.tokenCanId) && transferQty().isOk() && transferRecepient().isOk();
@@ -293,6 +340,7 @@ function TransferForm(props: ITransferFormProps) {
             onChange={setTransferRecepient}
           />
         </div>
+
         <div class="flex flex-col gap-2">
           <p class="font-semibold text-sm text-gray-140">
             Amount <span class="text-errorRed">*</span>
@@ -310,10 +358,94 @@ function TransferForm(props: ITransferFormProps) {
               },
             ]}
             symbol={meta()!.ticker}
+            placeholder={`Max is ${EDs.new(pidBalance(props.tokenCanId) || meta()!.fee.val, meta()!.fee.decimals)}`}
           />
         </div>
       </div>
+
       <Btn text="Confirm" bgColor={COLORS.orange} disabled={!canTransfer()} onClick={handleTransfer} />
+    </div>
+  );
+}
+
+export function ImportTokenForm(props: { onClose: () => void }) {
+  const { metadata, fetchMetadata } = useTokens();
+  const { savedTokens, addSavedToken } = useWallet();
+
+  const [tokenCanId, setTokenCanId] = createSignal<Result<string>>(Result.Err(""));
+  const [fetchingMetadata, setFetchingMetadata] = createSignal(false);
+
+  createEffect(
+    on(tokenCanId, (canId) => {
+      if (canId.isOk()) {
+        const meta = metadata[canId.unwrapOk()];
+
+        if (!meta) {
+          setFetchingMetadata(true);
+          fetchMetadata(Principal.fromText(canId.unwrapOk())).then(() => setFetchingMetadata(false));
+        }
+      }
+    })
+  );
+
+  const btnText = () => {
+    const idRes = tokenCanId();
+    if (idRes.isErr()) return "Type Canister ID";
+
+    const id = idRes.unwrapOk();
+
+    const found = savedTokens().find((it) => it.toText() === id);
+    if (found) return "Already imported";
+
+    if (fetchingMetadata()) return "Stand by...";
+
+    const meta = metadata[id];
+    if (!meta) return "Invalid ICRC-1 Token";
+
+    return `Import ${meta.ticker}`;
+  };
+
+  const btnDisabled = () => {
+    const idRes = tokenCanId();
+    if (idRes.isErr()) return true;
+
+    const id = idRes.unwrapOk();
+
+    const found = savedTokens().find((it) => it.toText() === id);
+    if (found) return true;
+
+    if (fetchingMetadata()) return true;
+
+    const meta = metadata[id];
+    if (!meta) return true;
+
+    return false;
+  };
+
+  const handleImport = () => {
+    const id = Principal.fromText(tokenCanId().unwrapOk());
+
+    addSavedToken(id);
+    props.onClose();
+  };
+
+  return (
+    <div class="flex flex-col gap-8">
+      <div class="flex flex-col gap-4">
+        <div class="flex flex-col gap-2">
+          <p class="font-semibold text-sm text-gray-140">
+            Token Canister ID <span class="text-errorRed">*</span>
+          </p>
+          <TextInput
+            placeholder={import.meta.env.VITE_BURNER_CANISTER_ID}
+            validations={[{ principal: null }, { required: null }]}
+            value={tokenCanId().unwrap()}
+            onChange={setTokenCanId}
+          />
+        </div>
+      </div>
+
+      <Btn text={btnText()} bgColor={COLORS.orange} disabled={btnDisabled()} onClick={handleImport} />
     </div>
   );
 }

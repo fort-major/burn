@@ -14,7 +14,7 @@ pub fn f64_to_e8s(n: f64) -> E8s {
     E8s::from(n_u128)
 }
 
-fn next_sunday_15_utc(now: TimestampNs) -> u64 {
+fn next_sunday_n_utc(now: TimestampNs, n: u64) -> u64 {
     let days_since_epoch = now / ONE_DAY_NS;
     let current_weekday = (days_since_epoch + 4) % 7; // 1970-01-01 was a Thursday (day 4)
 
@@ -28,13 +28,20 @@ fn next_sunday_15_utc(now: TimestampNs) -> u64 {
     // Calculate next Sunday's date (00:00:00 UTC)
     let next_sunday_start_ns = now + days_to_next_sunday * ONE_DAY_NS;
 
-    // Add 15 hours (15:00 UTC) to the start of Sunday
-    next_sunday_start_ns + 15 * ONE_HOUR_NS
+    // Add N hours (N:00 UTC) to the start of Sunday
+    next_sunday_start_ns + n * ONE_HOUR_NS
 }
 
 /// Calculates the duration in seconds until next Sunday 15:00 UTC
 pub fn duration_until_next_sunday_15_00(now: u64) -> Duration {
-    let next_sunday_secs = next_sunday_15_utc(now);
+    let next_sunday_secs = next_sunday_n_utc(now, 15);
+
+    Duration::from_nanos(next_sunday_secs - now)
+}
+
+/// Calculates the duration in seconds until next Sunday 12:00 UTC
+pub fn duration_until_next_sunday_12_00(now: u64) -> Duration {
+    let next_sunday_secs = next_sunday_n_utc(now, 12);
 
     Duration::from_nanos(next_sunday_secs - now)
 }

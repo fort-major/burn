@@ -86,18 +86,16 @@ export function Header(props: IHeaderProps) {
           }}
         >
           <nav class="flex flex-col md:flex-row items-center gap-10 font-semibold text-white">
-            <Show when={isAuthorized()}>
-              <A
-                activeClass="underline"
-                class="hover:underline"
-                onClick={eventHandler(() => {
-                  setExpanded(false);
-                })}
-                href={ROOT.$.pool.path}
-              >
-                Pool
-              </A>
-            </Show>
+            <A
+              activeClass="underline"
+              class="hover:underline"
+              onClick={eventHandler(() => {
+                setExpanded(false);
+              })}
+              href={ROOT.$.pool.path}
+            >
+              Pool
+            </A>
 
             <A
               activeClass="underline"

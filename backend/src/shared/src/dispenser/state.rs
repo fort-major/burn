@@ -1,6 +1,7 @@
 use candid::{Nat, Principal};
 use ic_e8s::d::EDs;
 use ic_stable_structures::{Cell, StableBTreeMap};
+use num_bigint::BigUint;
 
 use crate::burner::types::{Memory, TCycles, TimestampNs};
 
@@ -18,8 +19,9 @@ use super::{
 };
 
 pub struct DispenserState {
-    pub common_pool_members: StableBTreeMap<Principal, TCycles, Memory>,
-    pub kamikaze_pool_members: StableBTreeMap<Principal, TCycles, Memory>,
+    pub common_pool_members: StableBTreeMap<Principal, EDs, Memory>,
+    pub kamikaze_pool_members: StableBTreeMap<Principal, EDs, Memory>,
+    pub bonfire_pool_members: StableBTreeMap<Principal, EDs, Memory>,
 
     pub unclaimed_tokens: StableBTreeMap<Principal, EDs, Memory>,
 
@@ -63,6 +65,10 @@ impl DispenserState {
 
     /// returns true if should reschedule
     pub fn dispense_kamikaze_batch(&mut self, batch_size: u64) -> bool {
+        if self.kamikaze_pool_members.is_empty() {
+            return false;
+        }
+
         let mut distribution_info = self.get_current_distribution_info();
 
         let current_distribution_id = if let Some(id) = distribution_info.distribution_id {
@@ -84,18 +90,6 @@ impl DispenserState {
             return false;
         }
 
-        // only half goes to the common pool
-        let kamikaze_pool_reward = cur_tick_reward_opt.unwrap() / EDs::two(info.token_decimals);
-
-        // if nobody is in the pool, reschedule those tokens to the next week
-        if self.kamikaze_pool_members.is_empty() {
-            distribution.leftover_qty += kamikaze_pool_reward;
-            self.active_distributions
-                .insert(current_distribution_id, distribution);
-
-            return false;
-        }
-
         let mut iter = if let Some(cursor) = distribution_info.kamikaze_pool_cursor {
             let mut iter = self.kamikaze_pool_members.range(cursor..);
             iter.next();
@@ -114,7 +108,7 @@ impl DispenserState {
             n
         };
 
-        let mut counter = if let Some(c) = distribution_info.kamikaze_pool_counter {
+        let mut counter = if let Some(c) = distribution_info.kamikaze_pool_counter.clone() {
             c
         } else {
             TCycles::zero()
@@ -130,16 +124,22 @@ impl DispenserState {
                 continue;
             }
 
-            let (pid, weight) = entry.unwrap();
+            let (pid, weight) = entry.map(|(p, e)| (p, e.to_const())).unwrap();
 
-            distribution_info.common_pool_cursor = Some(pid);
             counter += weight / &info.total_kamikaze_pool_members_weight;
+            distribution_info.common_pool_cursor = Some(pid);
 
             if counter >= random_number {
                 let unclaimed_reward = self.unclaimed_tokens.get(&pid).unwrap_or_default();
 
+                let kamikaze_pool_reward = cur_tick_reward_opt.unwrap()
+                    / EDs::new(BigUint::from(3333_3333u64), 8).to_decimals(info.token_decimals);
+
                 self.unclaimed_tokens
-                    .insert(pid, unclaimed_reward + kamikaze_pool_reward);
+                    .insert(pid, unclaimed_reward + &kamikaze_pool_reward);
+
+                distribution.leftover_qty -= &kamikaze_pool_reward;
+                info.total_distributed += Nat(kamikaze_pool_reward.val);
 
                 break false;
             }
@@ -152,6 +152,14 @@ impl DispenserState {
 
         distribution_info.kamikaze_pool_counter = Some(counter);
 
+        if !should_reschedule {
+            distribution_info.kamikaze_pool_cursor = None;
+            distribution_info.kamikaze_pool_counter = None;
+            distribution_info.kamikaze_random_number = None;
+        }
+
+        self.active_distributions
+            .insert(distribution.id, distribution);
         self.set_current_distribution_info(distribution_info);
         self.set_dispenser_info(info);
 
@@ -160,6 +168,10 @@ impl DispenserState {
 
     /// returns true if should reschedule
     pub fn dispense_common_batch(&mut self, batch_size: u64) -> bool {
+        if self.common_pool_members.is_empty() {
+            return false;
+        }
+
         let mut distribution_info = self.get_current_distribution_info();
 
         let current_distribution_id = if let Some(id) = distribution_info.distribution_id {
@@ -174,22 +186,10 @@ impl DispenserState {
             .get(&current_distribution_id)
             .unwrap();
 
-        let info = self.get_dispenser_info();
+        let mut info = self.get_dispenser_info();
 
         let cur_tick_reward_opt = distribution.get_cur_tick_reward(info.token_fee.clone());
         if cur_tick_reward_opt.is_none() {
-            return false;
-        }
-
-        // only half goes to the common pool
-        let common_pool_reward = cur_tick_reward_opt.unwrap() / EDs::two(info.token_decimals);
-
-        // if nobody is in the pool, simply mark the distributed tokens for burning
-        if self.common_pool_members.is_empty() {
-            distribution.leftover_qty += common_pool_reward;
-            self.active_distributions
-                .insert(current_distribution_id, distribution);
-
             return false;
         }
 
@@ -202,6 +202,9 @@ impl DispenserState {
             self.common_pool_members.iter()
         };
 
+        let common_pool_reward = cur_tick_reward_opt.unwrap()
+            / EDs::new(BigUint::from(3333_3333u64), 8).to_decimals(info.token_decimals);
+
         let mut i = 0;
 
         let should_reschedule = loop {
@@ -212,7 +215,7 @@ impl DispenserState {
                 break false;
             }
 
-            let (pid, weight) = entry.unwrap();
+            let (pid, weight) = entry.map(|(p, e)| (p, e.to_const())).unwrap();
             let new_reward = (weight / &info.total_common_pool_members_weight)
                 .to_dynamic()
                 .to_decimals(common_pool_reward.decimals)
@@ -221,7 +224,10 @@ impl DispenserState {
             let unclaimed_reward = self.unclaimed_tokens.get(&pid).unwrap_or_default();
 
             self.unclaimed_tokens
-                .insert(pid, unclaimed_reward + new_reward);
+                .insert(pid, unclaimed_reward + &new_reward);
+
+            distribution.leftover_qty -= &new_reward;
+            info.total_distributed += Nat(new_reward.val);
 
             distribution_info.common_pool_cursor = Some(pid);
 
@@ -231,6 +237,98 @@ impl DispenserState {
             }
         };
 
+        if !should_reschedule {
+            distribution_info.common_pool_cursor = None;
+        }
+
+        self.active_distributions
+            .insert(distribution.id, distribution);
+        self.set_current_distribution_info(distribution_info);
+        self.set_dispenser_info(info);
+
+        should_reschedule
+    }
+
+    /// returns true if should reschedule
+    pub fn dispense_bonfire_batch(&mut self, batch_size: u64) -> bool {
+        if self.bonfire_pool_members.is_empty() {
+            return false;
+        }
+
+        let mut distribution_info = self.get_current_distribution_info();
+
+        let current_distribution_id = if let Some(id) = distribution_info.distribution_id {
+            id
+        } else {
+            // if no distribution is set, skip
+            return false;
+        };
+
+        let mut distribution = self
+            .active_distributions
+            .get(&current_distribution_id)
+            .unwrap();
+
+        if !distribution.distribute_to_bonfire {
+            return false;
+        }
+
+        let mut info = self.get_dispenser_info();
+
+        let cur_tick_reward_opt = distribution.get_cur_tick_reward(info.token_fee.clone());
+        if cur_tick_reward_opt.is_none() {
+            return false;
+        }
+
+        let mut iter = if let Some(cursor) = distribution_info.bonfire_pool_cursor {
+            let mut iter = self.bonfire_pool_members.range(cursor..);
+            iter.next();
+
+            iter
+        } else {
+            self.bonfire_pool_members.iter()
+        };
+
+        let bonfire_pool_reward = cur_tick_reward_opt.unwrap()
+            * EDs::new(BigUint::from(3333_3333u64), 8).to_decimals(info.token_decimals);
+        let mut i = 0;
+
+        let should_reschedule = loop {
+            let entry = iter.next();
+
+            // if reached the end of the list, store both info entries and return false
+            if entry.is_none() {
+                break false;
+            }
+
+            let (pid, weight) = entry.map(|(p, e)| (p, e.to_const())).unwrap();
+            let new_reward = (weight / &info.total_bonfire_pool_members_weight)
+                .to_dynamic()
+                .to_decimals(bonfire_pool_reward.decimals)
+                * &bonfire_pool_reward;
+
+            let unclaimed_reward = self.unclaimed_tokens.get(&pid).unwrap_or_default();
+
+            self.unclaimed_tokens
+                .insert(pid, unclaimed_reward + &new_reward);
+
+            distribution.leftover_qty -= &new_reward;
+            info.total_distributed += Nat(new_reward.val);
+
+            distribution_info.bonfire_pool_cursor = Some(pid);
+
+            i += 1;
+            if i == batch_size {
+                break true;
+            }
+        };
+
+        if !should_reschedule {
+            distribution_info.bonfire_pool_cursor = None;
+        }
+
+        self.active_distributions
+            .insert(distribution.id, distribution);
         self.set_current_distribution_info(distribution_info);
         self.set_dispenser_info(info);
 
@@ -262,7 +360,6 @@ impl DispenserState {
         true
     }
 
-    /// precondition - the provided id points to an active existing distribution
     pub fn complete_active_distributions_batch(&mut self, batch_size: u64) -> bool {
         let mut distribution_info = self.get_current_distribution_info();
 
@@ -408,6 +505,9 @@ impl DispenserState {
 
             scheduled_qty: EDs::new(req.qty.0.clone(), info.token_decimals),
             leftover_qty: EDs::new(req.qty.0, info.token_decimals),
+
+            hidden: req.hidden,
+            distribute_to_bonfire: req.distribute_to_bonfire,
         };
 
         if matches!(status, DistributionStatus::InProgress) {
@@ -473,7 +573,7 @@ impl DispenserState {
             d = self.past_distributions.get(&id);
         }
 
-        d
+        d.map(|it| it.try_to_hidden())
     }
 
     pub fn get_distributions(&self, req: GetDistributionsRequest) -> GetDistributionsResponse {
@@ -500,7 +600,7 @@ impl DispenserState {
 
             let (_, d) = entry.unwrap();
 
-            result.push(d);
+            result.push(d.try_to_hidden());
 
             i += 1;
             if i >= req.take {

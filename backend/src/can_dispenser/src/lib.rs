@@ -8,7 +8,7 @@ use ic_cdk::{
 };
 use ic_e8s::d::EDs;
 use ic_ledger_types::Subaccount;
-use icrc_ledger_types::icrc1::transfer::TransferArg;
+use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use shared::{
     burner::types::TCycles,
     dispenser::{
@@ -19,14 +19,15 @@ use shared::{
             GetDistributionsRequest, GetDistributionsResponse, InitArgs, WithdrawCanceledRequest,
             WithdrawCanceledResponse, WithdrawUserTokensRequest, WithdrawUserTokensResponse,
         },
-        types::{DispenserInfoPub, Distribution, DistributionId},
+        types::{DispenserInfoPub, Distribution, DistributionId, DISPENSER_DEV_FEE_SUBACCOUNT},
     },
     icrc1::ICRC1CanisterClient,
     Guard, ENV_VARS, ICP_FEE,
 };
 use utils::{
-    charge_caller_distribution_creation_fee_icp, charge_caller_tokens, claim_caller_tokens,
-    set_init_canister_one_timer, set_tick_timer, set_transform_icp_fee_to_cycles_timer, STATE,
+    charge_caller_distribution_creation_fee_icp, charge_caller_tokens, charge_dev_fee,
+    claim_caller_tokens, set_init_canister_one_timer, set_tick_timer,
+    set_transform_icp_fee_to_cycles_timer, set_update_bonfire_pool_members_timer, STATE,
 };
 
 pub mod utils;
@@ -44,11 +45,21 @@ async fn create_distribution(mut req: CreateDistributionRequest) -> CreateDistri
         panic!("The dispenser is not initted yet");
     }
 
-    if caller() != ENV_VARS.furnace_canister_id {
-        charge_caller_distribution_creation_fee_icp().await;
-    }
+    let qty = if caller() != ENV_VARS.furnace_canister_id {
+        // if requested from bonfire - don't charge fees
+        // charge_caller_distribution_creation_fee_icp().await;
 
-    charge_caller_tokens(info.token_can_id.unwrap(), info.token_fee, req.qty.clone()).await;
+        charge_dev_fee(
+            info.token_can_id.unwrap(),
+            info.token_fee.clone(),
+            req.qty.clone(),
+        )
+        .await
+    } else {
+        req.qty.clone()
+    };
+
+    charge_caller_tokens(info.token_can_id.unwrap(), info.token_fee, qty).await;
 
     // request validity does not depend on the state - safe to continue without checking validity again
 
@@ -204,6 +215,30 @@ fn subaccount_of(pid: Principal) -> Subaccount {
     Subaccount::from(pid)
 }
 
+#[update]
+async fn withdraw_dev_fee(to: Account, qty: Nat) {
+    if caller() != ENV_VARS.furnace_canister_id {
+        panic!("Access denied");
+    }
+
+    let info = STATE.with_borrow(|s| s.get_dispenser_info());
+
+    let token = ICRC1CanisterClient::new(info.token_can_id.unwrap());
+    token
+        .icrc1_transfer(TransferArg {
+            from_subaccount: Some(DISPENSER_DEV_FEE_SUBACCOUNT),
+            to,
+            amount: qty - info.token_fee.clone(),
+            fee: Some(info.token_fee),
+            created_at_time: None,
+            memo: None,
+        })
+        .await
+        .expect("Failed to withdraw dev fee")
+        .0
+        .expect("Failed to withdraw dev fee");
+}
+
 #[init]
 fn init_hook(args: InitArgs) {
     STATE.with_borrow_mut(|s| {
@@ -215,12 +250,14 @@ fn init_hook(args: InitArgs) {
     set_init_canister_one_timer();
     set_transform_icp_fee_to_cycles_timer();
     set_tick_timer();
+    set_update_bonfire_pool_members_timer();
 }
 
 #[post_upgrade]
 fn post_upgrade_hook() {
     set_transform_icp_fee_to_cycles_timer();
     set_tick_timer();
+    set_update_bonfire_pool_members_timer();
 }
 
 export_candid!();

@@ -3,10 +3,11 @@ import { Principal } from "@dfinity/principal";
 import { err, ErrorCode, logInfo } from "@utils/error";
 import { E8s, EDs } from "@utils/math";
 import { Fetcher, IChildren } from "@utils/types";
-import { Accessor, createContext, createSignal, useContext } from "solid-js";
+import { Accessor, createContext, createEffect, createSignal, on, onMount, useContext } from "solid-js";
 import { useAuth } from "./auth";
 import { newFurnaceActor, optUnwrap } from "@utils/backend";
 import { useWallet } from "./wallet";
+import { useTokens } from "./tokens";
 
 export interface IPosition {
   pid: Principal;
@@ -50,12 +51,17 @@ export interface ITokenXAlternative {
 
 export interface IPledgeRequest {
   pid: Principal;
-  qty: EDs;
+  qty: bigint;
   tokenCanId: Principal;
   downvote: boolean;
 }
 
 export type TTokenXVote = { tokenCanisterId: Principal; normalizedWeight: E8s }[];
+
+export interface IMyShares {
+  usd: E8s;
+  votingPower: E8s;
+}
 
 export interface IFurnaceStoreContext {
   supportedTokens: Accessor<Principal[]>;
@@ -78,6 +84,9 @@ export interface IFurnaceStoreContext {
 
   pledge: (req: IPledgeRequest) => Promise<bigint>;
   voteTokenX: (vote: TTokenXVote) => Promise<void>;
+
+  myShares: Accessor<IMyShares | undefined>;
+  fetchMyShares: Fetcher;
 }
 
 const FurnaceContext = createContext<IFurnaceStoreContext>();
@@ -93,7 +102,8 @@ export function useFurnace(): IFurnaceStoreContext {
 }
 
 export function FurnaceStore(props: IChildren) {
-  const { assertReadyToFetch, assertAuthorized, anonymousAgent, agent, disable, enable } = useAuth();
+  const { assertReadyToFetch, isReadyToFetch, assertAuthorized, anonymousAgent, agent, disable, enable } = useAuth();
+  const { metadata, fetchMetadata } = useTokens();
   const { fetchBonfireBalance } = useWallet();
 
   const [curRoundPositions, setCurRoundPositions] = createSignal<IPosition[]>([]);
@@ -106,6 +116,49 @@ export function FurnaceStore(props: IChildren) {
   const [info, setInfo] = createSignal<IFurnaceInfo>();
   const [winners, setWinners] = createSignal<IFurnaceWinnerHistoryEntry[]>([]);
   const [tokenXVotingAlternatives, setTokenXVotingAlternatives] = createSignal<ITokenXAlternative[]>([]);
+  const [myShares, setMyShares] = createSignal<IMyShares>();
+
+  createEffect(
+    on(isReadyToFetch, (ready) => {
+      if (ready) {
+        fetchInfo();
+        fetchSupportedTokens();
+        fetchTokenXVotingAlternatives();
+      }
+    })
+  );
+
+  onMount(() => {
+    if (isReadyToFetch()) {
+      fetchInfo();
+      fetchSupportedTokens();
+      fetchTokenXVotingAlternatives();
+    }
+  });
+
+  createEffect(
+    on(supportedTokens, (tokens) => {
+      for (let token of tokens) {
+        if (!metadata[token.toText()]) {
+          fetchMetadata(token);
+        }
+      }
+    })
+  );
+
+  const fetchMyShares: IFurnaceStoreContext["fetchMyShares"] = async () => {
+    assertAuthorized();
+
+    const furnace = newFurnaceActor(agent()!);
+    const [usd, usdBurn] = await furnace.get_my_cur_round_positions();
+
+    const shares: IMyShares = {
+      usd: E8s.new(usd),
+      votingPower: E8s.new(usdBurn),
+    };
+
+    setMyShares(shares);
+  };
 
   const fetchSupportedTokens: IFurnaceStoreContext["fetchSupportedTokens"] = async () => {
     assertReadyToFetch();
@@ -280,17 +333,9 @@ export function FurnaceStore(props: IChildren) {
         token_can_id: req.tokenCanId,
         pid: req.pid,
         downvote: req.downvote,
-        qty: req.qty.toBigIntRaw(),
+        qty: req.qty,
       };
       const resp = await furnace.pledge(request);
-
-      logInfo(
-        `Successfully pledged $${E8s.new(resp.pledge_value_usd).toShortString({
-          belowOne: 2,
-          belowThousand: 1,
-          afterThousand: 1,
-        })}!`
-      );
 
       return resp.pledge_value_usd;
     } finally {
@@ -336,6 +381,9 @@ export function FurnaceStore(props: IChildren) {
 
         pledge,
         voteTokenX,
+
+        myShares,
+        fetchMyShares,
       }}
     >
       {props.children}

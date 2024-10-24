@@ -20,6 +20,9 @@ pub const DISPENSER_DISTRIBUTION_SUBACCOUNT: [u8; 32] = [
 pub const DISPENSER_ICP_FEE_SUBACCOUNT: [u8; 32] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2,
 ];
+pub const DISPENSER_DEV_FEE_SUBACCOUNT: [u8; 32] = [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3,
+];
 pub const DISPENSER_ICP_FEE_E8S: u64 = 1_0000_0000;
 pub const DISPENSER_ICP_FEE_TRANSFORM_DELAY_NS: u64 = ONE_DAY_NS;
 
@@ -32,6 +35,8 @@ pub struct DispenserInfo {
     pub token_decimals: u8,
     pub token_fee: Nat,
 
+    pub total_distributed: Nat,
+
     pub prev_tick_timestamp: TimestampNs,
     pub tick_delay_ns: u64,
     pub cur_tick: u64,
@@ -42,6 +47,7 @@ pub struct DispenserInfo {
     pub is_stopped: bool,
 
     pub total_common_pool_members_weight: TCycles,
+    pub total_bonfire_pool_members_weight: TCycles,
     pub total_kamikaze_pool_members_weight: TCycles,
 }
 
@@ -52,6 +58,8 @@ pub struct DispenserInfoPub {
     pub token_can_id: Option<Principal>,
     pub token_decimals: u8,
     pub token_fee: Nat,
+
+    pub total_distributed: Nat,
 
     pub prev_tick_timestamp: TimestampNs,
     pub tick_delay_ns: u64,
@@ -68,6 +76,7 @@ impl DispenserInfo {
             token_can_id: self.token_can_id,
             token_decimals: self.token_decimals,
             token_fee: self.token_fee.clone(),
+            total_distributed: self.total_distributed.clone(),
             prev_tick_timestamp: self.prev_tick_timestamp,
             tick_delay_ns: self.tick_delay_ns,
             cur_tick: self.cur_tick,
@@ -153,6 +162,9 @@ pub struct Distribution {
     pub duration_ticks: u64,
     pub cur_tick_reward: EDs,
 
+    pub hidden: bool,
+    pub distribute_to_bonfire: bool,
+
     pub scheme: DistributionScheme,
 
     pub scheduled_qty: EDs,
@@ -160,6 +172,18 @@ pub struct Distribution {
 }
 
 impl Distribution {
+    pub fn try_to_hidden(mut self) -> Self {
+        if matches!(self.status, DistributionStatus::Scheduled) {
+            if self.hidden {
+                self.leftover_qty = EDs::zero(self.leftover_qty.decimals);
+                self.scheduled_qty = EDs::zero(self.leftover_qty.decimals);
+                self.cur_tick_reward = EDs::zero(self.leftover_qty.decimals);
+            }
+        }
+
+        self
+    }
+
     pub fn get_cur_tick_reward(&self, fee: Nat) -> Option<EDs> {
         if self.leftover_qty.val < fee.0 {
             None
@@ -187,15 +211,8 @@ impl Distribution {
     }
 
     pub fn try_complete(&mut self, fee: Nat) -> bool {
-        if let Some(cur_reward) = self.get_cur_tick_reward(fee) {
-            self.leftover_qty -= &cur_reward;
-
-            if self.leftover_qty < self.cur_tick_reward {
-                self.status = DistributionStatus::Completed;
-                true
-            } else {
-                false
-            }
+        if self.get_cur_tick_reward(fee).is_some() {
+            false
         } else {
             self.status = DistributionStatus::Completed;
             true
@@ -239,6 +256,7 @@ pub enum DistributionStatus {
 pub struct CurrentDistributionInfo {
     pub distribution_id: Option<DistributionId>,
     pub common_pool_cursor: Option<Principal>,
+    pub bonfire_pool_cursor: Option<Principal>,
     pub kamikaze_pool_cursor: Option<Principal>,
     pub kamikaze_pool_counter: Option<TCycles>,
     pub kamikaze_random_number: Option<TCycles>,

@@ -1,19 +1,19 @@
-export function getTimeUntilNextSunday15UTC(): { days: number; hours: number; minutes: number } {
+export function getTimeUntilNextSunday15UTC(n: number = 15): { days: number; hours: number; minutes: number } {
   const now = new Date();
   const currentDay = now.getUTCDay(); // Sunday is 0, Monday is 1, ..., Saturday is 6
   const currentHour = now.getUTCHours();
 
   // Calculate days until next Sunday
   let daysUntilSunday = (7 - currentDay) % 7; // if today is Sunday, set daysUntilSunday to 0
-  if (daysUntilSunday === 0 && currentHour >= 15) {
+  if (daysUntilSunday === 0 && currentHour >= n) {
     // If it's already Sunday and past 15:00 UTC, set the next Sunday
     daysUntilSunday = 7;
   }
 
-  // Set next Sunday at 15:00 UTC
+  // Set next Sunday at N UTC
   const nextSunday = new Date(now);
   nextSunday.setUTCDate(now.getUTCDate() + daysUntilSunday);
-  nextSunday.setUTCHours(15, 0, 0, 0); // 15:00 UTC
+  nextSunday.setUTCHours(n, 0, 0, 0); // N UTC
 
   // Get the difference in milliseconds
   const difference = nextSunday.getTime() - now.getTime();

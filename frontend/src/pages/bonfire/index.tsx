@@ -4,7 +4,9 @@ import { Bento, BentoBox } from "@components/bento";
 import { Btn } from "@components/btn";
 import { Copyable } from "@components/copyable";
 import { EIconKind, Icon } from "@components/icon";
+import { Modal } from "@components/modal";
 import { Page } from "@components/page";
+import { PledgeForm } from "@components/pledge-form";
 import { QtyInput } from "@components/qty-input";
 import { Timer } from "@components/timer";
 import { Principal } from "@dfinity/principal";
@@ -14,21 +16,21 @@ import { DEFAULT_TOKENS, useTokens } from "@store/tokens";
 import { useWallet } from "@store/wallet";
 import { COLORS } from "@utils/colors";
 import { avatarSrcFromPrincipal } from "@utils/common";
+import { err, ErrorCode, logErr } from "@utils/error";
 import { E8s, EDs } from "@utils/math";
 import { eventHandler } from "@utils/security";
 import { getTimeUntilNextSunday15UTC } from "@utils/time";
 import { Result } from "@utils/types";
-import { createEffect, createSignal, For, on, onMount, Show } from "solid-js";
+import { batch, createEffect, createSignal, For, on, onMount, Show } from "solid-js";
 
 export function BonfirePage() {
-  const { identity, isReadyToFetch } = useAuth();
+  const { identity, isReadyToFetch, isAuthorized, assertAuthorized } = useAuth();
   const { fetchBalanceOf, balanceOf, metadata, icpSwapUsdExchangeRates } = useTokens();
-  const { pidBalance, transfer, moveToBonfireAccount, pid } = useWallet();
-  const { pledge, curRoundPositions, fetchCurRoundPositions, fetchInfo, info } = useFurnace();
+  const { pidBalance, transfer, moveToBonfireAccount, withdrawFromBonfireAccount, pid } = useWallet();
+  const { pledge, curRoundPositions, fetchCurRoundPositions, fetchInfo, info, myShares, fetchMyShares } = useFurnace();
 
-  const [qtyToPledge, setQtyToPledge] = createSignal<Result<EDs, string>>(Result.Err("0"));
-
-  const burnMetadata = () => metadata[DEFAULT_TOKENS.burn.toText()];
+  const [pledgeModalOpen, setPledgeModalOpen] = createSignal(false);
+  const [pledgingToken, setPledgingToken] = createSignal<Principal>();
 
   const prizeFund = () => {
     const furnaceBalance = balanceOf(DEFAULT_TOKENS.icp, Principal.fromText(import.meta.env.VITE_FURNACE_CANISTER_ID));
@@ -70,21 +72,122 @@ export function BonfirePage() {
     })
   );
 
-  const canPledgeBurn = () => qtyToPledge().isOk();
+  const handlePledge = async (token: Principal, qty: bigint) => {
+    assertAuthorized();
 
-  const handlePledgeBurn = async () => {
-    const qty = qtyToPledge().unwrapOk();
+    const meta = metadata[token.toText()];
+    if (!meta) {
+      err(ErrorCode.UNREACHEABLE, "No token metadata present");
+    }
 
-    const blockIdx1 = await moveToBonfireAccount(DEFAULT_TOKENS.burn, qty.val);
-    console.log("Moved $BURN to bonfire at block", blockIdx1);
+    await moveToBonfireAccount(token, qty);
 
-    await pledge({
-      tokenCanId: DEFAULT_TOKENS.burn,
-      pid: pid()!,
-      qty: qty.sub(burnMetadata()!.fee),
-      downvote: false,
+    try {
+      await pledge({
+        tokenCanId: token,
+        pid: pid()!,
+        qty: qty - meta.fee.val,
+        downvote: false,
+      });
+    } catch (e) {
+      logErr(ErrorCode.NETWORK, "Unable to pledge");
+      console.error(e);
+
+      await withdrawFromBonfireAccount(token, qty - meta.fee.val);
+    } finally {
+      fetchMyShares();
+      fetchCurRoundPositions();
+    }
+
+    handlePledgeModalClose();
+  };
+
+  const handlePledgeModalClose = () => {
+    setPledgeModalOpen(false);
+  };
+
+  const handlePledgeClick = (tokenCanId: Principal) => {
+    batch(() => {
+      setPledgingToken(tokenCanId);
+      setPledgeModalOpen(true);
     });
   };
+
+  const canPledge = (tokenCanId: Principal) => {
+    const b = pidBalance(tokenCanId);
+    if (!b) return false;
+    if (b < 10) return false;
+
+    return true;
+  };
+
+  createEffect(() => {
+    if (isAuthorized()) {
+      fetchMyShares();
+    }
+  });
+
+  const drawChance = () => {
+    const shares = myShares();
+    if (!shares) return undefined;
+
+    const i = info();
+    if (!i) return undefined;
+
+    if (i.curRoundPledgedUsd.isZero()) return E8s.zero();
+
+    return shares.usd.div(i.curRoundPledgedUsd);
+  };
+
+  const votingPower = () => {
+    const shares = myShares();
+    if (!shares) return undefined;
+
+    const i = info();
+    if (!i) return undefined;
+
+    if (i.curRoundPledgedBurnUsd.isZero()) return E8s.zero();
+
+    return shares.votingPower.div(i.curRoundPledgedBurnUsd);
+  };
+
+  const curTokenXTicker = () => {
+    const token = info()?.curTokenX;
+    if (!token) return undefined;
+
+    const m = metadata[token.toText()];
+    if (!m) return undefined;
+
+    return m.ticker;
+  };
+
+  const modalTitle = () => {
+    const t = pledgingToken();
+    if (!t) return undefined;
+
+    const token = info()?.curTokenX;
+    if (!token) return undefined;
+
+    if (t.compareTo(token) === "eq") {
+      const m = metadata[token.toText()];
+      if (!m) return undefined;
+
+      return `Pledge $${m.ticker}`;
+    }
+
+    return "Pledge $BURN";
+  };
+
+  const totalShareWorth = () =>
+    curRoundPositions()
+      .map((it) => it.usd)
+      .reduce((prev, cur) => prev.add(cur), E8s.zero());
+
+  const avgShareWorth = () =>
+    curRoundPositions()
+      .map((it) => it.usd)
+      .reduce((prev, cur) => prev.add(cur), E8s.zero())
+      .div(E8s.fromBigIntBase(BigInt(curRoundPositions().length || 1)));
 
   return (
     <Page slim>
@@ -93,72 +196,106 @@ export function BonfirePage() {
         <div class="flex gap-4 sm:gap-6 items-center">
           <Icon kind={EIconKind.ICP} color="white" size={window.innerWidth > 800 ? 120 : 60} />
           <h2 class="font-semibold leading-[70px] text-[70px] sm:leading-[200px] sm:text-[200px]">
-            {prizeFund().toShortString({ belowOne: 1, belowThousand: 1, afterThousand: 2 })}{" "}
-            <span class="text-xl italic font-normal">ICP</span>
+            {prizeFund().toDynamic().toDecimals(0).toString()} <span class="text-xl italic font-normal">ICP</span>
           </h2>
         </div>
       </div>
 
       <div class="flex flex-col gap-6">
-        <div class="grid grid-cols-1 sm:grid-cols-5 gap-6">
-          <Bento class="sm:col-span-3 gap-5 flex-grow justify-between" id={1}>
-            <div class="flex flex-col gap-1">
-              <p class="text-xl font-semibold">
-                Pledge <span class="text-orange">$BURN</span> to have a chance
-              </p>
-              <p class="text-gray-140">The more you pledge, the better your odds</p>
+        <div class="grid grid-cols-2 gap-6">
+          <Bento class="flex-col" id={3}>
+            <div class="flex flex-col gap-8">
+              <p class="font-semibold text-xl">Bonfire Pool</p>
+
+              <Show when={isAuthorized() && myShares()} fallback={<p class="text-orange">Sign In To Participate</p>}>
+                <div class="flex flex-col gap-4">
+                  <div class="flex gap-4 justify-between items-baseline">
+                    <p class="font-bold text-6xl">
+                      ${myShares()!.usd.toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })}
+                    </p>
+                    <p class="text-gray-140">pledged USD</p>
+                  </div>
+
+                  <div class="flex gap-4 justify-between items-baseline">
+                    <p class="font-bold text-4xl">
+                      {drawChance()!.toPercent().toShortString({ belowOne: 4, belowThousand: 2, afterThousand: 2 })}%
+                    </p>
+                    <p class="text-gray-140">chance to draw</p>
+                  </div>
+
+                  <div class="flex gap-4 justify-between items-baseline">
+                    <p class="font-bold text-4xl">
+                      {votingPower()!.toPercent().toShortString({ belowOne: 4, belowThousand: 2, afterThousand: 2 })}%
+                    </p>
+                    <p class="text-gray-140">voting power</p>
+                  </div>
+                </div>
+
+                <div class="flex flex-col gap-2">
+                  <Btn
+                    text="Pledge $BURN"
+                    bgColor={COLORS.orange}
+                    class="w-full font-semibold"
+                    disabled={!canPledge(DEFAULT_TOKENS.burn)}
+                    onClick={() => handlePledgeClick(DEFAULT_TOKENS.burn)}
+                  />
+                  <Show when={info() && info()!.curTokenX.compareTo(DEFAULT_TOKENS.burn) !== "eq"}>
+                    <Btn
+                      text={`Pledge $${curTokenXTicker()}`}
+                      bgColor={COLORS.orange}
+                      class="w-full font-semibold"
+                      disabled={!canPledge(info()!.curTokenX)}
+                      onClick={() => handlePledgeClick(info()!.curTokenX)}
+                    />
+                  </Show>
+                </div>
+              </Show>
             </div>
-
-            <Show when={identity() && burnMetadata()} fallback={<p class="text-orange">Sign In To Participate</p>}>
-              <div class="flex flex-col gap-1">
-                <QtyInput
-                  value={qtyToPledge()}
-                  symbol={burnMetadata()!.ticker}
-                  decimals={burnMetadata()!.fee.decimals}
-                  onChange={setQtyToPledge}
-                  validations={[
-                    { required: null },
-                    {
-                      min: burnMetadata()!.fee,
-                      max: EDs.new(
-                        (pidBalance(DEFAULT_TOKENS.burn) || burnMetadata()!.fee.val) - burnMetadata()!.fee.val,
-                        burnMetadata()!.fee.decimals
-                      ),
-                    },
-                  ]}
-                />
-              </div>
-
-              <Btn text="Pledge $BURN" bgColor={COLORS.orange} disabled={!canPledgeBurn()} onClick={handlePledgeBurn} />
-            </Show>
           </Bento>
-          <Bento class="sm:col-span-2" id={2}>
+
+          <Bento class="flex-col" id={2}>
             <div class="flex flex-col gap-6">
               <p class="font-semibold text-xl">Rules</p>
-              <div class="flex flex-col gap-2">
-                <p>
-                  <span class="text-gray-140">1.</span> One Winners Takes All
-                </p>
-                <p>
-                  <span class="text-gray-140">2.</span> More Pledged Tokens = Better Odds
-                </p>
-                <p>
-                  <span class="text-gray-140">3.</span> New Round Every Week
-                </p>
-                <p>
-                  <span class="text-gray-140">4.</span> New Token to Pledge is Voted Every Week
-                </p>
-              </div>
+              <ol class="flex flex-col gap-1 list-decimal list-inside text-sm">
+                <li>
+                  <b>Weekly</b> prize fund distribution, <b>one winner takes all</b>.
+                </li>
+                <li>
+                  More $ pledged = <b>higher chance of winning</b>.
+                </li>
+                <li>
+                  At the end of the week <b>all positions expire</b>.
+                </li>
+                <li>
+                  Pledge <span class="text-orange">$BURN</span> or <b>another token</b>.
+                </li>
+                <li>
+                  Only pledging <span class="text-orange">$BURN</span> <b>gives voting power</b>.
+                </li>
+                <li>
+                  Voting power is used to select next week's <b>another token</b>.
+                </li>
+                <li>
+                  All current week's Bonfire participants <b>are eligible</b> for next week's airdrops.
+                </li>
+              </ol>
             </div>
           </Bento>
         </div>
-        <div class="grid grid-cols-1">
-          <Bento id={3}>
-            <Timer {...getTimeUntilNextSunday15UTC()} class="text-6xl" descriptionClass="text-2xl" />
+
+        <div class="grid grid-cols-2 gap-6">
+          <Bento class="flex-col" id={3}>
+            <Timer {...getTimeUntilNextSunday15UTC()} class="text-2xl" descriptionClass="text-xl" />
             <p class="text-gray-140">Before the winner is selected</p>
+          </Bento>
+          <Bento class="flex-col" id={4}>
+            <Timer {...getTimeUntilNextSunday15UTC(12)} class="text-2xl" descriptionClass="text-xl" />
+            <p class="text-orange">Until not eligible for next week airdrops</p>
           </Bento>
         </div>
       </div>
+
+      <div class=""></div>
 
       <div class="flex flex-col gap-4">
         <p class="text-white font-semibold text-4xl flex gap-4 items-center">Current Round Participants</p>
@@ -221,8 +358,21 @@ export function BonfirePage() {
               </For>
             </Show>
           </div>
+
+          <div class="grid px-2 grid-cols-4 sm:grid-cols-5 items-center gap-3 text-md font-semibold text-gray-190">
+            <p class="col-span-1 text-right">Average</p>
+            <p class="col-span-1 text-right font-semibold">${avgShareWorth().toDynamic().toDecimals(0).toString()}</p>
+            <p class="col-span-2 text-right">Total</p>
+            <p class="col-span-1 text-right font-semibold">${totalShareWorth().toDynamic().toDecimals(0).toString()}</p>
+          </div>
         </div>
       </div>
+
+      <Show when={pledgeModalOpen() && pledgingToken()}>
+        <Modal title={modalTitle()} onClose={handlePledgeModalClose}>
+          <PledgeForm onPledge={handlePledge} tokenCanId={pledgingToken()!} />
+        </Modal>
+      </Show>
     </Page>
   );
 }

@@ -13,7 +13,8 @@ use super::{
         ClaimRewardICPRequest, PledgeRequest, PledgeResponse, VoteTokenXRequest, VoteTokenXResponse,
     },
     types::{
-        FurnaceInfo, FurnaceWinner, FurnaceWinnerHistoryEntry, RaffleRoundInfo, TokenX, TokenXVote,
+        DistributionTrigger, DistributionTriggerKind, FurnaceInfo, FurnaceWinner,
+        FurnaceWinnerHistoryEntry, RaffleRoundInfo, TokenX, TokenXVote,
     },
 };
 
@@ -34,6 +35,8 @@ pub struct FurnaceState {
     pub dispenser_wasm: Cell<Vec<u8>, Memory>,
 
     pub total_burned_tokens: StableBTreeMap<Principal, EDs, Memory>,
+
+    pub distribution_triggers: StableBTreeMap<u64, DistributionTrigger, Memory>,
 }
 
 impl FurnaceState {
@@ -241,9 +244,11 @@ impl FurnaceState {
         let usd_value = if req.token_can_id == info.cur_token_x.can_id {
             self.get_usd_value(&req.token_can_id, req.qty, info.cur_token_x.decimals)
         } else {
-            let usd_value = self.get_usd_value(&ENV_VARS.burn_token_canister_id, req.qty, 8)
-                * E8s::from(9500_0000u64);
+            self.get_usd_value(&ENV_VARS.burn_token_canister_id, req.qty, 8)
+                * E8s::from(9500_0000u64)
+        };
 
+        if req.token_can_id == ENV_VARS.burn_token_canister_id {
             info.note_pledged_burn_usd(&usd_value);
 
             let prev_burn_usd_value = self
@@ -255,9 +260,7 @@ impl FurnaceState {
 
             self.cur_round_burn_positions
                 .insert(req.pid, (prev_burn_usd_value + &usd_value).to_dynamic());
-
-            usd_value
-        };
+        }
 
         info.note_pledged_usd(&usd_value);
 
@@ -306,7 +309,6 @@ impl FurnaceState {
             random_numbers,
             winners: Vec::new(),
             winner_selection_cursor: None,
-            elimination_cursor: None,
             from: E8s::zero(),
         };
 
@@ -397,6 +399,73 @@ impl FurnaceState {
         self.set_raffle_round_info(raffle_round_info);
 
         !is_over
+    }
+
+    pub fn process_triggers_batch(
+        &mut self,
+        batch_size: usize,
+        trigger_kind: DistributionTriggerKind,
+    ) -> (Option<Vec<DistributionTrigger>>, bool) {
+        if self.distribution_triggers.is_empty() {
+            return (None, false);
+        }
+
+        let mut info = self.get_furnace_info();
+
+        let mut iter = if let Some(cursor) = info.distribution_trigger_cursor {
+            self.distribution_triggers.range(cursor..)
+        } else {
+            self.distribution_triggers.iter()
+        };
+
+        let mut ids_to_remove = Vec::new();
+        let mut i = 0;
+
+        let should_reschedule = loop {
+            let entry = iter.next();
+            if entry.is_none() {
+                break false;
+            }
+
+            let (id, trigger) = entry.unwrap();
+
+            info.distribution_trigger_cursor = Some(id);
+
+            match trigger_kind {
+                DistributionTriggerKind::TokenXVotingWinner(expected_can_id) => {
+                    match trigger.kind {
+                        DistributionTriggerKind::TokenXVotingWinner(actual_can_id) => {
+                            if expected_can_id == actual_can_id {
+                                ids_to_remove.push(id);
+                            }
+                        }
+                    }
+                }
+            }
+
+            i += 1;
+            if i == batch_size {
+                break true;
+            }
+        };
+
+        if !should_reschedule {
+            info.distribution_trigger_cursor = None;
+        }
+
+        if ids_to_remove.is_empty() {
+            return (None, should_reschedule);
+        }
+
+        (
+            Some(
+                ids_to_remove
+                    .into_iter()
+                    .map(|id| self.distribution_triggers.remove(&id).unwrap())
+                    .collect(),
+            ),
+            should_reschedule,
+        )
     }
 
     pub fn get_usd_value(&self, can_id: &Principal, qty: Nat, decimals: u8) -> E8s {

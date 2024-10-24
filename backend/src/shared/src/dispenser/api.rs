@@ -26,6 +26,10 @@ pub struct CreateDistributionRequest {
     pub name: String,
     #[garde(skip)]
     pub scheme: DistributionScheme,
+    #[garde(skip)]
+    pub hidden: bool,
+    #[garde(skip)]
+    pub distribute_to_bonfire: bool,
 }
 
 impl Guard<DispenserState> for CreateDistributionRequest {

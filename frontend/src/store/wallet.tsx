@@ -2,11 +2,12 @@ import { Account } from "@dfinity/ledger-icp";
 import { Principal } from "@dfinity/principal";
 import { err, ErrorCode, logInfo } from "@utils/error";
 import { Fetcher, IChildren, TTimestamp } from "@utils/types";
-import { Accessor, createContext, createEffect, on, onMount, useContext } from "solid-js";
+import { Accessor, createContext, createEffect, createMemo, on, onMount, useContext } from "solid-js";
 import { useAuth } from "./auth";
 import { DEFAULT_TOKENS, useTokens } from "./tokens";
 import { IcrcLedgerCanister } from "@dfinity/ledger-icrc";
 import { newBurnerActor, newFurnaceActor, optUnwrap } from "@utils/backend";
+import { createLocalStorageSignal } from "@utils/common";
 
 export interface IWalletStoreContext {
   pid: Accessor<Principal | undefined>;
@@ -22,6 +23,10 @@ export interface IWalletStoreContext {
   poolBalance: (tokenCanId: Principal) => bigint | undefined;
   fetchPoolBalance: (tokenCanId: Principal) => Promise<void>;
 
+  savedTokens: Accessor<Principal[]>;
+  addSavedToken: (tokenCanId: Principal) => void;
+  removeSavedToken: (tokenCanId: Principal) => void;
+
   transfer: (tokenCanId: Principal, to: Account, qty: bigint) => Promise<bigint>;
 
   claimPoolBurnReward: () => Promise<bigint>;
@@ -32,6 +37,9 @@ export interface IWalletStoreContext {
 
   moveToBonfireAccount: (tokenCanId: Principal, qty: bigint) => Promise<bigint>;
   withdrawFromBonfireAccount: (tokenCanId: Principal, qty: bigint) => Promise<bigint>;
+
+  isWalletExpanded: Accessor<boolean | undefined>;
+  setWalletExpanded: (val: boolean) => void;
 }
 
 const WalletContext = createContext<IWalletStoreContext>();
@@ -47,8 +55,49 @@ export function useWallet(): IWalletStoreContext {
 }
 
 export function WalletStore(props: IChildren) {
-  const { identity, isAuthorized, assertAuthorized, agent, disable, enable } = useAuth();
-  const { subaccounts, fetchSubaccountOf, fetchBalanceOf, balanceOf } = useTokens();
+  const { identity, isReadyToFetch, isAuthorized, assertAuthorized, agent, disable, enable } = useAuth();
+  const { subaccounts, fetchSubaccountOf, fetchBalanceOf, balanceOf, fetchMetadata } = useTokens();
+
+  const [savedTokens, setSavedTokens] = createLocalStorageSignal<string[]>("msq-burn-saved-tokens");
+  const [isWalletExpanded, setWalletExpanded] = createLocalStorageSignal<boolean>("msq-burn-wallet-expanded");
+
+  createEffect(() => {
+    if (isReadyToFetch()) {
+      for (let token of getSavedTokens()) {
+        fetchMetadata(token);
+      }
+    }
+  });
+
+  createEffect(
+    on(savedTokens, (tokens) => {
+      if (!tokens || tokens.length === 0) {
+        setSavedTokens(Object.values(DEFAULT_TOKENS).map((it) => it.toText()));
+      }
+    })
+  );
+
+  const getSavedTokens: IWalletStoreContext["savedTokens"] = createMemo(() => {
+    return (savedTokens() ?? []).map((it) => Principal.fromText(it)) || Object.values(DEFAULT_TOKENS);
+  });
+
+  const addSavedToken: IWalletStoreContext["addSavedToken"] = (tokenCanId) => {
+    setSavedTokens((prev) => {
+      const s = new Set(prev);
+      s.add(tokenCanId.toText());
+
+      return [...s];
+    });
+  };
+
+  const removeSavedToken: IWalletStoreContext["removeSavedToken"] = (tokenCanId) => {
+    setSavedTokens((prev) => {
+      const s = new Set(prev);
+      s.delete(tokenCanId.toText());
+
+      return [...s];
+    });
+  };
 
   const pid: IWalletStoreContext["pid"] = () => {
     if (!isAuthorized()) return undefined;
@@ -66,7 +115,20 @@ export function WalletStore(props: IChildren) {
   createEffect(
     on(pid, (p) => {
       if (p) {
-        for (let token of Object.values(DEFAULT_TOKENS)) {
+        for (let token of getSavedTokens()) {
+          if (pidBalance(token) === undefined) {
+            fetchPidBalance(token);
+          }
+        }
+      }
+    })
+  );
+
+  createEffect(
+    on(getSavedTokens, (tokens) => {
+      const p = pid();
+      if (p) {
+        for (let token of tokens) {
           if (pidBalance(token) === undefined) {
             fetchPidBalance(token);
           }
@@ -307,6 +369,10 @@ export function WalletStore(props: IChildren) {
         poolBalance,
         fetchPoolBalance,
 
+        savedTokens: getSavedTokens,
+        addSavedToken,
+        removeSavedToken,
+
         transfer,
 
         claimPoolBurnReward,
@@ -317,6 +383,9 @@ export function WalletStore(props: IChildren) {
 
         moveToBonfireAccount,
         withdrawFromBonfireAccount,
+
+        isWalletExpanded,
+        setWalletExpanded,
       }}
     >
       {props.children}

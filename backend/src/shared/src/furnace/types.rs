@@ -6,7 +6,7 @@ use ic_stable_structures::{storable::Bound, Storable};
 use serde::Deserialize;
 use sha2::Digest;
 
-use crate::{burner::types::TimestampNs, ENV_VARS, ONE_WEEK_NS};
+use crate::{burner::types::TimestampNs, dispenser::types::DistributionId, ENV_VARS, ONE_WEEK_NS};
 
 pub const DEFAULT_ROUND_DELAY_NS: u64 = ONE_WEEK_NS;
 pub const UPDATE_FURNACE_SEED_DOMAIN: &[u8] = b"msq-burn-furnace-update-seed";
@@ -41,8 +41,12 @@ pub struct FurnaceInfo {
     pub total_pledged_usd: E8s,
     pub winner_icp_threshold: E8s,
 
+    pub distribution_trigger_id_gen: u64,
+    pub distribution_trigger_cursor: Option<u64>,
+
     pub is_looking_for_winners: bool,
     pub is_on_maintenance: bool,
+
     pub dev_pid: Option<Principal>,
 }
 
@@ -72,6 +76,13 @@ impl FurnaceInfo {
         self.prev_round_timestamp = now;
         self.winner_icp_threshold = E8s::from(DEFAULT_WINNER_ICP_THRESHOLD);
         self.dev_pid = Some(dev_pid);
+    }
+
+    pub fn generate_distribution_trigger_id(&mut self) -> u64 {
+        let id = self.distribution_trigger_id_gen;
+        self.distribution_trigger_id_gen += 1;
+
+        id
     }
 
     pub fn to_pub(&self) -> FurnaceInfoPub {
@@ -347,7 +358,6 @@ pub struct RaffleRoundInfo {
     pub random_numbers: Vec<E8s>,
     pub winners: Vec<(Principal, E8s)>,
     pub winner_selection_cursor: Option<Principal>,
-    pub elimination_cursor: Option<Principal>,
     pub from: E8s,
 }
 
@@ -402,6 +412,30 @@ pub struct TokenXVote {
 }
 
 impl Storable for TokenXVote {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        std::borrow::Cow::Owned(encode_one(self).expect("Unable to encode"))
+    }
+
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        decode_one(&bytes).expect("Unable to decode")
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+#[derive(CandidType, Deserialize, Clone)]
+pub struct DistributionTrigger {
+    pub dispenser_token_can_id: Principal,
+    pub distribution_id: DistributionId,
+    pub kind: DistributionTriggerKind,
+}
+
+#[derive(CandidType, Deserialize, Clone)]
+pub enum DistributionTriggerKind {
+    TokenXVotingWinner(Principal),
+}
+
+impl Storable for DistributionTrigger {
     fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
         std::borrow::Cow::Owned(encode_one(self).expect("Unable to encode"))
     }

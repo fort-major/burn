@@ -11,13 +11,15 @@ use ic_ledger_types::Subaccount;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use shared::{
     burner::types::TCycles,
+    dispenser::{client::DispenserClient, types::DistributionStartCondition},
     furnace::{
         api::{
             AddSupportedTokenRequest, AddSupportedTokenResponse, ClaimRewardICPRequest,
-            ClaimRewardICPResponse, DeployDispenserRequest, DeployDispenserResponse,
+            ClaimRewardICPResponse, CreateDistributionTriggerRequest,
+            CreateDistributionTriggerResponse, DeployDispenserRequest, DeployDispenserResponse,
             GetCurRoundPositionsRequest, GetCurRoundPositionsResponse, GetWinnersRequest,
-            GetWinnersResponse, PledgeRequest, PledgeResponse, RemoveSupportedTokenRequest,
-            RemoveSupportedTokenResponse, SetMaintenanceStatusRequest,
+            GetWinnersResponse, PledgeRequest, PledgeResponse, Position,
+            RemoveSupportedTokenRequest, RemoveSupportedTokenResponse, SetMaintenanceStatusRequest,
             SetMaintenanceStatusResponse, VoteTokenXRequest, VoteTokenXResponse, WithdrawRequest,
             WithdrawResponse,
         },
@@ -269,39 +271,18 @@ fn get_cur_round_positions(mut req: GetCurRoundPositionsRequest) -> GetCurRoundP
                 break;
             }
 
-            positions.push(entry.unwrap());
-        }
+            let (pid, usd) = entry.unwrap();
 
-        GetCurRoundPositionsResponse { positions }
-    })
-}
+            let vp = s
+                .cur_round_burn_positions
+                .get(&pid)
+                .unwrap_or_default()
+                .to_decimals(8)
+                .to_const::<8>();
 
-#[query]
-fn get_cur_round_burn_positions(
-    mut req: GetCurRoundPositionsRequest,
-) -> GetCurRoundPositionsResponse {
-    STATE.with_borrow(|s| {
-        req.validate_and_escape(s, caller(), time())
-            .expect("Invalid request");
+            let position = Position { pid, usd, vp };
 
-        let mut iter = if let Some(skip) = req.skip {
-            let mut iter = s.cur_round_burn_positions.range(skip..);
-            iter.next();
-
-            iter
-        } else {
-            s.cur_round_burn_positions.iter()
-        };
-
-        let mut positions = Vec::new();
-
-        for _ in 0..req.take {
-            let entry = iter.next().map(|(p, e)| (p, e.to_const()));
-            if entry.is_none() {
-                break;
-            }
-
-            positions.push(entry.unwrap());
+            positions.push(position);
         }
 
         GetCurRoundPositionsResponse { positions }
@@ -360,6 +341,49 @@ fn update_dispenser_wasm(wasm: Vec<u8>) {
 
         s.set_dispenser_wasm(wasm);
     });
+}
+
+#[update]
+async fn create_distribution_trigger(
+    mut req: CreateDistributionTriggerRequest,
+) -> CreateDistributionTriggerResponse {
+    let dispenser_id = STATE.with_borrow(|s| {
+        req.validate_and_escape(s, caller(), time())
+            .expect("Invalid request");
+
+        s.dispenser_of(&req.trigger.dispenser_token_can_id)
+            .unwrap()
+            .unwrap()
+    });
+
+    let dispenser = DispenserClient(dispenser_id);
+    let distribution = dispenser
+        .get_distribution(req.trigger.distribution_id)
+        .await
+        .expect("Unable to fetch distribution")
+        .0
+        .expect("Distribution not found");
+
+    if distribution.owner != caller() {
+        panic!("Access denied");
+    }
+
+    if !matches!(
+        distribution.start_condition,
+        DistributionStartCondition::AtFurnaceTrigger
+    ) {
+        panic!("The distribution has an invalid start condition");
+    }
+
+    STATE.with_borrow_mut(|s| {
+        let mut info = s.get_furnace_info();
+        let id = info.generate_distribution_trigger_id();
+        s.set_furnace_info(info);
+
+        s.distribution_triggers.insert(id, req.trigger);
+    });
+
+    CreateDistributionTriggerResponse {}
 }
 
 #[update]
@@ -423,16 +447,27 @@ fn init_hook() {
         }
     });
 
-    // set_deploy_dispenser_timer(ENV_VARS.burn_token_canister_id);
-    // set_raffle_timer();
+    set_raffle_timer();
 }
 
 #[post_upgrade]
 fn post_upgrade_hook() {
     set_fetch_token_prices_timer();
 
-    // set_deploy_dispenser_timer(ENV_VARS.burn_token_canister_id);
-    // set_raffle_timer();
+    // TODO: remove after update
+    STATE.with_borrow_mut(|s| {
+        let mut info = s.get_furnace_info();
+
+        for (pid, burn_usd) in s.cur_round_positions.iter() {
+            info.note_pledged_burn_usd(&burn_usd.clone().to_const());
+
+            s.cur_round_burn_positions.insert(pid, burn_usd);
+        }
+
+        s.set_furnace_info(info);
+    });
+
+    set_raffle_timer();
 }
 
 export_candid!();

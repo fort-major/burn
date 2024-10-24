@@ -15,6 +15,7 @@ export interface IQtyInputProps {
   symbol: string;
   validations?: TQtyInputValidation[];
   disabled?: boolean;
+  placeholder?: string;
 }
 
 export function QtyInput(props: IQtyInputProps) {
@@ -67,11 +68,11 @@ export function QtyInput(props: IQtyInputProps) {
 
   return (
     <div class="flex flex-col gap-1">
-      <div class="flex flex-col gap-1 min-w-52 bg-black border-b-[1px] border-gray-140">
+      <div class="relative flex flex-col gap-1 min-w-52 bg-black border-b-[1px] border-gray-140">
         <div class="flex items-center justify-between p-2 gap-1">
           <input
-            class="font-primary italic text-md font-medium leading-6 text-white bg-black focus:outline-none flex-grow"
-            placeholder="Amount..."
+            class="font-primary text-md placeholder-gray-140 font-medium leading-6 text-white bg-black focus:outline-none flex-grow"
+            placeholder={props.placeholder ? props.placeholder : max() ? `Max is ${max()!.toString()}` : "Amount..."}
             type="text"
             value={props.value.unwrap().toString()}
             onChange={handleChange}
@@ -83,7 +84,7 @@ export function QtyInput(props: IQtyInputProps) {
       </div>
       <Show when={max()}>
         <div
-          class="flex flex-col items-end text-xs text-gray-140 underline italic cursor-pointer px-2"
+          class="flex flex-col items-end self-end text-xs text-gray-140 underline italic cursor-pointer px-2"
           onClick={handleMaxClick}
         >
           max

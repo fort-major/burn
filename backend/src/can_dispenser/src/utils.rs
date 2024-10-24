@@ -10,6 +10,7 @@ use ic_cdk::{
     caller, id, spawn,
 };
 use ic_cdk_timers::set_timer;
+use ic_e8s::d::EDs;
 use ic_ledger_types::{
     transfer, AccountBalanceArgs, AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs,
 };
@@ -29,10 +30,13 @@ use shared::{
         state::DispenserState,
         types::{
             CurrentDistributionInfo, DispenserInfo, DISPENSER_DEFAULT_TICK_DELAY_NS,
-            DISPENSER_DISTRIBUTION_SUBACCOUNT, DISPENSER_ICP_FEE_E8S, DISPENSER_ICP_FEE_SUBACCOUNT,
+            DISPENSER_DEV_FEE_SUBACCOUNT, DISPENSER_DISTRIBUTION_SUBACCOUNT, DISPENSER_ICP_FEE_E8S,
+            DISPENSER_ICP_FEE_SUBACCOUNT,
         },
     },
+    furnace::{api::GetCurRoundPositionsRequest, client::FurnaceClient},
     icrc1::ICRC1CanisterClient,
+    utils::duration_until_next_sunday_12_00,
     ENV_VARS, ICP_FEE, MEMO_TOP_UP_CANISTER, ONE_DAY_NS, ONE_HOUR_NS, ONE_MINUTE_NS,
 };
 
@@ -48,28 +52,31 @@ thread_local! {
             kamikaze_pool_members: StableBTreeMap::init(
                 MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(1))),
             ),
-
-            unclaimed_tokens: StableBTreeMap::init(
+            bonfire_pool_members: StableBTreeMap::init(
                 MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(2))),
             ),
 
-            scheduled_distributions: StableBTreeMap::init(
+            unclaimed_tokens: StableBTreeMap::init(
                 MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(3))),
             ),
-            active_distributions: StableBTreeMap::init(
+
+            scheduled_distributions: StableBTreeMap::init(
                 MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(4))),
             ),
-            past_distributions: StableBTreeMap::init(
+            active_distributions: StableBTreeMap::init(
                 MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(5))),
+            ),
+            past_distributions: StableBTreeMap::init(
+                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(6))),
             ),
 
             current_distribution_info: Cell::init(
-                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(6))),
+                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(7))),
                 CurrentDistributionInfo::default()
             ).expect("Unable to create cur distribution info cell"),
 
             dispenser_info: Cell::init(
-                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(7))),
+                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(8))),
                 DispenserInfo::default()
             ).expect("Unable to create dispenser info cell"),
         }
@@ -207,23 +214,23 @@ fn dispense_to_kamikaze_pool_members() {
 async fn update_common_pool_members() {
     let client = BurnerClient(ENV_VARS.burner_canister_id);
 
+    let take = 100;
     let mut start = None;
 
     loop {
-        let call_result = client
-            .get_burners(GetBurnersRequest { start, take: 200 })
-            .await;
+        let call_result = client.get_burners(GetBurnersRequest { start, take }).await;
 
         if let Ok((response,)) = call_result {
             let should_stop = STATE.with_borrow_mut(|s| {
-                let should_stop = response.entries.len() < 200;
+                let should_stop = response.entries.len() < take as usize;
 
                 let mut total_shares = TCycles::zero();
 
                 for entry in response.entries {
                     total_shares += &entry.share;
 
-                    s.common_pool_members.insert(entry.pid, entry.share);
+                    s.common_pool_members
+                        .insert(entry.pid, entry.share.to_dynamic());
 
                     start = Some(entry.pid);
                 }
@@ -245,23 +252,25 @@ async fn update_common_pool_members() {
 async fn update_kamikaze_pool_members() {
     let client = BurnerClient(ENV_VARS.burner_canister_id);
 
+    let take = 100;
     let mut start = None;
 
     loop {
         let call_result = client
-            .get_kamikazes(GetKamikazesRequest { start, take: 200 })
+            .get_kamikazes(GetKamikazesRequest { start, take })
             .await;
 
         if let Ok((response,)) = call_result {
             let should_stop = STATE.with_borrow_mut(|s| {
-                let should_stop = response.entries.len() < 200;
+                let should_stop = response.entries.len() < take as usize;
 
                 let mut total_shares = TCycles::zero();
 
                 for entry in response.entries {
                     total_shares += &entry.share;
 
-                    s.kamikaze_pool_members.insert(entry.pid, entry.share);
+                    s.kamikaze_pool_members
+                        .insert(entry.pid, entry.share.to_dynamic());
 
                     start = Some(entry.pid);
                 }
@@ -278,6 +287,57 @@ async fn update_kamikaze_pool_members() {
             }
         }
     }
+}
+
+pub fn set_update_bonfire_pool_members_timer() {
+    set_timer(Duration::from_nanos(0), update_bonfire_pool_members);
+}
+
+fn update_bonfire_pool_members() {
+    spawn(async {
+        let client = FurnaceClient(ENV_VARS.burner_canister_id);
+
+        let take = 100;
+        let mut skip = None;
+
+        loop {
+            let call_result = client
+                .get_cur_round_positions(GetCurRoundPositionsRequest { skip, take })
+                .await;
+
+            if let Ok((response,)) = call_result {
+                let should_stop = STATE.with_borrow_mut(|s| {
+                    let should_stop = response.positions.len() < take as usize;
+
+                    let mut total_shares = EDs::zero(12);
+
+                    for positions in response.positions {
+                        let share = positions.usd.to_dynamic().to_decimals(12);
+                        total_shares += &share;
+
+                        s.kamikaze_pool_members.insert(positions.pid, share);
+
+                        skip = Some(positions.pid);
+                    }
+
+                    let mut info = s.get_dispenser_info();
+                    info.total_kamikaze_pool_members_weight += total_shares.to_const();
+                    s.set_dispenser_info(info);
+
+                    should_stop
+                });
+
+                if should_stop {
+                    break;
+                }
+            }
+        }
+    });
+
+    set_timer(
+        duration_until_next_sunday_12_00(time()),
+        update_bonfire_pool_members,
+    );
 }
 
 pub async fn charge_caller_distribution_creation_fee_icp() {
@@ -322,6 +382,33 @@ pub async fn charge_caller_tokens(token_can_id: Principal, token_fee: Nat, qty: 
         .expect("Failed to collect dispensed tokens")
         .0
         .expect("Failed to collect dispensed tokens");
+}
+
+pub async fn charge_dev_fee(token_can_id: Principal, token_fee: Nat, qty: Nat) -> Nat {
+    let caller_subaccount = Subaccount::from(caller()).0;
+    let dev_fee_account = Account {
+        owner: id(),
+        subaccount: Some(DISPENSER_DEV_FEE_SUBACCOUNT),
+    };
+
+    let dev_fee = qty.clone() / Nat::from(100u64);
+
+    let token = ICRC1CanisterClient::new(token_can_id);
+    token
+        .icrc1_transfer(TransferArg {
+            from_subaccount: Some(caller_subaccount),
+            to: dev_fee_account,
+            amount: dev_fee.clone() - token_fee.clone(),
+            fee: Some(token_fee),
+            created_at_time: None,
+            memo: None,
+        })
+        .await
+        .expect("Failed to collect dev fee")
+        .0
+        .expect("Failed to collect dev fee");
+
+    qty - dev_fee
 }
 
 pub async fn claim_caller_tokens(

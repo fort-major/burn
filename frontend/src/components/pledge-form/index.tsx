@@ -21,7 +21,7 @@ export function PledgeForm(props: IPledgeFormProps) {
 
   const meta = () => metadata[props.tokenCanId.toText()];
 
-  const [pledgeQty, setPledgeQty] = createSignal<Result<EDs, string>>(Result.Err("0"));
+  const [pledgeQty, setPledgeQty] = createSignal<Result<EDs, string>>(Result.Err(""));
 
   const canPledge = () => {
     return meta() && pidBalance(props.tokenCanId) && pledgeQty().isOk();
