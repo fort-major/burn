@@ -42,6 +42,8 @@ export function TokenVotingOption(props: ITokenVotingOptionProps) {
     const i = info();
     if (!i) return E8s.zero();
 
+    if (i.curRoundPledgedBurnUsd.isZero()) return E8s.zero();
+
     return v.div(i.curRoundPledgedBurnUsd);
   };
 

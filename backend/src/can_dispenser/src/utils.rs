@@ -7,7 +7,7 @@ use ic_cdk::{
         management_canister::main::raw_rand,
         time,
     },
-    caller, id, spawn,
+    caller, id, print, spawn,
 };
 use ic_cdk_timers::set_timer;
 use ic_e8s::d::EDs;
@@ -116,7 +116,10 @@ fn init_canister() {
 }
 
 pub fn set_tick_timer() {
-    set_timer(Duration::from_nanos(ONE_HOUR_NS), tick_start);
+    set_timer(
+        Duration::from_nanos(DISPENSER_DEFAULT_TICK_DELAY_NS),
+        tick_start,
+    );
 }
 
 fn tick_start() {
@@ -141,9 +144,13 @@ fn tick_start() {
         return;
     }
 
+    print(format!("Starting the tick"));
+
     spawn(async {
         update_common_pool_members().await;
         update_kamikaze_pool_members().await;
+
+        print(format!("Updated pool members"));
 
         set_timer(
             Duration::from_nanos(0),
@@ -153,6 +160,8 @@ fn tick_start() {
 }
 
 fn try_activate_scheduled_distributions() {
+    print(format!("Activate scheduled distributions"));
+
     let should_reschedule =
         STATE.with_borrow_mut(|s| s.activate_scheduled_distributions_batch(300));
 
@@ -171,19 +180,25 @@ fn find_next_active_distribution() {
     let found = STATE.with_borrow_mut(|s| s.find_next_active_distribution());
 
     if found {
+        print(format!("Found active distribution"));
         set_timer(Duration::from_nanos(0), dispense_to_common_pool_members);
     } else {
+        print(format!("No more active distributions"));
         set_timer(Duration::from_nanos(0), try_complete_active_distributions);
     }
 }
 
 fn try_complete_active_distributions() {
+    print(format!("Completing active distributions"));
+
     let should_reschedule = STATE.with_borrow_mut(|s| s.complete_active_distributions_batch(300));
 
     if should_reschedule {
         set_timer(Duration::from_nanos(0), try_complete_active_distributions);
         return;
     }
+
+    print(format!("Completing the tick"));
 
     STATE.with_borrow_mut(|s| s.complete_tick(time()));
 
@@ -192,6 +207,8 @@ fn try_complete_active_distributions() {
 }
 
 fn dispense_to_common_pool_members() {
+    print(format!("Dispensing to common pool members"));
+
     let should_reschedule = STATE.with_borrow_mut(|s| s.dispense_common_batch(300));
 
     if should_reschedule {
@@ -203,6 +220,8 @@ fn dispense_to_common_pool_members() {
 }
 
 fn dispense_to_kamikaze_pool_members() {
+    print(format!("Dispensing to kamikaze pool members"));
+
     let should_reschedule = STATE.with_borrow_mut(|s| s.dispense_kamikaze_batch(300));
 
     if should_reschedule {
@@ -214,6 +233,8 @@ fn dispense_to_kamikaze_pool_members() {
 }
 
 fn dispense_to_bonfire_pool_members() {
+    print(format!("Dispensing to bonfire pool members"));
+
     let should_reschedule = STATE.with_borrow_mut(|s| s.dispense_bonfire_batch(300));
 
     if should_reschedule {

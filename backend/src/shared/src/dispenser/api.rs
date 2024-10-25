@@ -171,7 +171,11 @@ impl Guard<DispenserState> for ClaimTokensRequest {
     ) -> Result<(), String> {
         self.validate(&()).map_err(|e| e.to_string())?;
 
-        let unclaimed_tokens = state.unclaimed_tokens.get(&caller).unwrap_or_default();
+        let unclaimed_tokens = state
+            .unclaimed_tokens
+            .get(&caller)
+            .unwrap_or_default()
+            .to_decimals(state.get_dispenser_info().token_decimals);
 
         if unclaimed_tokens < self.qty {
             return Err(String::from("Insufficiend funds"));

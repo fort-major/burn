@@ -7,12 +7,13 @@ use sha2::Digest;
 
 use crate::{
     burner::types::{TCycles, TimestampNs},
-    ONE_DAY_NS, ONE_HOUR_NS,
+    ONE_DAY_NS, ONE_HOUR_NS, ONE_MINUTE_NS,
 };
 
 pub type DistributionId = u64;
 
-pub const DISPENSER_DEFAULT_TICK_DELAY_NS: u64 = ONE_HOUR_NS;
+//pub const DISPENSER_DEFAULT_TICK_DELAY_NS: u64 = ONE_HOUR_NS;
+pub const DISPENSER_DEFAULT_TICK_DELAY_NS: u64 = ONE_MINUTE_NS;
 pub const UPDATE_DISPENSER_SEED_DOMAIN: &[u8] = b"msq-burn-dispenser-update-seed";
 pub const DISPENSER_DISTRIBUTION_SUBACCOUNT: [u8; 32] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,

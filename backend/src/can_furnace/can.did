@@ -81,6 +81,7 @@ service : () -> {
       record {},
     );
   deploy_dispenser : (DeployDispenserRequest) -> (record {});
+  get_account_ids : () -> (vec record { text; record { blob; Account } }) query;
   get_cur_round_positions : (GetCurRoundPositionsRequest) -> (
       GetCurRoundPositionsResponse,
     ) query;
@@ -100,8 +101,10 @@ service : () -> {
   receive_cycles : () -> ();
   remove_supported_token : (RemoveSupportedTokenRequest) -> (record {});
   set_maintenance_status : (SetMaintenanceStatusRequest) -> (record {});
+  start_raffle : () -> ();
   subaccount_of : (principal) -> (blob) query;
   update_dispenser_wasm : (blob) -> ();
+  upgrade_dispensers : () -> ();
   vote_token_x : (VoteTokenXRequest) -> (record {});
   withdraw : (WithdrawRequest) -> (WithdrawResponse);
 }

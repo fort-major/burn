@@ -125,10 +125,12 @@ pub fn set_raffle_timer() {
     set_timer(duration, start_the_raffle);
 }
 
-fn start_the_raffle() {
+pub fn start_the_raffle() {
     STATE.with_borrow_mut(|s| s.set_looking_for_winners(true));
 
     set_timer(Duration::from_nanos(ONE_MINUTE_NS), handle_prize_fund_icp);
+
+    print("Starting the raffle");
 }
 
 fn handle_prize_fund_icp() {
@@ -145,12 +147,16 @@ fn handle_prize_fund_icp() {
             let balance_e8s = E8s::new(balance.0);
             let prize_fund_cur_round = balance_e8s * E8s::from(8500_0000u64); // reserve 15% for the next round to keep the fund accumulating
 
+            print("Moving the prize fund");
+
             let prize_fund_moved = move_prize_fund(icp, prize_fund_cur_round.clone()).await;
 
             if prize_fund_moved {
                 STATE.with_borrow_mut(|s| {
                     s.prepare_raffle(prize_fund_cur_round - E8s::from(10_000u64))
                 });
+
+                print("Raffle prepared");
 
                 set_timer(Duration::from_nanos(0), redistirbute_pledged_tokens);
                 set_timer(Duration::from_nanos(0), find_winners);
@@ -229,7 +235,7 @@ async fn redistribute_pledged_token(token_x_info: TokenX) {
                 qty: dispenser_qty - token_x_info.fee.clone(),
                 start_condition: DistributionStartCondition::AtTickDelay(0),
                 duration_ticks: 168, // ~1 week
-                name: format!("Bonfire Distribution #{}", time()),
+                name: format!("Bonfire Distribution #{}", time() / 1_000_000_000),
                 scheme: DistributionScheme::Linear,
                 hidden: false,
                 distribute_to_bonfire: false,
@@ -262,11 +268,18 @@ async fn redistribute_pledged_token(token_x_info: TokenX) {
                 memo: None,
             })
             .await;
+
+        print(format!(
+            "Redistributed pledged token {}",
+            token_x_info.can_id
+        ));
     }
 }
 
 // one position can win more than one prize in case there are less positions, than prizes
 pub fn find_winners() {
+    print(format!("Looking for winners"));
+
     let should_reschedule = STATE.with_borrow_mut(|s| s.find_winners_batch(300));
 
     if should_reschedule {
@@ -278,6 +291,8 @@ pub fn find_winners() {
 }
 
 pub fn select_next_token_x() {
+    print(format!("Selecting next token x"));
+
     let token_can_id = STATE.with_borrow_mut(|s| s.select_next_token_x());
 
     set_deploy_dispenser_timer(token_can_id);
@@ -285,6 +300,8 @@ pub fn select_next_token_x() {
 }
 
 pub fn process_next_token_x_triggers() {
+    print(format!("Processing triggers"));
+
     let (triggers_to_execute_opt, should_reschedule) = STATE.with_borrow_mut(|s| {
         let token_x_can_id = s.get_furnace_info().cur_token_x.can_id;
         let trigger_kind = DistributionTriggerKind::TokenXVotingWinner(token_x_can_id);
@@ -319,6 +336,8 @@ pub fn process_next_token_x_triggers() {
 }
 
 pub fn complete_raffle() {
+    print(format!("Completing the raffle"));
+
     STATE.with_borrow_mut(|s| {
         s.complete_raffle(time());
 

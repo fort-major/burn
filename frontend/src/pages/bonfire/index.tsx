@@ -344,12 +344,12 @@ export function BonfirePage() {
                   const i = info()!;
 
                   const poolSharePercent = position.usd
-                    .div(i.curRoundPledgedUsd || E8s.fromBigIntBase(1n))
+                    .div(i.curRoundPledgedUsd.isZero() ? E8s.fromBigIntBase(1n) : i.curRoundPledgedUsd)
                     .toPercent()
                     .toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 1 });
 
                   const vpPercent = position.vp
-                    .div(i.curRoundPledgedBurnUsd || E8s.fromBigIntBase(1n))
+                    .div(i.curRoundPledgedBurnUsd.isZero() ? E8s.fromBigIntBase(1n) : i.curRoundPledgedBurnUsd)
                     .toPercent()
                     .toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 1 });
 
@@ -376,12 +376,8 @@ export function BonfirePage() {
                       <p class="col-span-1 font-semibold text-gray-140 text-md text-right">
                         {position.usd.toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}
                       </p>
-                      <p class="col-span-1 font-semibold text-gray-140 text-md text-right">
-                        <Show when={i.curRoundPledgedBurnUsd.toBigIntRaw() > 0n}>{vpPercent}%</Show>
-                      </p>
-                      <p class="col-span-1 font-semibold text-gray-140 text-md text-right">
-                        <Show when={i.curRoundPledgedUsd.toBigIntRaw() > 0n}>{poolSharePercent}%</Show>
-                      </p>
+                      <p class="col-span-1 font-semibold text-gray-140 text-md text-right">{vpPercent}%</p>
+                      <p class="col-span-1 font-semibold text-gray-140 text-md text-right">{poolSharePercent}%</p>
                     </div>
                   );
                 }}

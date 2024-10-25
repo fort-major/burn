@@ -1,13 +1,20 @@
-use candid::{Nat, Principal};
+use std::collections::BTreeMap;
+
+use candid::{encode_args, Nat, Principal};
 use ic_cdk::{
     api::{
         call::{msg_cycles_accept128, msg_cycles_available128},
-        canister_balance128, time,
+        canister_balance128,
+        management_canister::main::{
+            install_code, start_canister, stop_canister, CanisterIdRecord, CanisterInstallMode,
+            InstallCodeArgument,
+        },
+        time,
     },
-    caller, export_candid, id, init, post_upgrade, query, update,
+    caller, export_candid, id, init, post_upgrade, print, query, update,
 };
 use ic_e8s::{c::E8s, d::EDs};
-use ic_ledger_types::Subaccount;
+use ic_ledger_types::{AccountIdentifier, Subaccount};
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use shared::{
     burner::types::TCycles,
@@ -24,8 +31,8 @@ use shared::{
             WithdrawResponse,
         },
         types::{
-            FurnaceInfoPub, TokenX, TokenXVote, FURNACE_ICP_PRIZE_DISTRIBUTION_SUBACCOUNT,
-            FURNACE_REDISTRIBUTION_SUBACCOUNT,
+            FurnaceInfoPub, TokenX, TokenXVote, FURNACE_DEV_FEE_SUBACCOUNT,
+            FURNACE_ICP_PRIZE_DISTRIBUTION_SUBACCOUNT, FURNACE_REDISTRIBUTION_SUBACCOUNT,
         },
     },
     icpswap::ICPSwapTokenInfo,
@@ -34,7 +41,7 @@ use shared::{
 };
 use utils::{
     deploy_dispenser_for, deposit_cycles, set_fetch_token_prices_timer,
-    set_init_canister_one_timer, STATE,
+    set_init_canister_one_timer, set_raffle_timer, start_the_raffle, STATE,
 };
 
 pub mod utils;
@@ -387,6 +394,58 @@ async fn create_distribution_trigger(
 }
 
 #[update]
+fn start_raffle() {
+    let info = STATE.with_borrow(|s| s.get_furnace_info());
+    if !info.is_dev(&caller()) {
+        panic!("Access denied");
+    }
+
+    start_the_raffle();
+}
+
+#[update]
+async fn upgrade_dispensers() {
+    let info = STATE.with_borrow(|s| s.get_furnace_info());
+    if !info.is_dev(&caller()) {
+        panic!("Access denied");
+    }
+
+    let dispensers: Vec<_> = STATE.with_borrow(|s| {
+        s.token_dispensers
+            .iter()
+            .filter_map(|(_, pid_opt)| pid_opt)
+            .collect()
+    });
+
+    let wasm = STATE.with_borrow(|s| s.dispenser_wasm.get().clone());
+
+    for dispenser in dispensers {
+        let res1 = stop_canister(CanisterIdRecord {
+            canister_id: dispenser,
+        })
+        .await;
+
+        let res2 = install_code(InstallCodeArgument {
+            mode: CanisterInstallMode::Upgrade(None),
+            wasm_module: wasm.clone(),
+            canister_id: dispenser,
+            arg: encode_args(()).unwrap(),
+        })
+        .await;
+
+        let res3 = start_canister(CanisterIdRecord {
+            canister_id: dispenser,
+        })
+        .await;
+
+        print(format!(
+            "Upgraded dispenser {}. Stop - {:?}, Install - {:?}, Start - {:?}",
+            dispenser, res1, res2, res3
+        ));
+    }
+}
+
+#[update]
 fn receive_cycles() {
     let avail_cycles = msg_cycles_available128();
     msg_cycles_accept128(avail_cycles);
@@ -419,6 +478,47 @@ fn get_cycles_balance() -> TCycles {
         .to_const()
 }
 
+#[query]
+fn get_account_ids() -> BTreeMap<String, (AccountIdentifier, Account)> {
+    let mut map = BTreeMap::new();
+
+    map.insert(
+        String::from("Dev Fee"),
+        (
+            AccountIdentifier::new(&id(), &Subaccount(FURNACE_DEV_FEE_SUBACCOUNT)),
+            Account {
+                owner: id(),
+                subaccount: Some(FURNACE_DEV_FEE_SUBACCOUNT),
+            },
+        ),
+    );
+    map.insert(
+        String::from("Redistribution"),
+        (
+            AccountIdentifier::new(&id(), &Subaccount(FURNACE_REDISTRIBUTION_SUBACCOUNT)),
+            Account {
+                owner: id(),
+                subaccount: Some(FURNACE_REDISTRIBUTION_SUBACCOUNT),
+            },
+        ),
+    );
+    map.insert(
+        String::from("ICP Prize Distribution"),
+        (
+            AccountIdentifier::new(
+                &id(),
+                &Subaccount(FURNACE_ICP_PRIZE_DISTRIBUTION_SUBACCOUNT),
+            ),
+            Account {
+                owner: id(),
+                subaccount: Some(FURNACE_ICP_PRIZE_DISTRIBUTION_SUBACCOUNT),
+            },
+        ),
+    );
+
+    map
+}
+
 #[init]
 fn init_hook() {
     set_init_canister_one_timer(caller());
@@ -447,14 +547,14 @@ fn init_hook() {
         }
     });
 
-    // set_raffle_timer();
+    set_raffle_timer();
 }
 
 #[post_upgrade]
 fn post_upgrade_hook() {
     set_fetch_token_prices_timer();
 
-    // set_raffle_timer();
+    set_raffle_timer();
 }
 
 export_candid!();

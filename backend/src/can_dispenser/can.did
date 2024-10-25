@@ -71,6 +71,7 @@ service : (InitArgs) -> {
       CancelDistributionRequest,
     );
   furnace_trigger_distribution : (CancelDistributionRequest) -> (record {});
+  get_account_ids : () -> (vec record { text; record { blob; Account } }) query;
   get_cycles_balance : () -> (nat) query;
   get_distribution : (nat64) -> (opt Distribution) query;
   get_distributions : (GetDistributionsRequest) -> (
@@ -81,7 +82,6 @@ service : (InitArgs) -> {
   receive_cycles : () -> ();
   subaccount_of : (principal) -> (blob) query;
   withdraw_canceled_funds : (WithdrawCanceledRequest) -> (ClaimTokensResponse);
-  withdraw_dev_fee : (Account, nat) -> ();
   withdraw_user_tokens : (WithdrawUserTokensRequest) -> (
       WithdrawUserTokensResponse,
     );

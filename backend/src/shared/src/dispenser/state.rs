@@ -52,13 +52,21 @@ impl DispenserState {
     }
 
     pub fn claim_tokens(&mut self, caller: Principal, qty: EDs) {
-        let prev_val = self.unclaimed_tokens.get(&caller).unwrap_or_default();
+        let prev_val = self
+            .unclaimed_tokens
+            .get(&caller)
+            .unwrap_or_default()
+            .to_decimals(self.get_dispenser_info().token_decimals);
 
         self.unclaimed_tokens.insert(caller, prev_val - qty);
     }
 
     pub fn revert_claim_tokens(&mut self, caller: Principal, qty: EDs) {
-        let prev_val = self.unclaimed_tokens.get(&caller).unwrap_or_default();
+        let prev_val = self
+            .unclaimed_tokens
+            .get(&caller)
+            .unwrap_or_default()
+            .to_decimals(self.get_dispenser_info().token_decimals);
 
         self.unclaimed_tokens.insert(caller, prev_val + qty);
     }
@@ -130,7 +138,11 @@ impl DispenserState {
             distribution_info.common_pool_cursor = Some(pid);
 
             if counter >= random_number {
-                let unclaimed_reward = self.unclaimed_tokens.get(&pid).unwrap_or_default();
+                let unclaimed_reward = self
+                    .unclaimed_tokens
+                    .get(&pid)
+                    .unwrap_or_default()
+                    .to_decimals(info.token_decimals);
 
                 let kamikaze_pool_reward = cur_tick_reward_opt.unwrap()
                     / EDs::new(BigUint::from(3333_3333u64), 8).to_decimals(info.token_decimals);
@@ -221,7 +233,11 @@ impl DispenserState {
                 .to_decimals(common_pool_reward.decimals)
                 * &common_pool_reward;
 
-            let unclaimed_reward = self.unclaimed_tokens.get(&pid).unwrap_or_default();
+            let unclaimed_reward = self
+                .unclaimed_tokens
+                .get(&pid)
+                .unwrap_or_default()
+                .to_decimals(info.token_decimals);
 
             self.unclaimed_tokens
                 .insert(pid, unclaimed_reward + &new_reward);
@@ -307,7 +323,11 @@ impl DispenserState {
                 .to_decimals(bonfire_pool_reward.decimals)
                 * &bonfire_pool_reward;
 
-            let unclaimed_reward = self.unclaimed_tokens.get(&pid).unwrap_or_default();
+            let unclaimed_reward = self
+                .unclaimed_tokens
+                .get(&pid)
+                .unwrap_or_default()
+                .to_decimals(info.token_decimals);
 
             self.unclaimed_tokens
                 .insert(pid, unclaimed_reward + &new_reward);

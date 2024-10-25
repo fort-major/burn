@@ -1,13 +1,15 @@
+use std::collections::BTreeMap;
+
 use candid::{Nat, Principal};
 use ic_cdk::{
     api::{
         call::{msg_cycles_accept128, msg_cycles_available128},
         canister_balance128, time,
     },
-    caller, export_candid, init, post_upgrade, query, update,
+    caller, export_candid, id, init, post_upgrade, query, update,
 };
 use ic_e8s::d::EDs;
-use ic_ledger_types::Subaccount;
+use ic_ledger_types::{AccountIdentifier, Subaccount};
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use shared::{
     burner::types::TCycles,
@@ -19,7 +21,10 @@ use shared::{
             GetDistributionsRequest, GetDistributionsResponse, InitArgs, WithdrawCanceledRequest,
             WithdrawCanceledResponse, WithdrawUserTokensRequest, WithdrawUserTokensResponse,
         },
-        types::{DispenserInfoPub, Distribution, DistributionId, DISPENSER_DEV_FEE_SUBACCOUNT},
+        types::{
+            DispenserInfoPub, Distribution, DistributionId, DISPENSER_DEV_FEE_SUBACCOUNT,
+            DISPENSER_DISTRIBUTION_SUBACCOUNT, DISPENSER_ICP_FEE_SUBACCOUNT,
+        },
     },
     icrc1::ICRC1CanisterClient,
     Guard, ENV_VARS, ICP_FEE,
@@ -149,7 +154,12 @@ fn get_distributions(req: GetDistributionsRequest) -> GetDistributionsResponse {
 
 #[query]
 fn get_unclaimed_tokens() -> EDs {
-    STATE.with_borrow(|s| s.unclaimed_tokens.get(&caller()).unwrap_or_default())
+    STATE.with_borrow(|s| {
+        s.unclaimed_tokens
+            .get(&caller())
+            .unwrap_or_default()
+            .to_decimals(s.get_dispenser_info().token_decimals)
+    })
 }
 
 #[update]
@@ -214,6 +224,44 @@ fn get_cycles_balance() -> TCycles {
 #[query]
 fn subaccount_of(pid: Principal) -> Subaccount {
     Subaccount::from(pid)
+}
+
+#[query]
+fn get_account_ids() -> BTreeMap<String, (AccountIdentifier, Account)> {
+    let mut map = BTreeMap::new();
+
+    map.insert(
+        String::from("Dev Fee"),
+        (
+            AccountIdentifier::new(&id(), &Subaccount(DISPENSER_DEV_FEE_SUBACCOUNT)),
+            Account {
+                owner: id(),
+                subaccount: Some(DISPENSER_DEV_FEE_SUBACCOUNT),
+            },
+        ),
+    );
+    map.insert(
+        String::from("Distribution"),
+        (
+            AccountIdentifier::new(&id(), &Subaccount(DISPENSER_DISTRIBUTION_SUBACCOUNT)),
+            Account {
+                owner: id(),
+                subaccount: Some(DISPENSER_DISTRIBUTION_SUBACCOUNT),
+            },
+        ),
+    );
+    map.insert(
+        String::from("ICP Fee"),
+        (
+            AccountIdentifier::new(&id(), &Subaccount(DISPENSER_ICP_FEE_SUBACCOUNT)),
+            Account {
+                owner: id(),
+                subaccount: Some(DISPENSER_ICP_FEE_SUBACCOUNT),
+            },
+        ),
+    );
+
+    map
 }
 
 #[init]

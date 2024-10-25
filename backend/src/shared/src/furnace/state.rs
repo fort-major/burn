@@ -72,7 +72,9 @@ impl FurnaceState {
         let prev = self
             .total_burned_tokens
             .get(&token_can_id)
-            .unwrap_or_default();
+            .unwrap_or_default()
+            .to_decimals(qty.decimals);
+
         self.total_burned_tokens.insert(token_can_id, prev + qty);
     }
 
@@ -344,7 +346,11 @@ impl FurnaceState {
         self.winners.insert(now, winner_history_entry);
 
         self.clear_raffle_round_info();
+
         self.cur_round_positions.clear_new();
+        self.cur_round_burn_positions.clear_new();
+        self.next_token_x_alternatives.clear_new();
+        self.next_token_x_votes.clear_new();
 
         furnace_info.complete_round(now);
         furnace_info.icp_won_total += raffle_round_info.prize_fund_icp;
