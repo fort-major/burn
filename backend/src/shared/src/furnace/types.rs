@@ -41,7 +41,7 @@ pub struct FurnaceInfo {
     pub total_pledged_usd: E8s,
     pub winner_icp_threshold: E8s,
 
-    pub distribution_trigger_id_gen: u64,
+    pub distribution_trigger_id_gen: Option<u64>,
     pub distribution_trigger_cursor: Option<u64>,
 
     pub is_looking_for_winners: bool,
@@ -79,8 +79,8 @@ impl FurnaceInfo {
     }
 
     pub fn generate_distribution_trigger_id(&mut self) -> u64 {
-        let id = self.distribution_trigger_id_gen;
-        self.distribution_trigger_id_gen += 1;
+        let id = self.distribution_trigger_id_gen.unwrap_or_default();
+        self.distribution_trigger_id_gen = Some(id + 1);
 
         id
     }

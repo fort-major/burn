@@ -33,8 +33,8 @@ use shared::{
     CanisterMode, Guard, ENV_VARS, ICP_FEE,
 };
 use utils::{
-    deploy_dispenser_for, deposit_cycles, set_deploy_dispenser_timer, set_fetch_token_prices_timer,
-    set_init_canister_one_timer, set_raffle_timer, STATE,
+    deploy_dispenser_for, deposit_cycles, set_fetch_token_prices_timer,
+    set_init_canister_one_timer, STATE,
 };
 
 pub mod utils;
@@ -154,7 +154,7 @@ async fn deploy_dispenser(mut req: DeployDispenserRequest) -> DeployDispenserRes
     });
 
     if !info.is_dev(&caller()) {
-        deposit_cycles(caller(), 9999_0000u64)
+        deposit_cycles(caller(), 9990_0000u64)
             .await
             .expect("Unable to collect the fee")
             .0
@@ -447,27 +447,14 @@ fn init_hook() {
         }
     });
 
-    set_raffle_timer();
+    // set_raffle_timer();
 }
 
 #[post_upgrade]
 fn post_upgrade_hook() {
     set_fetch_token_prices_timer();
 
-    // TODO: remove after update
-    STATE.with_borrow_mut(|s| {
-        let mut info = s.get_furnace_info();
-
-        for (pid, burn_usd) in s.cur_round_positions.iter() {
-            info.note_pledged_burn_usd(&burn_usd.clone().to_const());
-
-            s.cur_round_burn_positions.insert(pid, burn_usd);
-        }
-
-        s.set_furnace_info(info);
-    });
-
-    set_raffle_timer();
+    // set_raffle_timer();
 }
 
 export_candid!();

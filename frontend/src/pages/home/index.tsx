@@ -106,61 +106,28 @@ const AboutCols = (props: { children: JSX.Element[] }) => {
   );
 };
 
-const Stat = (props: { title: string; data?: string }) => (
-  <div
-    style={{ direction: "ltr" }}
-    class="flex flex-row items-center justify-between sm:items-start sm:justify-start sm:flex-col gap-5 pt-5 sm:pt-0 sm:pl-10 border-t sm:border-t-0 sm:border-l border-gray-120"
-  >
-    <h4 class="font-semibold text-xs sm:text-md leading-[150%] text-gray-150">{props.title}</h4>
-    <p class="font-semibold text-white text-right sm:text-left text-5xl sm:text-[80px] tracking-tight leading-[100%]">
-      {props.data ?? "Loading..."}
-    </p>
-  </div>
-);
-
 export const areWeOnMobile = () => window.innerWidth <= 640;
 
 export function HomePage() {
-  const { isReadyToFetch } = useAuth();
-  const { totals, poolMembers, fetchPoolMembers } = useBurner();
-
-  onMount(() => {
-    if (!isReadyToFetch()) return;
-    if (poolMembers().length !== 0) return;
-
-    fetchPoolMembers();
-  });
-
-  createEffect(
-    on(isReadyToFetch, (ready) => {
-      if (!ready) return;
-      if (poolMembers().length !== 0) return;
-
-      fetchPoolMembers();
-    })
-  );
-
-  const circulatingSupply = () => totals.data?.totalBurnTokenMinted;
-  const totalSupply = () => {
-    const c = circulatingSupply();
-    if (!c) return;
-
-    const nonMinted = poolMembers()
-      .map((it) => it.unclaimedReward)
-      .reduce((prev, cur) => prev.add(cur), E8s.zero());
-
-    return c.add(nonMinted);
-  };
-
   return (
     <div class="bg-black text-white relative flex flex-col gap-20 pb-32 sm:pb-10">
-      <div class="fixed bottom-5 right-5 z-10 flex sm:hidden gap-2">
+      <div class="fixed bottom-20 right-5 z-10 flex sm:hidden gap-2">
         <Btn
           icon={EIconKind.Twitter}
           linkTo="https://x.com/msqwallet"
           linkTarget="_blank"
           color={COLORS.white}
           iconSize={24}
+          innerClass="px-[8px] py-[8px]"
+          shadow="2px 2px 15px rgba(0, 0, 0, .25)"
+          iconColor={COLORS.black}
+        />
+        <Btn
+          icon={EIconKind.Telegram}
+          linkTo="https://t.me/fortmajoricp/788"
+          linkTarget="_blank"
+          color={COLORS.white}
+          iconSize={35}
           innerClass="px-[8px] py-[8px]"
           shadow="2px 2px 15px rgba(0, 0, 0, .25)"
           iconColor={COLORS.black}
@@ -189,9 +156,10 @@ export function HomePage() {
 
         <div class="relative flex flex-col gap-12 sm:pt-20 pb-40 pt-10 px-5 lg:px-20 lg:flex-row lg:gap-5 sm:items-center sm:justify-center bg-gradient-to-b from-50% from-black">
           <div class="flex flex-col lg:self-auto items-center justify-between sm:justify-center gap-14 sm:gap-10">
-            <h2 class="font-primary font-semibold text-4xl leading-9 lg:text-[80px] lg:leading-[80px] tracking-tight text-center max-w-6xl">
-              <span class="sm:text-nowrap">The Most Advanced</span> <span class="sm:text-nowrap">Memecoin Miner</span>{" "}
-              <span class="sm:text-nowrap">on the Internet Computer</span>
+            <h2 class="font-primary flex flex-col font-semibold text-4xl leading-9 lg:text-[80px] lg:leading-[80px] tracking-tight text-center max-w-6xl">
+              <span class="sm:text-nowrap">The Great Deflator</span>
+
+              <span class="sm:text-nowrap">of the IC Ecosystem</span>
             </h2>
 
             <div class="flex flex-col-reverse sm:flex-row gap-14 sm:gap-5 items-center">
@@ -202,6 +170,16 @@ export function HomePage() {
                   linkTarget="_blank"
                   color={COLORS.white}
                   iconSize={24}
+                  innerClass="px-[8px] py-[8px]"
+                  shadow="2px 2px 15px rgba(0, 0, 0, .25)"
+                  iconColor={COLORS.black}
+                />
+                <Btn
+                  icon={EIconKind.Telegram}
+                  linkTo="https://t.me/fortmajoricp/788"
+                  linkTarget="_blank"
+                  color={COLORS.white}
+                  iconSize={35}
                   innerClass="px-[8px] py-[8px]"
                   shadow="2px 2px 15px rgba(0, 0, 0, .25)"
                   iconColor={COLORS.black}
@@ -232,74 +210,33 @@ export function HomePage() {
         </div>
       </div>
 
-      <div class="flex flex-col gap-10 px-5 sm:my-28 lg:px-20">
-        <h3 class="font-primary font-semibold text-2xl">Stats</h3>
-        <Show when={totals.data}>
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-y-16">
-            <Stat
-              data={totals.data!.totalTcyclesBurned.toShortString({ belowOne: 4, belowThousand: 2, afterThousand: 0 })}
-              title="Total Burned TCycles"
-            />
-            <Stat
-              data={totals.data!.currentBurnTokenReward.toDynamic().toDecimals(4).toString()}
-              title="Current Block BURN Reward"
-            />
-            <Stat data={`${totals.data!.posRoundDelayNs / ONE_SEC_NS}s`} title="Block Time" />
-            <Stat data={totals.data!.currentPosRound.toString()} title="Current Block Index" />
-            <Show when={totals.data!.currentBurnTokenReward.gt(E8s.new(140000n))}>
-              <Stat
-                data={(5040n - (totals.data!.currentPosRound % 5040n)).toString() + " blocks"}
-                title={"Until Reward Halving"}
-              />
-            </Show>
-            <Stat
-              data={circulatingSupply()!.toDynamic().toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 1 })}
-              title="Circulating BURN Supply"
-            />
-            <Show when={totalSupply()}>
-              <Stat
-                data={totalSupply()!.toDynamic().toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 1 })}
-                title="Total BURN Supply"
-              />
-            </Show>
-            <Show when={totals.data!.totalVerifiedAccounts > 0}>
-              <Stat data={totals.data!.totalVerifiedAccounts.toString()} title="Verified Accounts" />
-            </Show>
-          </div>
-        </Show>
-      </div>
-
       <div class="flex flex-col gap-10 px-5 lg:px-20">
-        <h3 class="font-primary font-semibold text-2xl">How It Works</h3>
+        <h3 class="font-primary font-semibold text-2xl">About</h3>
         <AboutCols>
           <AboutCard
             class="bg-gray-120"
-            title="One Big Superpool"
-            desc="BURN is a fair miner - all pool members get a piece of 
-            reward from each minted block, proportional to their share. The more 
-            ICP you burn, the bigger your share!"
+            title="Crypto Don't Wear Out"
+            desc="Physical currency naturally degrades over time, helping regulate its supply. In contrast, digital assets, including cryptocurrencies, remain intact indefinitely, which can lead to inflation and token oversaturation."
           />
           <AboutCard
             class="bg-gray-110"
-            title="Green & Efficient"
-            desc="Unlike other similar projects, BURN doesn't waste IC's compute power, 
-            loading nodes with useless tasks. Instead, it uses special API, 
-            which allows it to burn ICP (cycles) much faster, without 
-            any negative impact on the network and the environment!"
+            title="Deflation Is Hard"
+            desc="Though many crypto projects attempt to limit inflation, motivating users to burn their tokens remains a significant hurdle. Without strong incentives, token holders often hesitate to reduce their holdings."
           />
           <AboutCard
             class="bg-gray-108"
-            title="Fuel Burns, You Know"
-            desc="Each block each pool member loses a little piece of their share. 
-            This enables a dynamic environment, where new people can join the fun 
-            even if they're really late."
+            title="MSQ.Burn Is a Deflator"
+            desc="MSQ.Burn is an innovative DeFi product designed to address this issue. Our platform provides mechanics that encourage users to actively burn their tokens, along with tools for projects to incentivize holders to do the same."
           />
           <AboutCard
             class="bg-gray-105"
-            title="Simple Tokenomics"
-            desc="The block reward is halved once per each 5040 blocks (~1 week), 
-            until it reaches 0.0014 BURN per block (~1 BURN a day). This 
-            keeps the inflation reasonable, stimulating the value over time."
+            title="$BURN Token Is the Heart"
+            desc="At the center of MSQ.Burn is our native token, $BURN. This essential asset powers the burning mechanism and sustains the entire ecosystem, creating a sustainable environment for projects and their communities."
+          />
+          <AboutCard
+            class="bg-gray-110"
+            title="Want To Learn More?"
+            desc="Interested in learning more? Check out our in-depth article [TODO] to explore how MSQ.Burn is transforming tokenomics for a sustainable future."
           />
         </AboutCols>
       </div>

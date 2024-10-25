@@ -6,7 +6,16 @@ type ClaimRewardICPRequest = record {
   winner_idx : nat32;
 };
 type ClaimRewardICPResponse = record { result : Result };
+type CreateDistributionTriggerRequest = record {
+  trigger : DistributionTrigger;
+};
 type DeployDispenserRequest = record { token_can_id : principal };
+type DistributionTrigger = record {
+  kind : DistributionTriggerKind;
+  distribution_id : nat64;
+  dispenser_token_can_id : principal;
+};
+type DistributionTriggerKind = variant { TokenXVotingWinner : principal };
 type EDs = record { val : nat; decimals : nat8 };
 type FurnaceInfoPub = record {
   cur_round_pledged_usd : nat;
@@ -39,11 +48,10 @@ type GetCurRoundPositionsRequest = record {
   skip : opt principal;
   take : nat64;
 };
-type GetCurRoundPositionsResponse = record {
-  positions : vec record { principal; nat };
-};
+type GetCurRoundPositionsResponse = record { positions : vec Position };
 type GetWinnersRequest = record { skip : nat64; take : nat64 };
 type GetWinnersResponse = record { winners : vec FurnaceWinnerHistoryEntry };
+type ICPSwapTokenInfo = record { exchange_rate_usd : nat; can_id : principal };
 type PledgeRequest = record {
   pid : principal;
   qty : nat;
@@ -51,6 +59,7 @@ type PledgeRequest = record {
   token_can_id : principal;
 };
 type PledgeResponse = record { pledge_value_usd : nat };
+type Position = record { vp : nat; pid : principal; usd : nat };
 type RemoveSupportedTokenRequest = record { token_can_ids : vec principal };
 type Result = variant { Ok : nat; Err : text };
 type SetMaintenanceStatusRequest = record { new_status : bool };
@@ -68,10 +77,10 @@ type WithdrawResponse = record { block_idx : nat };
 service : () -> {
   add_supported_token : (AddSupportedTokenRequest) -> (record {});
   claim_reward_icp : (ClaimRewardICPRequest) -> (ClaimRewardICPResponse);
+  create_distribution_trigger : (CreateDistributionTriggerRequest) -> (
+      record {},
+    );
   deploy_dispenser : (DeployDispenserRequest) -> (record {});
-  get_cur_round_burn_positions : (GetCurRoundPositionsRequest) -> (
-      GetCurRoundPositionsResponse,
-    ) query;
   get_cur_round_positions : (GetCurRoundPositionsRequest) -> (
       GetCurRoundPositionsResponse,
     ) query;
@@ -82,6 +91,9 @@ service : () -> {
   get_total_burned_tokens : () -> (vec record { principal; EDs }) query;
   get_winners : (GetWinnersRequest) -> (GetWinnersResponse) query;
   list_dispensers : () -> (vec record { principal; opt principal }) query;
+  list_exchange_rates : () -> (
+      vec record { principal; ICPSwapTokenInfo },
+    ) query;
   list_supported_tokens : () -> (vec TokenX) query;
   list_token_x_alternatives : () -> (vec record { principal; nat }) query;
   pledge : (PledgeRequest) -> (PledgeResponse);

@@ -110,14 +110,14 @@ export const PoolPage = () => {
       <Switch>
         <Match when={!value()}>
           <div class="flex items-center gap-1">
-            <p class="font-semibold sm:text-[4rem] leading-[3.5rem]">Pledging Required</p>
+            <p class="font-semibold text-2xl sm:text-5xl">Pledge To Mint</p>
           </div>
         </Match>
         <Match when={value()!.min.eq(value()!.max)}>
           <div class="flex flex-grow justify-between items-end">
             <div class="flex items-center gap-1">
-              <span class="text-2xl font-semibold">~</span>
-              <p class="font-semibold sm:text-[4rem] leading-[3.5rem]">
+              <span class="text-lg sm:text-2xl font-semibold">~</span>
+              <p class="font-semibold text-2xl sm:text-[4rem] sm:leading-[3.5rem]">
                 {value()!.min.toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })}
               </p>
             </div>
@@ -129,12 +129,12 @@ export const PoolPage = () => {
         <Match when={!value()!.min.eq(value()!.max)}>
           <div class="flex flex-grow justify-between items-end">
             <div class="flex items-center gap-1">
-              <span class="text-2xl font-semibold">~</span>
-              <p class="font-semibold sm:text-[4rem] leading-[3.5rem]">
+              <span class="text-lg sm:text-2xl font-semibold">~</span>
+              <p class="font-semibold text-2xl sm:text-[4rem] sm:leading-[3.5rem]">
                 {value()!.min.toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })}
               </p>
-              <span class="text-2xl font-semibold">-</span>
-              <p class="font-semibold sm:text-[4rem] leading-[3.5rem]">
+              <span class="text-lg sm:text-2xl font-semibold">-</span>
+              <p class="font-semibold text-2xl sm:text-[4rem] sm:leading-[3.5rem]">
                 {value()!.max.toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })}
               </p>
             </div>
@@ -239,7 +239,7 @@ export const PoolPage = () => {
           </Bento>
         </Show>
 
-        <Bento class="col-span-2 flex-col" id={2}>
+        <Bento class="col-span-4 sm:col-span-2 flex-col" id={2}>
           <div class="flex flex-col gap-8">
             <p class="font-semibold text-xl">Classic Pool</p>
 
@@ -296,7 +296,7 @@ export const PoolPage = () => {
           </div>
         </Bento>
 
-        <Bento class="col-span-2 flex-col" id={3}>
+        <Bento class="col-span-4 sm:col-span-2 flex-col" id={2}>
           <div class="flex flex-col gap-8">
             <p class="font-semibold text-xl">High-Risk Pool</p>
 
@@ -356,7 +356,7 @@ export const PoolPage = () => {
 
       <Show when={totals.data && isAuthorized()}>
         <div class="grid grid-cols-4 gap-6">
-          <Bento class="col-span-3 flex-col justify-end" id={5}>
+          <Bento class="col-span-4 sm:col-span-3 flex-col justify-end" id={1}>
             <div class="flex flex-col gap-4">
               <div class="flex flex-col gap-4">
                 <p class="text-gray-165 font-semibold text-xl">Burn Minting</p>
@@ -365,7 +365,7 @@ export const PoolPage = () => {
             </div>
           </Bento>
 
-          <Bento class="col-span-1 flex-col justify-center items-center gap-2" id={4}>
+          <Bento class="col-span-4 sm:col-span-1 flex-col justify-center items-center gap-2" id={4}>
             <BalanceOf
               tokenId={DEFAULT_TOKENS.burn}
               onRefreshOverride={fetchTotals}
@@ -518,9 +518,9 @@ function KamikazePoolTable() {
           </div>
 
           <div class="grid px-2 grid-cols-5 sm:grid-cols-6 items-center gap-3 text-md font-semibold text-gray-190">
-            <p class="col-span-1 sm:col-span-2 text-right">Average</p>
+            <p class="col-span-1 sm:col-span-2 text-right text-gray-140 text-xs">Average</p>
             <p class="col-span-1 text-right font-semibold">${avgKamikazeShareWorth().toDecimals(2).toString()}</p>
-            <p class="col-span-2 text-right">Total</p>
+            <p class="col-span-2 text-right text-gray-140 text-xs">Total</p>
             <p class="col-span-1 text-right font-semibold">${totalKamikazeShareWorth().toDecimals(0).toString()}</p>
           </div>
         </div>
@@ -651,9 +651,9 @@ function ClassicPoolTable() {
         </div>
 
         <div class="grid px-2 grid-cols-5 sm:grid-cols-6 items-center gap-3 text-md font-semibold text-gray-190">
-          <p class="col-span-1 sm:col-span-2 text-right">Average</p>
+          <p class="col-span-1 sm:col-span-2 text-right text-gray-140 text-xs">Average</p>
           <p class="col-span-1 text-right font-semibold">${avgShareWorth().toDecimals(0).toString()}</p>
-          <p class="col-span-2 text-right">Total</p>
+          <p class="col-span-2 text-right text-gray-140 text-xs">Total</p>
           <p class="col-span-1 text-right font-semibold">${totalShareWorth().toDecimals(0).toString()}</p>
         </div>
       </div>

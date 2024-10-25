@@ -148,6 +148,7 @@ impl FurnaceState {
                 .next_token_x_alternatives
                 .get(token_can_id)
                 .unwrap_or_default()
+                .to_decimals(8)
                 .to_const::<8>();
 
             let add_votes = &voting_power * weight;
@@ -374,9 +375,12 @@ impl FurnaceState {
 
         loop {
             let entry_opt = iter.next();
+
+            // if we reached the last position but there a prizes left - start over, but continue the counter
             if entry_opt.is_none() {
                 iter = self.cur_round_positions.iter();
                 raffle_round_info.winner_selection_cursor = None;
+
                 continue;
             }
 

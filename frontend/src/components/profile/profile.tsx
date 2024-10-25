@@ -42,7 +42,7 @@ export function ProfileFull(props: IProfileProps) {
   return (
     <>
       <div class="flex gap-10 items-center justify-between">
-        <div class="flex gap-5 items-start sm:items-center">
+        <div class="flex gap-5 items-center">
           <Avatar url={avatarSrc()} size="lg" borderColor={COLORS.orange} />
           <div class="flex flex-col gap-3">
             <div class="flex flex-row gap-4 items-center">

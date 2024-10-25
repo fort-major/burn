@@ -12,6 +12,7 @@ import { useTokens } from "./tokens";
 export interface IPosition {
   pid: Principal;
   usd: E8s;
+  vp: E8s;
 }
 
 export interface IFurnaceInfo {
@@ -70,9 +71,6 @@ export interface IFurnaceStoreContext {
   curRoundPositions: Accessor<IPosition[]>;
   fetchCurRoundPositions: Fetcher;
 
-  curRoundBurnPositions: Accessor<IPosition[]>;
-  fetchCurRoundBurnPositions: Fetcher;
-
   info: Accessor<IFurnaceInfo | undefined>;
   fetchInfo: Fetcher;
 
@@ -84,6 +82,9 @@ export interface IFurnaceStoreContext {
 
   pledge: (req: IPledgeRequest) => Promise<bigint>;
   voteTokenX: (vote: TTokenXVote) => Promise<void>;
+
+  myVoteTokenX: Accessor<TTokenXVote | undefined>;
+  fetchMyVoteTokenX: Fetcher;
 
   myShares: Accessor<IMyShares | undefined>;
   fetchMyShares: Fetcher;
@@ -109,14 +110,12 @@ export function FurnaceStore(props: IChildren) {
   const [curRoundPositions, setCurRoundPositions] = createSignal<IPosition[]>([]);
   const [fetchingPositions, setFetchingPositions] = createSignal(false);
 
-  const [curRoundBurnPositions, setCurRoundBurnPositions] = createSignal<IPosition[]>([]);
-  const [fetchingBurnPositions, setFetchingBurnPositions] = createSignal(false);
-
   const [supportedTokens, setSupportedTokens] = createSignal<Principal[]>([]);
   const [info, setInfo] = createSignal<IFurnaceInfo>();
   const [winners, setWinners] = createSignal<IFurnaceWinnerHistoryEntry[]>([]);
   const [tokenXVotingAlternatives, setTokenXVotingAlternatives] = createSignal<ITokenXAlternative[]>([]);
   const [myShares, setMyShares] = createSignal<IMyShares>();
+  const [myVoteTokenX, setMyVoteTokenX] = createSignal<TTokenXVote>();
 
   createEffect(
     on(isReadyToFetch, (ready) => {
@@ -145,6 +144,20 @@ export function FurnaceStore(props: IChildren) {
       }
     })
   );
+
+  const fetchMyVoteTokenX: IFurnaceStoreContext["fetchMyVoteTokenX"] = async () => {
+    assertAuthorized();
+
+    const furnace = newFurnaceActor(agent()!);
+    const vote = optUnwrap(await furnace.get_my_vote_token_x());
+
+    const myVote: TTokenXVote | undefined = vote?.can_ids_and_normalized_weights.map((it) => ({
+      tokenCanisterId: it[0],
+      normalizedWeight: E8s.new(it[1]),
+    }));
+
+    setMyVoteTokenX(myVote);
+  };
 
   const fetchMyShares: IFurnaceStoreContext["fetchMyShares"] = async () => {
     assertAuthorized();
@@ -190,8 +203,8 @@ export function FurnaceStore(props: IChildren) {
       const positions: IPosition[] = [];
 
       for (let p of resp.positions) {
-        skip = [p[0]];
-        positions.push({ pid: p[0], usd: E8s.new(p[1]) });
+        skip = [p.pid];
+        positions.push({ pid: p.pid, usd: E8s.new(p.usd), vp: E8s.new(p.vp) });
       }
 
       setCurRoundPositions((t) =>
@@ -204,44 +217,6 @@ export function FurnaceStore(props: IChildren) {
     }
 
     setFetchingPositions(false);
-  };
-
-  const fetchCurRoundBurnPositions: IFurnaceStoreContext["fetchCurRoundBurnPositions"] = async () => {
-    assertReadyToFetch();
-
-    if (fetchingBurnPositions()) {
-      return;
-    } else {
-      setFetchingBurnPositions(true);
-    }
-
-    setCurRoundBurnPositions([]);
-
-    const furnace = newFurnaceActor(anonymousAgent()!);
-
-    let skip: [] | [Principal] = [];
-    const take = 100;
-
-    while (true) {
-      const resp: GetCurRoundPositionsResponse = await furnace.get_cur_round_burn_positions({
-        take: BigInt(take),
-        skip,
-      });
-      const positions: IPosition[] = [];
-
-      for (let p of resp.positions) {
-        skip = [p[0]];
-        positions.push({ pid: p[0], usd: E8s.new(p[1]) });
-      }
-
-      setCurRoundBurnPositions((t) => [...t, ...positions]);
-
-      if (resp.positions.length < take) {
-        break;
-      }
-    }
-
-    setFetchingBurnPositions(false);
   };
 
   const fetchInfo: IFurnaceStoreContext["fetchInfo"] = async () => {
@@ -347,15 +322,21 @@ export function FurnaceStore(props: IChildren) {
   const voteTokenX: IFurnaceStoreContext["voteTokenX"] = async (req: TTokenXVote) => {
     assertAuthorized();
 
-    const furnace = newFurnaceActor(agent()!);
+    disable();
 
-    await furnace.vote_token_x({
-      vote: {
-        can_ids_and_normalized_weights: req.map((it) => [it.tokenCanisterId, it.normalizedWeight.toBigIntRaw()]),
-      },
-    });
+    try {
+      const furnace = newFurnaceActor(agent()!);
 
-    logInfo(`Successfully voted for the next bonfire token!`);
+      await furnace.vote_token_x({
+        vote: {
+          can_ids_and_normalized_weights: req.map((it) => [it.tokenCanisterId, it.normalizedWeight.toBigIntRaw()]),
+        },
+      });
+
+      logInfo(`Successfully voted for the next bonfire token!`);
+    } finally {
+      enable();
+    }
   };
 
   return (
@@ -366,9 +347,6 @@ export function FurnaceStore(props: IChildren) {
 
         curRoundPositions,
         fetchCurRoundPositions,
-
-        curRoundBurnPositions,
-        fetchCurRoundBurnPositions,
 
         info,
         fetchInfo,
@@ -381,6 +359,8 @@ export function FurnaceStore(props: IChildren) {
 
         pledge,
         voteTokenX,
+        myVoteTokenX,
+        fetchMyVoteTokenX,
 
         myShares,
         fetchMyShares,

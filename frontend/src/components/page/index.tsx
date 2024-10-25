@@ -11,7 +11,7 @@ export function Page(props: IPageProps) {
   return (
     <div
       ref={props.ref}
-      class="flex flex-col items-center flex-grow text-white font-primary bg-black px-5 py-16 lg:px-10 lg:py-20"
+      class="flex flex-col items-center flex-grow text-white font-primary bg-black px-5 py-20 lg:px-10 lg:py-20"
       classList={{ [props.outerClass!]: !!props.outerClass }}
     >
       <div

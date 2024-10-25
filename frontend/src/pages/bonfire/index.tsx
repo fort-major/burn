@@ -9,6 +9,7 @@ import { Page } from "@components/page";
 import { PledgeForm } from "@components/pledge-form";
 import { QtyInput } from "@components/qty-input";
 import { Timer } from "@components/timer";
+import { TokenVotingOption } from "@components/voting-option";
 import { Principal } from "@dfinity/principal";
 import { useAuth } from "@store/auth";
 import { useFurnace } from "@store/furnace";
@@ -25,12 +26,23 @@ import { batch, createEffect, createSignal, For, on, onMount, Show } from "solid
 
 export function BonfirePage() {
   const { identity, isReadyToFetch, isAuthorized, assertAuthorized } = useAuth();
-  const { fetchBalanceOf, balanceOf, metadata, icpSwapUsdExchangeRates } = useTokens();
-  const { pidBalance, transfer, moveToBonfireAccount, withdrawFromBonfireAccount, pid } = useWallet();
-  const { pledge, curRoundPositions, fetchCurRoundPositions, fetchInfo, info, myShares, fetchMyShares } = useFurnace();
+  const { fetchBalanceOf, balanceOf, metadata } = useTokens();
+  const { pidBalance, moveToBonfireAccount, withdrawFromBonfireAccount, pid } = useWallet();
+  const {
+    pledge,
+    curRoundPositions,
+    fetchCurRoundPositions,
+    fetchInfo,
+    info,
+    myShares,
+    fetchMyShares,
+    fetchMyVoteTokenX,
+    supportedTokens,
+  } = useFurnace();
 
   const [pledgeModalOpen, setPledgeModalOpen] = createSignal(false);
   const [pledgingToken, setPledgingToken] = createSignal<Principal>();
+  const [voteConfirmVisible, setVoteConfirmVisible] = createSignal(false);
 
   const prizeFund = () => {
     const furnaceBalance = balanceOf(DEFAULT_TOKENS.icp, Principal.fromText(import.meta.env.VITE_FURNACE_CANISTER_ID));
@@ -95,6 +107,7 @@ export function BonfirePage() {
 
       await withdrawFromBonfireAccount(token, qty - meta.fee.val);
     } finally {
+      fetchInfo();
       fetchMyShares();
       fetchCurRoundPositions();
     }
@@ -124,6 +137,7 @@ export function BonfirePage() {
   createEffect(() => {
     if (isAuthorized()) {
       fetchMyShares();
+      fetchMyVoteTokenX();
     }
   });
 
@@ -203,7 +217,7 @@ export function BonfirePage() {
 
       <div class="flex flex-col gap-6">
         <div class="grid grid-cols-2 gap-6">
-          <Bento class="flex-col" id={3}>
+          <Bento class="flex-col col-span-2 sm:col-span-1" id={4}>
             <div class="flex flex-col gap-8">
               <p class="font-semibold text-xl">Bonfire Pool</p>
 
@@ -240,20 +254,25 @@ export function BonfirePage() {
                     onClick={() => handlePledgeClick(DEFAULT_TOKENS.burn)}
                   />
                   <Show when={info() && info()!.curTokenX.compareTo(DEFAULT_TOKENS.burn) !== "eq"}>
-                    <Btn
-                      text={`Pledge $${curTokenXTicker()}`}
-                      bgColor={COLORS.orange}
-                      class="w-full font-semibold"
-                      disabled={!canPledge(info()!.curTokenX)}
-                      onClick={() => handlePledgeClick(info()!.curTokenX)}
-                    />
+                    <div class="flex flex-col relative">
+                      <Btn
+                        text={`Pledge $${curTokenXTicker()}`}
+                        bgColor={COLORS.orange}
+                        class="w-full font-semibold"
+                        disabled={!canPledge(info()!.curTokenX)}
+                        onClick={() => handlePledgeClick(info()!.curTokenX)}
+                      />
+                      <p class="absolute bg-green text-black px-2 py-1 right-[-15px] top-[-7px] rotate-12 rounded-full text-xs">
+                        +5%
+                      </p>
+                    </div>
                   </Show>
                 </div>
               </Show>
             </div>
           </Bento>
 
-          <Bento class="flex-col" id={2}>
+          <Bento class="flex-col col-span-2 sm:col-span-1" id={1}>
             <div class="flex flex-col gap-6">
               <p class="font-semibold text-xl">Rules</p>
               <ol class="flex flex-col gap-1 list-decimal list-inside text-sm">
@@ -284,18 +303,28 @@ export function BonfirePage() {
         </div>
 
         <div class="grid grid-cols-2 gap-6">
-          <Bento class="flex-col" id={3}>
+          <Bento class="flex-col col-span-2 sm:col-span-1" id={1}>
             <Timer {...getTimeUntilNextSunday15UTC()} class="text-2xl" descriptionClass="text-xl" />
             <p class="text-gray-140">Before the winner is selected</p>
           </Bento>
-          <Bento class="flex-col" id={4}>
-            <Timer {...getTimeUntilNextSunday15UTC(12)} class="text-2xl" descriptionClass="text-xl" />
-            <p class="text-orange">Until not eligible for next week airdrops</p>
+          <Bento class="flex-col col-span-2 sm:col-span-1" id={1}>
+            <Show
+              when={Object.values(getTimeUntilNextSunday15UTC(12)).reduce((p, c) => p + c, 0) > 0}
+              fallback={<p class="text-orange">Not eligible for next week airdrops</p>}
+            >
+              <Timer {...getTimeUntilNextSunday15UTC(12)} class="text-2xl" descriptionClass="text-xl" />
+              <p class="text-orange">Until not eligible for next week airdrops</p>
+            </Show>
           </Bento>
         </div>
       </div>
 
-      <div class=""></div>
+      <div class="flex flex-col gap-6">
+        <p class="font-semibold text-4xl">Next Week's Burning Token</p>
+        <div class="grid grid-cols-2 gap-6">
+          <For each={supportedTokens()}>{(token) => <TokenVotingOption tokenCanId={token} id={2} />}</For>
+        </div>
+      </div>
 
       <div class="flex flex-col gap-4">
         <p class="text-white font-semibold text-4xl flex gap-4 items-center">Current Round Participants</p>
@@ -319,6 +348,11 @@ export function BonfirePage() {
                     .toPercent()
                     .toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 1 });
 
+                  const vpPercent = position.vp
+                    .div(i.curRoundPledgedBurnUsd || E8s.fromBigIntBase(1n))
+                    .toPercent()
+                    .toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 1 });
+
                   return (
                     <div class="grid p-2 grid-cols-4 md:grid-cols-5 items-center gap-3 odd:bg-gray-105 even:bg-black relative">
                       <div class="flex items-center gap-1 col-span-1">
@@ -338,17 +372,13 @@ export function BonfirePage() {
                           }
                         />
                       </div>
-
                       <Copyable class="col-span-1 hidden md:flex" text={position.pid.toText()} ellipsis />
-
                       <p class="col-span-1 font-semibold text-gray-140 text-md text-right">
                         {position.usd.toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}
                       </p>
-
                       <p class="col-span-1 font-semibold text-gray-140 text-md text-right">
-                        <Show when={i.curRoundPledgedUsd.toBigIntRaw() > 0n}>{poolSharePercent}%</Show>
+                        <Show when={i.curRoundPledgedBurnUsd.toBigIntRaw() > 0n}>{vpPercent}%</Show>
                       </p>
-
                       <p class="col-span-1 font-semibold text-gray-140 text-md text-right">
                         <Show when={i.curRoundPledgedUsd.toBigIntRaw() > 0n}>{poolSharePercent}%</Show>
                       </p>
@@ -360,9 +390,9 @@ export function BonfirePage() {
           </div>
 
           <div class="grid px-2 grid-cols-4 sm:grid-cols-5 items-center gap-3 text-md font-semibold text-gray-190">
-            <p class="col-span-1 text-right">Average</p>
+            <p class="col-span-1 text-right text-gray-140 text-xs">Average</p>
             <p class="col-span-1 text-right font-semibold">${avgShareWorth().toDynamic().toDecimals(0).toString()}</p>
-            <p class="col-span-2 text-right">Total</p>
+            <p class="col-span-1 sm:col-span-2 text-right text-gray-140 text-xs">Total</p>
             <p class="col-span-1 text-right font-semibold">${totalShareWorth().toDynamic().toDecimals(0).toString()}</p>
           </div>
         </div>

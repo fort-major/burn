@@ -4,8 +4,10 @@ type ClaimTokensRequest = record { to : Account; qty : EDs };
 type ClaimTokensResponse = record { result : Result };
 type CreateDistributionRequest = record {
   qty : nat;
+  distribute_to_bonfire : bool;
   scheme : DistributionScheme;
   name : text;
+  hidden : bool;
   duration_ticks : nat64;
   start_condition : DistributionStartCondition;
 };
@@ -18,17 +20,20 @@ type DispenserInfoPub = record {
   token_fee : nat;
   token_decimals : nat8;
   initted : bool;
+  total_distributed : nat;
   token_can_id : opt principal;
 };
 type Distribution = record {
   id : nat64;
   leftover_qty : EDs;
   status : DistributionStatus;
+  distribute_to_bonfire : bool;
   owner : principal;
   scheme : DistributionScheme;
   cur_tick_reward : EDs;
   scheduled_qty : EDs;
   name : text;
+  hidden : bool;
   duration_ticks : nat64;
   start_condition : DistributionStartCondition;
 };
@@ -76,6 +81,7 @@ service : (InitArgs) -> {
   receive_cycles : () -> ();
   subaccount_of : (principal) -> (blob) query;
   withdraw_canceled_funds : (WithdrawCanceledRequest) -> (ClaimTokensResponse);
+  withdraw_dev_fee : (Account, nat) -> ();
   withdraw_user_tokens : (WithdrawUserTokensRequest) -> (
       WithdrawUserTokensResponse,
     );

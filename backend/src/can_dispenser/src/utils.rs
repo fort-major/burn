@@ -34,7 +34,9 @@ use shared::{
             DISPENSER_ICP_FEE_SUBACCOUNT,
         },
     },
-    furnace::{api::GetCurRoundPositionsRequest, client::FurnaceClient},
+    furnace::{
+        api::GetCurRoundPositionsRequest, client::FurnaceClient, types::FURNACE_DEV_FEE_SUBACCOUNT,
+    },
     icrc1::ICRC1CanisterClient,
     utils::duration_until_next_sunday_12_00,
     ENV_VARS, ICP_FEE, MEMO_TOP_UP_CANISTER, ONE_DAY_NS, ONE_HOUR_NS, ONE_MINUTE_NS,
@@ -208,6 +210,17 @@ fn dispense_to_kamikaze_pool_members() {
         return;
     }
 
+    set_timer(Duration::from_nanos(0), dispense_to_bonfire_pool_members);
+}
+
+fn dispense_to_bonfire_pool_members() {
+    let should_reschedule = STATE.with_borrow_mut(|s| s.dispense_bonfire_batch(300));
+
+    if should_reschedule {
+        set_timer(Duration::from_nanos(0), dispense_to_bonfire_pool_members);
+        return;
+    }
+
     set_timer(Duration::from_nanos(0), find_next_active_distribution);
 }
 
@@ -294,6 +307,28 @@ pub fn set_update_bonfire_pool_members_timer() {
 }
 
 fn update_bonfire_pool_members() {
+    let skip = STATE.with_borrow_mut(|s| {
+        let info = s.get_dispenser_info();
+
+        info.is_distributing || info.is_stopped
+    });
+
+    if skip {
+        set_timer(
+            Duration::from_nanos(ONE_MINUTE_NS * 10),
+            update_bonfire_pool_members,
+        );
+        return;
+    }
+
+    STATE.with_borrow_mut(|s| {
+        s.bonfire_pool_members.clear_new();
+
+        let mut info = s.get_dispenser_info();
+        info.total_bonfire_pool_members_weight = TCycles::zero();
+        s.set_dispenser_info(info);
+    });
+
     spawn(async {
         let client = FurnaceClient(ENV_VARS.burner_canister_id);
 
@@ -315,13 +350,13 @@ fn update_bonfire_pool_members() {
                         let share = positions.usd.to_dynamic().to_decimals(12);
                         total_shares += &share;
 
-                        s.kamikaze_pool_members.insert(positions.pid, share);
+                        s.bonfire_pool_members.insert(positions.pid, share);
 
                         skip = Some(positions.pid);
                     }
 
                     let mut info = s.get_dispenser_info();
-                    info.total_kamikaze_pool_members_weight += total_shares.to_const();
+                    info.total_bonfire_pool_members_weight += total_shares.to_const();
                     s.set_dispenser_info(info);
 
                     should_stop
@@ -338,6 +373,49 @@ fn update_bonfire_pool_members() {
         duration_until_next_sunday_12_00(time()),
         update_bonfire_pool_members,
     );
+}
+
+pub fn set_transfer_dev_fee_to_furnace_timer() {
+    set_timer(
+        Duration::from_nanos(ONE_DAY_NS),
+        transfer_dev_fee_to_furnace,
+    );
+}
+
+fn transfer_dev_fee_to_furnace() {
+    spawn(async {
+        let from = Account {
+            owner: id(),
+            subaccount: Some(DISPENSER_DEV_FEE_SUBACCOUNT),
+        };
+
+        let token_can_id = STATE.with_borrow(|s| s.get_dispenser_info().token_can_id.unwrap());
+        let token = ICRC1CanisterClient::new(token_can_id);
+
+        let balance_resp = token.icrc1_balance_of(from).await;
+
+        if let Ok((balance,)) = balance_resp {
+            let fee = STATE.with_borrow(|s| s.get_dispenser_info().token_fee);
+
+            let to = Account {
+                owner: ENV_VARS.furnace_canister_id,
+                subaccount: Some(FURNACE_DEV_FEE_SUBACCOUNT),
+            };
+
+            let _ = token
+                .icrc1_transfer(TransferArg {
+                    from_subaccount: from.subaccount,
+                    to,
+                    amount: balance - fee.clone(),
+                    fee: Some(fee),
+                    created_at_time: None,
+                    memo: None,
+                })
+                .await;
+        }
+    });
+
+    set_transfer_dev_fee_to_furnace_timer();
 }
 
 pub async fn charge_caller_distribution_creation_fee_icp() {

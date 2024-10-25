@@ -31,8 +31,6 @@ export function PledgeForm(props: IPledgeFormProps) {
     const qty = pledgeQty().unwrapOk();
 
     await props.onPledge(props.tokenCanId, qty.val);
-
-    logInfo(`Successfully pledged ${qty.toString()} ${meta()!.ticker}`);
   };
 
   return (

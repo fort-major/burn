@@ -1,17 +1,17 @@
 use std::{cell::RefCell, time::Duration};
 
 use candid::{encode_args, Nat, Principal};
-use futures::future::join_all;
+
 use ic_cdk::{
     api::{
-        call::{call_raw, notify_raw, CallResult, RejectionCode},
+        call::{CallResult, RejectionCode},
         management_canister::main::{
             create_canister, install_code, raw_rand, CanisterInstallMode, CreateCanisterArgument,
             InstallCodeArgument,
         },
         time,
     },
-    call, id, notify, print, spawn,
+    id, notify, print, spawn,
 };
 use ic_cdk_timers::set_timer;
 use ic_e8s::{c::E8s, d::EDs};
@@ -168,23 +168,24 @@ fn handle_prize_fund_icp() {
 
 fn redistirbute_pledged_tokens() {
     spawn(async {
-        redistribute_pledged_token(false).await;
-        redistribute_pledged_token(true).await;
+        let token_x = STATE.with_borrow(|s| s.get_furnace_info().cur_token_x);
+        let burn = TokenX {
+            can_id: ENV_VARS.burn_token_canister_id,
+            fee: Nat::from(10_000u64),
+            decimals: 8,
+        };
+
+        if token_x.can_id == burn.can_id {
+            redistribute_pledged_token(burn).await;
+        } else {
+            redistribute_pledged_token(burn).await;
+            redistribute_pledged_token(token_x).await;
+        }
     });
 }
 
 // TODO: check all the responses and react to errors
-async fn redistribute_pledged_token(token_x: bool) {
-    let token_x_info = if token_x {
-        STATE.with_borrow(|s| s.get_furnace_info().cur_token_x)
-    } else {
-        TokenX {
-            can_id: ENV_VARS.burn_token_canister_id,
-            fee: Nat::from(10_000u64),
-            decimals: 8,
-        }
-    };
-
+async fn redistribute_pledged_token(token_x_info: TokenX) {
     let token = ICRC1CanisterClient::new(token_x_info.can_id);
 
     let balance_call_result = token
@@ -264,6 +265,7 @@ async fn redistribute_pledged_token(token_x: bool) {
     }
 }
 
+// one position can win more than one prize in case there are less positions, than prizes
 pub fn find_winners() {
     let should_reschedule = STATE.with_borrow_mut(|s| s.find_winners_batch(300));
 

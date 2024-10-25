@@ -23,7 +23,7 @@ pub const DISPENSER_ICP_FEE_SUBACCOUNT: [u8; 32] = [
 pub const DISPENSER_DEV_FEE_SUBACCOUNT: [u8; 32] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3,
 ];
-pub const DISPENSER_ICP_FEE_E8S: u64 = 1_0000_0000;
+pub const DISPENSER_ICP_FEE_E8S: u64 = 9990_0000;
 pub const DISPENSER_ICP_FEE_TRANSFORM_DELAY_NS: u64 = ONE_DAY_NS;
 
 #[derive(CandidType, Deserialize, Clone, Default)]
