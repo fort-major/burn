@@ -29,7 +29,7 @@ export function BooleanInput(props: IBooleanInputProps) {
   const iconColor = () => {
     if (d()) return COLORS.gray[190];
 
-    return props.value ? COLORS.black : COLORS.gray[150];
+    return props.value ? COLORS.orange : COLORS.gray[150];
   };
 
   return (
@@ -43,10 +43,7 @@ export function BooleanInput(props: IBooleanInputProps) {
           {labelOn()}
         </Show>
       </p>
-      <Icon
-        color={iconColor()}
-        kind={props.value ? EIconKind.ToggleOn : EIconKind.ToggleOff}
-      />
+      <Icon color={iconColor()} kind={props.value ? EIconKind.ToggleOn : EIconKind.ToggleOff} />
     </div>
   );
 }

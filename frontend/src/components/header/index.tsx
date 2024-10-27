@@ -39,6 +39,13 @@ export function Header(props: IHeaderProps) {
     setAuthModalVisible(true);
   };
 
+  const handleSignOutClick = async () => {
+    setExpanded(false);
+    await deauthorize();
+
+    window.location.reload();
+  };
+
   const selectAuthProviderForm = (
     <div class="flex flex-col gap-4">
       <Btn
@@ -86,18 +93,27 @@ export function Header(props: IHeaderProps) {
           }}
         >
           <nav class="flex flex-col md:flex-row items-center gap-10 font-semibold text-white">
-            <Show when={isAuthorized()}>
-              <A
-                activeClass="underline"
-                class="hover:underline"
-                onClick={eventHandler(() => {
-                  setExpanded(false);
-                })}
-                href={ROOT.$.pool.path}
-              >
-                Pool
-              </A>
-            </Show>
+            <A
+              activeClass="underline"
+              class="hover:underline"
+              onClick={eventHandler(() => {
+                setExpanded(false);
+              })}
+              href={ROOT.$.pool.path}
+            >
+              Pool
+            </A>
+
+            <A
+              activeClass="underline"
+              class="hover:underline"
+              onClick={eventHandler(() => {
+                setExpanded(false);
+              })}
+              href={ROOT.$.bonfire.path}
+            >
+              Bonfire
+            </A>
 
             <A
               activeClass="underline"
@@ -122,13 +138,13 @@ export function Header(props: IHeaderProps) {
             </Match>
             <Match when={isAuthorized()}>
               <div class="gap-4 items-center flex pb-4 md:pb-0 md:pl-4 md:border-l border-l-gray-120">
-                <ProfileMini onClick={deauthorize} avatarSize="md" />
+                <ProfileMini avatarSize="md" />
                 <Icon
                   kind={EIconKind.Logout}
                   class="cursor-pointer"
                   color={COLORS.gray[140]}
                   hoverColor={COLORS.white}
-                  onClick={deauthorize}
+                  onClick={handleSignOutClick}
                 />
               </div>
             </Match>

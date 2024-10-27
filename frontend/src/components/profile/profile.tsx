@@ -32,12 +32,6 @@ export function ProfileFull(props: IProfileProps) {
   const [pseudonym] = createResource(identity, getPseudonym);
   const [avatarSrc] = createResource(identity, getAvatarSrc);
 
-  const pid = () => {
-    if (!isAuthorized()) return undefined;
-
-    return identity()!.getPrincipal();
-  };
-
   const isDecideAIVerified = () => {
     const t = totals.data;
     if (!t) return false;
@@ -45,54 +39,14 @@ export function ProfileFull(props: IProfileProps) {
     return t.yourDecideIdVerificationStatus;
   };
 
-  const isMSQ = () => {
-    return authProvider() === "MSQ";
-  };
-
-  const handleVerifyDecideIdClick = eventHandler(() => {
-    verifyDecideId();
-  });
-
-  const handleMigratePopupOpenClick = eventHandler(() => {
-    setMigratePopupVisible(true);
-  });
-
   return (
     <>
       <div class="flex gap-10 items-center justify-between">
-        <div class="flex gap-5 items-start sm:items-center">
-          <Avatar url={avatarSrc()} size="lg" borderColor={isDecideAIVerified() ? COLORS.orange : COLORS.gray[140]} />
+        <div class="flex gap-5 items-center">
+          <Avatar url={avatarSrc()} size="lg" borderColor={COLORS.orange} />
           <div class="flex flex-col gap-3">
             <div class="flex flex-row gap-4 items-center">
               <p class="font-semibold text-white text-4xl">{pseudonym() ? pseudonym() : "Anonymous"}</p>
-            </div>
-
-            <div class="flex flex-col items-start sm:flex-row sm:items-center gap-4">
-              <Show when={isMSQ()}>
-                <p class="text-xs text-gray-140">Only Internet Identity users can verify their personhood</p>
-              </Show>
-              <Show when={canVerifyDecideId()}>
-                <div
-                  onClick={handleVerifyDecideIdClick}
-                  class="flex items-center flex-nowrap justify-center gap-2 text-white font-normal text- rounded-full px-6 py-2 cursor-pointer bg-gray-110"
-                >
-                  <span class="text-nowrap">Verify via</span>
-                  <img class="h-6" src="/decide-id-logo.svg" />
-                </div>
-              </Show>
-              <Show when={isDecideAIVerified()}>
-                <p class="flex items-center gap-2 font-semibold text-xs bg-gray-120 h-7 px-2 rounded-lg">
-                  Verified For Lottery <Icon kind={EIconKind.CheckCircle} size={15} color={COLORS.chartreuse} />
-                </p>
-              </Show>
-              <Show when={canMigrateMsqAccount()}>
-                <p
-                  class="underline text-xs text-gray-140 cursor-pointer text-center"
-                  onClick={handleMigratePopupOpenClick}
-                >
-                  Migrate
-                </p>
-              </Show>
             </div>
           </div>
         </div>
@@ -157,11 +111,7 @@ export function ProfileMini(props: IProfileProps) {
       />
       <div class="flex flex-col text-white gap-1">
         <p class="font-primary text-xs font-bold">{pseudonym()}</p>
-        <BalanceOf
-          tokenId={DEFAULT_TOKENS.burn}
-          onRefreshOverride={fetchTotals}
-          balance={totals.data?.yourUnclaimedReward?.toBigIntRaw()}
-        />
+        <Copyable text={identity()!.getPrincipal().toText()} ellipsis ellipsisSymbols={20} />
       </div>
     </div>
   );

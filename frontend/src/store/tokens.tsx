@@ -1,5 +1,5 @@
-import { createContext, createEffect, on, useContext } from "solid-js";
-import { IChildren } from "../utils/types";
+import { Accessor, createContext, createEffect, createSignal, on, useContext } from "solid-js";
+import { Fetcher, IChildren } from "../utils/types";
 import { ErrorCode, err, logErr, logInfo } from "../utils/error";
 import { createStore, Store } from "solid-js/store";
 import { useAuth } from "./auth";
@@ -36,14 +36,11 @@ export interface ITokensStoreContext {
   metadata: Store<Partial<Record<TPrincipalStr, ITokenMetadata>>>;
   fetchMetadata: (id: Principal) => Promise<void>;
 
-  transfer: (tokenId: Principal, qty: EDs, to: Principal) => Promise<void>;
-  canTransfer: (tokenId: Principal) => boolean;
-
-  canClaimLost: () => boolean;
-  claimLost: (recepient: Principal) => Promise<void>;
-
   icpSwapUsdExchangeRates: Store<Partial<Record<TPrincipalStr, E8s>>>;
   fetchIcpSwapUsdExchangeRates: () => Promise<void>;
+
+  totalBurnSupply: Accessor<E8s | undefined>;
+  fetchTotalBurnSupply: Fetcher;
 }
 
 const TokensContext = createContext<ITokensStoreContext>();
@@ -64,41 +61,35 @@ export const DEFAULT_TOKENS = {
 };
 
 export function TokensStore(props: IChildren) {
-  const { assertReadyToFetch, assertAuthorized, anonymousAgent, isAuthorized, agent, identity, disable, enable } =
-    useAuth();
+  const { assertReadyToFetch, anonymousAgent, isAuthorized, identity } = useAuth();
 
   const [balances, setBalances] = createStore<ITokensStoreContext["balances"]>();
   const [subaccounts, setSubaccounts] = createStore<ITokensStoreContext["subaccounts"]>();
   const [metadata, setMetadata] = createStore<ITokensStoreContext["metadata"]>();
   const [icpSwapUsdExchangeRates, setIcpSwapUsdExchangeRates] =
     createStore<ITokensStoreContext["icpSwapUsdExchangeRates"]>();
+  const [totalBurnSupply, setTotalBurnSupply] = createSignal<E8s>();
 
   createEffect(
     on(anonymousAgent, (a) => {
       if (!a) return;
 
-      if (Object.keys(icpSwapUsdExchangeRates).length === 0) {
-        fetchIcpSwapUsdExchangeRates();
-      }
-
-      fetchMetadata(DEFAULT_TOKENS.burn);
-      fetchMetadata(DEFAULT_TOKENS.icp);
-    })
-  );
-
-  createEffect(
-    on(isAuthorized, (ready) => {
-      if (!ready) return;
-      const pid = identity()!.getPrincipal();
+      fetchTotalBurnSupply();
 
       if (Object.keys(icpSwapUsdExchangeRates).length === 0) {
         fetchIcpSwapUsdExchangeRates();
       }
-
-      fetchBalanceOf(DEFAULT_TOKENS.burn, pid);
-      fetchBalanceOf(DEFAULT_TOKENS.icp, pid);
     })
   );
+
+  const fetchTotalBurnSupply: ITokensStoreContext["fetchTotalBurnSupply"] = async () => {
+    assertReadyToFetch();
+
+    const burnToken = IcrcLedgerCanister.create({ canisterId: DEFAULT_TOKENS.burn, agent: anonymousAgent()! });
+    const totalSupply = await burnToken.totalTokensSupply({});
+
+    setTotalBurnSupply(E8s.new(totalSupply));
+  };
 
   const fetchIcpSwapUsdExchangeRates: ITokensStoreContext["fetchIcpSwapUsdExchangeRates"] = async () => {
     const actor = await newICPSwapInfoActor();
@@ -179,108 +170,6 @@ export function TokensStore(props: IChildren) {
     setMetadata(id.toText(), meta);
   };
 
-  const canTransfer: ITokensStoreContext["canTransfer"] = (tokenId) => isAuthorized() && !!metadata[tokenId.toText()];
-
-  const transfer: ITokensStoreContext["transfer"] = async (tokenId, qty, to) => {
-    assertAuthorized();
-
-    disable();
-
-    const meta = metadata[tokenId.toText()]!;
-    const ledger = IcrcLedgerCanister.create({ agent: agent()!, canisterId: tokenId });
-
-    try {
-      const blockIdx = await ledger.transfer({
-        to: {
-          owner: to,
-          subaccount: [],
-        },
-        amount: qty.val,
-        fee: meta.fee.val,
-        created_at_time: nowNs(),
-      });
-
-      logInfo(`Transferred ${qty.toString()} ${meta.ticker} at #${blockIdx.toString()}`);
-    } catch (e) {
-      logErr(ErrorCode.NETWORK, debugStringify(e));
-    } finally {
-      enable();
-    }
-  };
-
-  const canClaimLost: ITokensStoreContext["canClaimLost"] = () => {
-    const id = identity();
-    if (!id) return false;
-
-    const lostBurnBalance = balanceOf(DEFAULT_TOKENS.burn, id.getPrincipal());
-    const lostIcpBalance = balanceOf(DEFAULT_TOKENS.icp, id.getPrincipal());
-
-    if (!lostBurnBalance && !lostIcpBalance) return false;
-
-    return true;
-  };
-
-  const claimLost: ITokensStoreContext["claimLost"] = async (recepient) => {
-    assertAuthorized();
-    const a = agent()!;
-    const pid = identity()!.getPrincipal();
-
-    const burnBalance = balanceOf(DEFAULT_TOKENS.burn, pid);
-
-    if (burnBalance) {
-      disable();
-
-      const burnToken = IcrcLedgerCanister.create({ canisterId: DEFAULT_TOKENS.burn, agent: a });
-
-      logInfo("Claiming lost BURN...");
-
-      try {
-        await burnToken.transfer({
-          to: {
-            owner: recepient,
-            subaccount: [],
-          },
-          amount: burnBalance - 10_000n,
-        });
-
-        logInfo(`Successfully claimed ${tokensToStr(burnBalance - 10_000n, 8)} BURN!`);
-      } catch (e) {
-        logErr(ErrorCode.NETWORK, debugStringify(e));
-      } finally {
-        enable();
-      }
-    }
-
-    const icpBalance = balanceOf(DEFAULT_TOKENS.icp, pid);
-
-    if (icpBalance) {
-      disable();
-
-      const icpToken = IcrcLedgerCanister.create({ canisterId: DEFAULT_TOKENS.icp, agent: a });
-
-      logInfo("Claiming lost ICP...");
-
-      try {
-        await icpToken.transfer({
-          to: {
-            owner: recepient,
-            subaccount: [],
-          },
-          amount: icpBalance - 10_000n,
-        });
-
-        logInfo(`Successfully claimed ${tokensToStr(icpBalance - 10_000n, 8)} ICP!`);
-      } catch (e) {
-        logErr(ErrorCode.NETWORK, debugStringify(e));
-      } finally {
-        enable();
-      }
-    }
-
-    fetchBalanceOf(DEFAULT_TOKENS.burn, pid);
-    fetchBalanceOf(DEFAULT_TOKENS.icp, pid);
-  };
-
   return (
     <TokensContext.Provider
       value={{
@@ -291,12 +180,11 @@ export function TokensStore(props: IChildren) {
         fetchSubaccountOf,
         metadata,
         fetchMetadata,
-        transfer,
-        canTransfer,
-        canClaimLost,
-        claimLost,
         icpSwapUsdExchangeRates,
         fetchIcpSwapUsdExchangeRates,
+
+        totalBurnSupply,
+        fetchTotalBurnSupply,
       }}
     >
       {props.children}

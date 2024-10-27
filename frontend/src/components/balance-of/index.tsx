@@ -80,7 +80,9 @@ export const BalanceOf = (props: IBalanceOfProps) => {
         <img src={meta()!.logoSrc} alt={meta()?.ticker} class="w-6 h-6 rounded-full" />
       </Show>
       <div class="flex gap-1 items-baseline">
-        <p class="font-semibold text-white text-lg">{balance() ? balance()!.toDecimals(2).toString() : "0.00"}</p>
+        <p class="font-semibold text-white text-lg">
+          {balance() ? balance()!.toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 }) : "0.00"}
+        </p>
         <p class="font-thin text-gray-140 text-sm">{meta()?.ticker ?? "TOK"}</p>
       </div>
 

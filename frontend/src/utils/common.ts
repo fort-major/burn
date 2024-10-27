@@ -85,7 +85,7 @@ export function avatarSrcFromPrincipal(id: Principal) {
 export function createLocalStorageSignal<T extends unknown>(key: string): [Accessor<T | undefined>, Setter<T>] {
   const storage = window.localStorage;
   const stored = storage.getItem(key);
-  const initialValue: T | undefined = stored ? fromCBOR(stored) : undefined;
+  const initialValue: T | undefined = stored ? fromCBOR<{ value: T }>(stored).value : undefined;
 
   const [value, setValue] = createSignal<T | undefined>(initialValue);
 

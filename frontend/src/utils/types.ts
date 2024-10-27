@@ -15,6 +15,8 @@ export interface IRef<T> {
   ref?: T;
 }
 
+export type Fetcher = () => Promise<void>;
+
 export type TTaskId = bigint;
 export type TTaskTagId = number;
 export type TTokenId = number;
@@ -105,21 +107,13 @@ export class Result<T, E = T> {
   }
 
   unwrapOk(): T {
-    if ("Err" in this.value)
-      err(
-        ErrorCode.UNREACHEABLE,
-        `The Result is not Ok: ${debugStringify(this.value)}`
-      );
+    if ("Err" in this.value) err(ErrorCode.UNREACHEABLE, `The Result is not Ok: ${debugStringify(this.value)}`);
 
     return this.value.Ok;
   }
 
   unwrapErr(): E {
-    if ("Ok" in this.value)
-      err(
-        ErrorCode.UNREACHEABLE,
-        `The Result is not Err: ${debugStringify(this.value)}`
-      );
+    if ("Ok" in this.value) err(ErrorCode.UNREACHEABLE, `The Result is not Err: ${debugStringify(this.value)}`);
 
     return this.value.Err;
   }
@@ -131,10 +125,7 @@ export class Result<T, E = T> {
 
   expect(msg: string): T {
     if ("Err" in this.value) {
-      err(
-        ErrorCode.UNREACHEABLE,
-        `${msg}: The result expected to be Ok: ${debugStringify(this.value)}`
-      );
+      err(ErrorCode.UNREACHEABLE, `${msg}: The result expected to be Ok: ${debugStringify(this.value)}`);
     }
 
     return this.value.Ok;

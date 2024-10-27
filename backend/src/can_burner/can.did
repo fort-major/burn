@@ -1,20 +1,31 @@
+type BurnerInfo = record {
+  pid : principal;
+  is_lottery_participant : bool;
+  unclaimed_reward : nat;
+  share : nat;
+  lottery_rounds_won : nat64;
+};
 type ClaimRewardRequest = record { to : principal };
 type ClaimRewardResponse = record { result : Result };
 type GetBurnersRequest = record { take : nat32; start : opt principal };
-type GetBurnersResponse = record {
-  entries : vec record { principal; nat; nat; bool };
-};
+type GetBurnersResponse = record { entries : vec BurnerInfo };
+type GetKamikazesResponse = record { entries : vec KamikazeInfo };
 type GetTotalsResponse = record {
   total_lottery_participants : nat64;
   your_lottery_eligibility_status : bool;
+  total_kamikaze_pool_supply : nat;
   total_share_supply : nat;
   your_decide_id_verification_status : bool;
   total_burners : nat64;
   total_tcycles_burned : nat;
+  your_kamikaze_share_tcycles : nat;
   pos_start_key : opt principal;
   your_share_tcycles : nat;
+  your_kamikaze_position_created_at : opt nat64;
   pos_round_delay_ns : nat64;
+  is_kamikaze_pool_enabled : bool;
   total_burn_token_minted : nat;
+  icp_to_cycles_exchange_rate : nat;
   total_verified_accounts : nat64;
   current_burn_token_reward : nat;
   your_unclaimed_reward_e8s : nat;
@@ -22,27 +33,37 @@ type GetTotalsResponse = record {
   current_pos_round : nat64;
   current_share_fee : nat;
 };
-type RefundLostTokensRequest = record { kind : RefundTokenKind };
-type RefundLostTokensResponse = record { results : vec Result };
-type RefundTokenKind = variant { ICP : vec record { blob; nat64 } };
+type KamikazeInfo = record {
+  pid : principal;
+  created_at : nat64;
+  share : nat;
+  rounds_won : nat64;
+};
 type Result = variant { Ok : nat; Err : text };
+type Result_1 = variant { Ok : nat64; Err : text };
 type StakeRequest = record { qty_e8s_u64 : nat64 };
 type VerifyDecideIdRequest = record { jwt : text };
 type WithdrawRequest = record { to : principal; qty_e8s : nat };
+type WithdrawResponse = record { block_idx : nat };
 service : () -> {
   can_migrate_msq_account : () -> (bool) query;
   claim_reward : (ClaimRewardRequest) -> (ClaimRewardResponse);
   decide_id_verified_accounts_count : () -> (nat32) query;
+  disable_kamikaze_pool : () -> ();
   disable_lottery : () -> ();
+  enable_kamikaze_pool : () -> ();
   enable_lottery : () -> ();
+  get_account_ids : () -> (vec record { text; blob }) query;
   get_burners : (GetBurnersRequest) -> (GetBurnersResponse) query;
+  get_kamikazes : (GetBurnersRequest) -> (GetKamikazesResponse) query;
   get_totals : () -> (GetTotalsResponse) query;
   migrate_msq_account : (ClaimRewardRequest) -> (record {});
-  refund_lost_tokens : (RefundLostTokensRequest) -> (RefundLostTokensResponse);
   resume : () -> ();
   stake : (StakeRequest) -> (record {});
+  stake_kamikaze : (StakeRequest) -> (record {});
   stop : () -> ();
   subaccount_of : (principal) -> (blob) query;
   verify_decide_id : (VerifyDecideIdRequest) -> (record {});
-  withdraw : (WithdrawRequest) -> (record {});
+  withdraw : (WithdrawRequest) -> (WithdrawResponse);
+  withdraw_dev_fee_icp : (nat64, blob) -> (Result_1);
 }

@@ -15,6 +15,7 @@ fi
 # check if canisters are created
 
 dfx canister --network=$network create burner && \
+dfx canister --network=$network create furnace && \
 dfx canister --network=$network create burn_token && \
 dfx canister --network=$network create internet_identity
 
@@ -25,6 +26,7 @@ rm -f $file_backend
 touch $file_backend
 
 echo "CAN_BURNER_CANISTER_ID=\"$(dfx canister --network=$network id burner)\"" >> $file_backend
+echo "CAN_FURNACE_CANISTER_ID=\"$(dfx canister --network=$network id furnace)\"" >> $file_backend
 echo "CAN_BURN_TOKEN_CANISTER_ID=\"$(dfx canister --network=$network id burn_token)\"" >> $file_backend
 echo "CAN_II_CANISTER_ID=\"$(dfx canister --network=$network id internet_identity)\"" >> $file_backend
 echo "CAN_ROOT_KEY=\"$(dfx ping $network | grep -oP '(?<="root_key": )\[.*\]')\"" >> $file_backend
@@ -49,6 +51,7 @@ rm -f $file_frontend
 touch $file_frontend
 
 echo "VITE_BURNER_CANISTER_ID=\"$(dfx canister --network=$network id burner)\"" >> $file_frontend
+echo "VITE_FURNACE_CANISTER_ID=\"$(dfx canister --network=$network id furnace)\"" >> $file_frontend
 echo "VITE_BURN_TOKEN_CANISTER_ID=\"$(dfx canister --network=$network id burn_token)\"" >> $file_frontend
 echo "VITE_II_CANISTER_ID=\"$(dfx canister --network=$network id internet_identity)\"" >> $file_frontend
 echo "VITE_ROOT_KEY=\"$(dfx ping $network | grep -oP '(?<="root_key": )\[.*\]')\"" >> $file_frontend

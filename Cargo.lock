@@ -338,6 +338,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
+name = "chrono"
+version = "0.4.38"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a21f936df1771bf62b77f047b726c4625ff2e8aa607c01ec06e5a05bd8463401"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "clap"
 version = "3.2.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -543,6 +552,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "dispenser"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "futures",
+ "garde",
+ "ic-cdk 0.13.5",
+ "ic-cdk-timers",
+ "ic-e8s",
+ "ic-ledger-types",
+ "ic-stable-structures",
+ "icrc-ledger-types",
+ "serde",
+ "shared",
+]
+
+[[package]]
 name = "dotenv"
 version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -659,6 +685,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
 
 [[package]]
+name = "furnace"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "futures",
+ "garde",
+ "ic-cdk 0.13.5",
+ "ic-cdk-timers",
+ "ic-e8s",
+ "ic-ledger-types",
+ "ic-stable-structures",
+ "icrc-ledger-types",
+ "serde",
+ "shared",
+]
+
+[[package]]
 name = "futures"
 version = "0.3.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -756,6 +799,8 @@ dependencies = [
  "compact_str",
  "garde_derive",
  "smallvec",
+ "unicode-segmentation",
+ "url",
 ]
 
 [[package]]
@@ -904,6 +949,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c49c37c09c17a53d937dfbb742eb3a961d65a994e6bcdcf37e7399d0cc8ab5e"
 dependencies = [
  "digest 0.10.7",
+]
+
+[[package]]
+name = "html-escape"
+version = "0.2.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6d1ad449764d627e22bfd7cd5e8868264fc9236e07c752972b4080cd351cb476"
+dependencies = [
+ "utf8-width",
 ]
 
 [[package]]
@@ -1075,9 +1129,9 @@ dependencies = [
 
 [[package]]
 name = "ic-e8s"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d803080f697948ffa142d3a42d1179c4fdeb0cf0ef2adc88494c35d4c6a87589"
+checksum = "8bf7fd7c6a07f10e36cacb7031344504303b01c935e613b91d9bd1306edd1889"
 dependencies = [
  "candid",
  "ic-stable-structures",
@@ -2041,7 +2095,10 @@ name = "shared"
 version = "0.1.0"
 dependencies = [
  "candid",
+ "chrono",
  "dotenv",
+ "garde",
+ "html-escape",
  "ic-canister-sig-creation",
  "ic-cdk 0.13.5",
  "ic-cdk-timers",
@@ -2054,6 +2111,7 @@ dependencies = [
  "num-bigint",
  "serde",
  "sha2 0.10.8",
+ "url",
 ]
 
 [[package]]
@@ -2333,6 +2391,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "unicode-segmentation"
+version = "1.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d4c87d22b6e3f4a18d4d40ef354e97c90fcb14dd91d7dc0aa9d8a1172ebf7202"
+
+[[package]]
 name = "unicode-width"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2349,6 +2413,12 @@ dependencies = [
  "percent-encoding",
  "serde",
 ]
+
+[[package]]
+name = "utf8-width"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86bd8d4e895da8537e5315b8254664e6b769c4ff3db18321b297a1e7004392e3"
 
 [[package]]
 name = "version_check"

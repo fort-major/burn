@@ -38,7 +38,9 @@ export const ReturnCalculator = () => {
     const t = totals.data!;
     const shareAbs = E8s.fromPercentNum(poolSharePercent()).divNum(100n);
 
-    return unwrapRewards(b.toBigIntBase(), t.currentPosRound, t.isLotteryEnabled).mul(shareAbs);
+    return unwrapRewards(b.toBigIntBase(), t.currentPosRound, t.isLotteryEnabled || t.isKamikazePoolEnabled).mul(
+      shareAbs
+    );
   };
 
   const handleMyInvestmentChange = eventHandler((e: Event & { target: HTMLInputElement }) => {
@@ -101,7 +103,7 @@ export const ReturnCalculator = () => {
   );
 };
 
-function unwrapRewards(blocksLeft: bigint, curBlock: bigint, lotteryEnabled: boolean): E8s {
+export function unwrapRewards(blocksLeft: bigint, curBlock: bigint, lotteryEnabled: boolean): E8s {
   const epoch = curBlock / 5040n;
   let curBlockReward = 1024_0000_0000n / 2n ** epoch;
 

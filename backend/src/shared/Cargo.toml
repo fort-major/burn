@@ -20,5 +20,11 @@ ic-ledger-types = { workspace = true }
 ic-canister-sig-creation = { workspace = true }
 ic-verifiable-credentials = { workspace = true }
 
+garde = { workspace = true }
+html-escape = { workspace = true }
+url = { workspace = true }
+
+chrono = { workspace = true }
+
 [build-dependencies]
 dotenv = "0.15"

@@ -1,0 +1,22 @@
+[package]
+name = "furnace"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+serde = { workspace = true }
+shared = { path = "../shared" }
+candid = { workspace = true }
+ic-cdk = { workspace = true }
+ic-cdk-timers = { workspace = true }
+ic-stable-structures = { workspace = true }
+garde = { workspace = true }
+ic-e8s = { workspace = true }
+icrc-ledger-types = { workspace = true }
+ic-ledger-types = { workspace = true }
+futures = { workspace = true }

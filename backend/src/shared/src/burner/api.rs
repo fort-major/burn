@@ -4,7 +4,7 @@ use ic_ledger_types::AccountIdentifier;
 
 use serde::Deserialize;
 
-use super::types::TCycles;
+use super::types::{TCycles, TimestampNs};
 
 #[derive(CandidType, Deserialize)]
 pub struct GetBurnersRequest {
@@ -13,8 +13,36 @@ pub struct GetBurnersRequest {
 }
 
 #[derive(CandidType, Deserialize)]
+pub struct BurnerInfo {
+    pub pid: Principal,
+    pub share: TCycles,
+    pub unclaimed_reward: E8s,
+    pub is_lottery_participant: bool,
+    pub lottery_rounds_won: u64,
+}
+
+#[derive(CandidType, Deserialize)]
 pub struct GetBurnersResponse {
-    pub entries: Vec<(Principal, TCycles, E8s, bool)>,
+    pub entries: Vec<BurnerInfo>,
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct GetKamikazesRequest {
+    pub start: Option<Principal>,
+    pub take: u32,
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct KamikazeInfo {
+    pub pid: Principal,
+    pub share: TCycles,
+    pub created_at: TimestampNs,
+    pub rounds_won: u64,
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct GetKamikazesResponse {
+    pub entries: Vec<KamikazeInfo>,
 }
 
 #[derive(CandidType, Deserialize)]
@@ -33,6 +61,13 @@ pub struct GetTotalsResponse {
     pub total_verified_accounts: u64,
     pub total_lottery_participants: u64,
 
+    pub total_kamikaze_pool_supply: TCycles,
+    pub icp_to_cycles_exchange_rate: TCycles,
+
+    pub is_kamikaze_pool_enabled: bool,
+
+    pub your_kamikaze_share_tcycles: TCycles,
+    pub your_kamikaze_position_created_at: Option<u64>,
     pub your_share_tcycles: TCycles,
     pub your_unclaimed_reward_e8s: E8s,
     pub your_decide_id_verification_status: bool,
@@ -79,7 +114,9 @@ pub struct WithdrawRequest {
 }
 
 #[derive(CandidType, Deserialize)]
-pub struct WithdrawResponse {}
+pub struct WithdrawResponse {
+    pub block_idx: Nat,
+}
 
 #[derive(CandidType, Deserialize)]
 pub struct VerifyDecideIdRequest {

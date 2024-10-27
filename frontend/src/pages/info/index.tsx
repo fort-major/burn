@@ -1,42 +1,58 @@
-import { Avatar } from "@components/avatar";
-import { BalanceOf } from "@components/balance-of";
-import { Btn } from "@components/btn";
-import { Copyable } from "@components/copyable";
-import { EIconKind, Icon } from "@components/icon";
 import { Page } from "@components/page";
 import { ReturnCalculator } from "@components/return-calc";
 import { useAuth } from "@store/auth";
 import { useBurner } from "@store/burner";
+import { useFurnace } from "@store/furnace";
 import { DEFAULT_TOKENS, useTokens } from "@store/tokens";
-import { COLORS } from "@utils/colors";
-import { avatarSrcFromPrincipal } from "@utils/common";
-import { E8s, EDs } from "@utils/math";
-import { createEffect, For, on, onMount, Show } from "solid-js";
+import { E8s } from "@utils/math";
+import { ONE_SEC_NS } from "@utils/types";
+import { createEffect, on, onMount, Show } from "solid-js";
 
 export const InfoPage = () => {
   const { isReadyToFetch } = useAuth();
-  const { icpSwapUsdExchangeRates } = useTokens();
-  const { poolMembers, fetchPoolMembers, totals } = useBurner();
-
-  const burnExchangeRate = () => icpSwapUsdExchangeRates["egjwt-lqaaa-aaaak-qi2aa-cai"] ?? E8s.zero();
-  const burnUSDPrice = () =>
-    burnExchangeRate()?.toDynamic().toShortString({ belowOne: 4, belowThousand: 2, afterThousand: 2 });
-  const tcyclesExchangeRate = () => icpSwapUsdExchangeRates["aanaa-xaaaa-aaaah-aaeiq-cai"] ?? E8s.zero();
-
-  const totalShareWorth = () =>
-    poolMembers()
-      .map((it) => it.share)
-      .reduce((prev, cur) => prev.add(cur), EDs.zero(12));
+  const { icpSwapUsdExchangeRates, totalBurnSupply } = useTokens();
+  const { totals, poolMembers, fetchPoolMembers } = useBurner();
+  const { totalTokensBurned } = useFurnace();
 
   onMount(() => {
-    if (isReadyToFetch()) fetchPoolMembers();
+    if (!isReadyToFetch()) return;
+    if (poolMembers().length !== 0) return;
+
+    fetchPoolMembers();
   });
 
   createEffect(
     on(isReadyToFetch, (ready) => {
-      if (ready) fetchPoolMembers();
+      if (!ready) return;
+      if (poolMembers().length !== 0) return;
+
+      fetchPoolMembers();
     })
   );
+
+  const circulatingSupply = () => {
+    const sup = totalBurnSupply() ?? E8s.zero();
+
+    const nonMinted = poolMembers()
+      .map((it) => it.unclaimedReward)
+      .reduce((prev, cur) => prev.add(cur), E8s.zero());
+
+    return sup.add(nonMinted);
+  };
+  const totalMined = () => {
+    const sup = totals.data?.totalBurnTokenMinted ?? E8s.zero();
+
+    const nonMinted = poolMembers()
+      .map((it) => it.unclaimedReward)
+      .reduce((prev, cur) => prev.add(cur), E8s.zero());
+
+    return sup.add(nonMinted);
+  };
+  const totalBurned = () => totalTokensBurned[DEFAULT_TOKENS.burn.toText()]?.toE8s() ?? E8s.zero();
+
+  const burnExchangeRate = () => icpSwapUsdExchangeRates["egjwt-lqaaa-aaaak-qi2aa-cai"] ?? E8s.zero();
+  const burnUSDPrice = () =>
+    burnExchangeRate()?.toDynamic().toShortString({ belowOne: 4, belowThousand: 2, afterThousand: 2 });
 
   return (
     <Page slim>
@@ -79,86 +95,57 @@ export const InfoPage = () => {
         </div>
       </div>
 
-      <div class="flex flex-col gap-4">
-        <p class="text-white font-semibold text-4xl">Return Calculator</p>
-        <ReturnCalculator />
-      </div>
+      <div class="flex flex-col gap-10">
+        <h3 class="font-primary font-semibold text-2xl">Stats</h3>
 
-      <div class="flex flex-col gap-4">
-        <p class="text-white font-semibold text-4xl flex gap-4 items-center">
-          Active Pool Members
-          <Show when={totals.data?.isLotteryEnabled}>
-            <Icon kind={EIconKind.Lottery} color={COLORS.orange} />
-          </Show>
-        </p>
-        <div class="flex flex-col gap-4">
-          <div class="mb-2 grid grid-cols-5 md:grid-cols-6 items-start md:items-center gap-3 text-xs font-semibold text-gray-140">
-            <p class="col-span-1 text-right"></p>
-            <p class="col-span-1 text-right hidden md:block">PID</p>
-            <p class="col-span-1 text-right">Fuel Left</p>
-            <p class="col-span-1 text-right">Blocks Left</p>
-            <p class="col-span-1 text-right">Pool Share</p>
-            <p class="col-span-1 text-right">Share Worth</p>
-          </div>
-
-          <div class="flex flex-col gap-2">
-            <Show when={tcyclesExchangeRate().toBool()}>
-              <For each={poolMembers()} fallback={<p class="text-sm text-gray-140">Nothing here yet :(</p>}>
-                {(member, idx) => {
-                  const blocksLeft = member.share
-                    .div(totals.data!.currentBlockShareFee)
-                    .toShortString({ belowOne: 0, belowThousand: 0, afterThousand: 1 });
-
-                  const poolShare = member.share
-                    .div(totals.data!.totalSharesSupply)
-                    .toPercent()
-                    .toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 1 });
-
-                  const shareWorth = member.share
-                    .mul(tcyclesExchangeRate().toDynamic().toDecimals(12))
-                    .toShortString({ belowOne: 3, belowThousand: 1, afterThousand: 1 });
-
-                  const fuelLeft = member.share.toShortString({ belowOne: 4, belowThousand: 2, afterThousand: 1 });
-
-                  return (
-                    <div class="grid p-2 grid-cols-5 md:grid-cols-6 items-center gap-3 odd:bg-gray-105 even:bg-black">
-                      <div class="flex items-center gap-1 col-span-1">
-                        <p class="text-xs font-semibold min-w-7">{idx() + 1}</p>
-                        <Avatar
-                          url={avatarSrcFromPrincipal(member.id)}
-                          size="sm"
-                          borderColor={member.isVerifiedViaDecideID ? COLORS.orange : COLORS.gray[140]}
-                        />
-                      </div>
-
-                      <Copyable class="col-span-1 hidden md:flex" text={member.id.toText()} ellipsis />
-
-                      <p class="col-span-1 font-semibold text-gray-140 text-md text-right">{fuelLeft}</p>
-
-                      <p class="col-span-1 font-semibold text-gray-140 text-md text-right">
-                        <Show when={totals.data}>{blocksLeft}</Show>
-                      </p>
-
-                      <p class="col-span-1 font-semibold text-gray-140 text-md text-right">
-                        <Show when={totals.data && !totals.data.totalSharesSupply.isZero()}>{poolShare}%</Show>
-                      </p>
-
-                      <p class="col-span-1 font-semibold text-gray-140 text-md text-right">
-                        <Show when={totals.data && !totals.data.totalSharesSupply.isZero()}>${shareWorth}</Show>
-                      </p>
-                    </div>
-                  );
-                }}
-              </For>
+        <Show when={totals.data}>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-y-16">
+            <Stat
+              data={totals.data!.totalTcyclesBurned.toShortString({ belowOne: 4, belowThousand: 2, afterThousand: 0 })}
+              title="Total Burned TCycles"
+            />
+            <Stat
+              data={totals.data!.currentBurnTokenReward.toDynamic().toDecimals(4).toString()}
+              title="Current Block BURN Reward"
+            />
+            <Stat data={`${totals.data!.posRoundDelayNs / ONE_SEC_NS}s`} title="Block Time" />
+            <Stat data={totals.data!.currentPosRound.toString()} title="Current Block Index" />
+            <Show when={totals.data!.currentBurnTokenReward.gt(E8s.new(140000n))}>
+              <Stat
+                data={(5040n - (totals.data!.currentPosRound % 5040n)).toString() + " blocks"}
+                title={"Until Reward Halving"}
+              />
+            </Show>
+            <Stat
+              data={circulatingSupply()!.toDynamic().toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 1 })}
+              title="Circulating BURN Supply"
+            />
+            <Stat
+              data={totalMined()!.toDynamic().toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 1 })}
+              title="Total Minted BURN"
+            />
+            <Stat
+              data={totalBurned()!.toDynamic().toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 1 })}
+              title="Total Burned BURN"
+            />
+            <Show when={totals.data!.totalVerifiedAccounts > 0}>
+              <Stat data={totals.data!.totalVerifiedAccounts.toString()} title="Verified Accounts" />
             </Show>
           </div>
-
-          <div class="grid px-2 grid-cols-6 items-center gap-3 text-md font-semibold text-gray-190">
-            <p class="col-span-5 text-left">Total</p>
-            <p class="col-span-1 text-right font-semibold">${totalShareWorth().toDecimals(0).toString()}</p>
-          </div>
-        </div>
+        </Show>
       </div>
     </Page>
   );
 };
+
+const Stat = (props: { title: string; data?: string }) => (
+  <div
+    style={{ direction: "ltr" }}
+    class="flex flex-row items-center justify-between sm:items-start sm:justify-start sm:flex-col gap-5 pt-5 sm:pt-0 sm:pl-10 border-t sm:border-t-0 sm:border-l border-gray-120"
+  >
+    <h4 class="font-semibold text-xs sm:text-md leading-[150%] text-gray-150">{props.title}</h4>
+    <p class="font-semibold text-white text-right sm:text-left text-5xl sm:text-[60px] tracking-tight leading-[100%]">
+      {props.data ?? "Loading..."}
+    </p>
+  </div>
+);

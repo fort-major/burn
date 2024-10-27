@@ -1,9 +1,29 @@
 import { HttpAgent, Identity, AnonymousIdentity, Agent, Actor, ActorMethod } from "@fort-major/agent-js-fork";
 import { _SERVICE as BurnerActor, idlFactory as BurnerActorIdlFactory } from "../declarations/burner/burner.did";
+import { _SERVICE as FurnaceActor, idlFactory as FurnaceActorIdlFactory } from "../declarations/furnace/furnace.did";
+import {
+  _SERVICE as DispenserActor,
+  idlFactory as DispenserActorIdlFactory,
+} from "../declarations/dispenser/dispenser.did";
+import { Principal } from "@dfinity/principal";
 
 export function newBurnerActor(agent: Agent): BurnerActor {
   return Actor.createActor(BurnerActorIdlFactory, {
     canisterId: import.meta.env.VITE_BURNER_CANISTER_ID,
+    agent,
+  });
+}
+
+export function newFurnaceActor(agent: Agent): FurnaceActor {
+  return Actor.createActor(FurnaceActorIdlFactory, {
+    canisterId: import.meta.env.VITE_FURNACE_CANISTER_ID,
+    agent,
+  });
+}
+
+export function newDispenserActor(canisterId: string | Principal, agent: Agent): DispenserActor {
+  return Actor.createActor(DispenserActorIdlFactory, {
+    canisterId,
     agent,
   });
 }
