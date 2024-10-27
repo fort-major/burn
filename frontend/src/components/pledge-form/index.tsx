@@ -56,7 +56,13 @@ export function PledgeForm(props: IPledgeFormProps) {
           />
         </div>
       </div>
-      <Btn text="Confirm" bgColor={COLORS.orange} disabled={!canPledge()} onClick={handlePledge} />
+      <Btn
+        text="Confirm"
+        class="font-semibold"
+        bgColor={COLORS.orange}
+        disabled={!canPledge()}
+        onClick={handlePledge}
+      />
     </div>
   );
 }

@@ -33,6 +33,7 @@ type FurnaceInfoPub = record {
 };
 type FurnaceWinner = record {
   pid : principal;
+  share_normalized : nat;
   claimed : bool;
   prize_icp : nat;
 };
@@ -62,7 +63,6 @@ type PledgeResponse = record { pledge_value_usd : nat };
 type Position = record { vp : nat; pid : principal; usd : nat };
 type RemoveSupportedTokenRequest = record { token_can_ids : vec principal };
 type Result = variant { Ok : nat; Err : text };
-type SetMaintenanceStatusRequest = record { new_status : bool };
 type TokenX = record { fee : nat; decimals : nat8; can_id : principal };
 type TokenXVote = record {
   can_ids_and_normalized_weights : vec record { principal; nat };
@@ -97,11 +97,13 @@ service : () -> {
     ) query;
   list_supported_tokens : () -> (vec TokenX) query;
   list_token_x_alternatives : () -> (vec record { principal; nat }) query;
+  next_raffle_timestamp : () -> (nat64) query;
   pledge : (PledgeRequest) -> (PledgeResponse);
   receive_cycles : () -> ();
   remove_supported_token : (RemoveSupportedTokenRequest) -> (record {});
-  set_maintenance_status : (SetMaintenanceStatusRequest) -> (record {});
+  resume : () -> ();
   start_raffle : () -> ();
+  stop : () -> ();
   subaccount_of : (principal) -> (blob) query;
   update_dispenser_wasm : (blob) -> ();
   upgrade_dispensers : () -> ();

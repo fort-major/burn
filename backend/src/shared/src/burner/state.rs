@@ -321,6 +321,8 @@ impl BurnerState {
             info.next_kamikaze_id = Some(pid);
 
             if now - created_at >= KAMIKAZE_POOL_POSITION_LIFESPAN_NS {
+                self.kamikaze_rounds_won.remove(&pid);
+
                 kamikaze_total_supply -= shares;
                 positions_to_remove.push(pid);
             }

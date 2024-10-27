@@ -256,33 +256,6 @@ impl Guard<FurnaceState> for RemoveSupportedTokenRequest {
 pub struct RemoveSupportedTokenResponse {}
 
 #[derive(CandidType, Deserialize, Validate)]
-pub struct SetMaintenanceStatusRequest {
-    #[garde(skip)]
-    pub new_status: bool,
-}
-
-impl Guard<FurnaceState> for SetMaintenanceStatusRequest {
-    fn validate_and_escape(
-        &mut self,
-        state: &FurnaceState,
-        caller: Principal,
-        _now: TimestampNs,
-    ) -> Result<(), String> {
-        self.validate(&()).map_err(|e| e.to_string())?;
-
-        let info = state.get_furnace_info();
-        if !info.is_dev(&caller) {
-            return Err(String::from("Access denied"));
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(CandidType, Deserialize)]
-pub struct SetMaintenanceStatusResponse {}
-
-#[derive(CandidType, Deserialize, Validate)]
 pub struct GetWinnersRequest {
     #[garde(skip)]
     pub skip: u64,

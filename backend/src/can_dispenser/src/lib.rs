@@ -8,6 +8,7 @@ use ic_cdk::{
     },
     caller, export_candid, id, init, post_upgrade, query, update,
 };
+use ic_cdk_timers::{clear_timer};
 use ic_e8s::d::EDs;
 use ic_ledger_types::{AccountIdentifier, Subaccount};
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
@@ -33,13 +34,17 @@ use utils::{
     charge_caller_distribution_creation_fee_icp, charge_caller_tokens, charge_dev_fee,
     claim_caller_tokens, set_init_canister_one_timer, set_tick_timer,
     set_transfer_dev_fee_to_furnace_timer, set_transform_icp_fee_to_cycles_timer,
-    set_update_bonfire_pool_members_timer, STATE,
+    set_update_bonfire_pool_members_timer, IS_STOPPED, STATE, TIMERS,
 };
 
 pub mod utils;
 
 #[update]
 async fn create_distribution(mut req: CreateDistributionRequest) -> CreateDistributionResponse {
+    if is_stopped() {
+        panic!("The canister is stopped for an upgrade");
+    }
+
     let info = STATE.with_borrow(|s| {
         req.validate_and_escape(s, caller(), time())
             .expect("Invalid request");
@@ -74,6 +79,10 @@ async fn create_distribution(mut req: CreateDistributionRequest) -> CreateDistri
 
 #[update]
 fn cancel_distribution(mut req: CancelDistributionRequest) -> CancelDistributionResponse {
+    if is_stopped() {
+        panic!("The canister is stopped for an upgrade");
+    }
+
     STATE.with_borrow_mut(|s| {
         req.validate_and_escape(s, caller(), time())
             .expect("Invalid request");
@@ -84,6 +93,10 @@ fn cancel_distribution(mut req: CancelDistributionRequest) -> CancelDistribution
 
 #[update]
 async fn withdraw_user_tokens(req: WithdrawUserTokensRequest) -> WithdrawUserTokensResponse {
+    if is_stopped() {
+        panic!("The canister is stopped for an upgrade");
+    }
+
     let (fee, token_can_id) = if req.icp {
         (Nat::from(ICP_FEE), ENV_VARS.icp_token_canister_id)
     } else {
@@ -116,6 +129,10 @@ async fn withdraw_user_tokens(req: WithdrawUserTokensRequest) -> WithdrawUserTok
 
 #[update]
 async fn withdraw_canceled_funds(mut req: WithdrawCanceledRequest) -> WithdrawCanceledResponse {
+    if is_stopped() {
+        panic!("The canister is stopped for an upgrade");
+    }
+
     let info = STATE.with_borrow_mut(|s| {
         req.validate_and_escape(s, caller(), time())
             .expect("Invalid request");
@@ -164,6 +181,10 @@ fn get_unclaimed_tokens() -> EDs {
 
 #[update]
 async fn claim_tokens(mut req: ClaimTokensRequest) -> ClaimTokensResponse {
+    if is_stopped() {
+        panic!("The canister is stopped for an upgrade");
+    }
+
     let info = STATE.with_borrow_mut(|s| {
         req.validate_and_escape(s, caller(), time())
             .expect("Invalid request");
@@ -262,6 +283,40 @@ fn get_account_ids() -> BTreeMap<String, (AccountIdentifier, Account)> {
     );
 
     map
+}
+
+#[query]
+fn is_stopped() -> bool {
+    utils::is_stopped()
+}
+
+#[update]
+fn stop() {
+    if caller() != ENV_VARS.furnace_canister_id {
+        panic!("Access denied");
+    }
+
+    IS_STOPPED.with_borrow_mut(|s| *s = true);
+
+    TIMERS.with_borrow(|t| {
+        for id in t {
+            clear_timer(*id);
+        }
+    });
+}
+
+#[update]
+fn resume() {
+    if caller() != ENV_VARS.furnace_canister_id {
+        panic!("Access denied");
+    }
+
+    IS_STOPPED.with_borrow_mut(|s| *s = false);
+
+    set_transform_icp_fee_to_cycles_timer();
+    set_tick_timer();
+    set_update_bonfire_pool_members_timer();
+    set_transfer_dev_fee_to_furnace_timer();
 }
 
 #[init]

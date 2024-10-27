@@ -5,14 +5,12 @@ use ic_cdk::{
     api::{
         call::{msg_cycles_accept128, msg_cycles_available128},
         canister_balance128,
-        management_canister::main::{
-            install_code, start_canister, stop_canister, CanisterIdRecord, CanisterInstallMode,
-            InstallCodeArgument,
-        },
+        management_canister::main::{install_code, CanisterInstallMode, InstallCodeArgument},
         time,
     },
     caller, export_candid, id, init, post_upgrade, print, query, update,
 };
+
 use ic_e8s::{c::E8s, d::EDs};
 use ic_ledger_types::{AccountIdentifier, Subaccount};
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
@@ -26,9 +24,8 @@ use shared::{
             CreateDistributionTriggerResponse, DeployDispenserRequest, DeployDispenserResponse,
             GetCurRoundPositionsRequest, GetCurRoundPositionsResponse, GetWinnersRequest,
             GetWinnersResponse, PledgeRequest, PledgeResponse, Position,
-            RemoveSupportedTokenRequest, RemoveSupportedTokenResponse, SetMaintenanceStatusRequest,
-            SetMaintenanceStatusResponse, VoteTokenXRequest, VoteTokenXResponse, WithdrawRequest,
-            WithdrawResponse,
+            RemoveSupportedTokenRequest, RemoveSupportedTokenResponse, VoteTokenXRequest,
+            VoteTokenXResponse, WithdrawRequest, WithdrawResponse,
         },
         types::{
             FurnaceInfoPub, TokenX, TokenXVote, FURNACE_DEV_FEE_SUBACCOUNT,
@@ -40,8 +37,9 @@ use shared::{
     CanisterMode, Guard, ENV_VARS, ICP_FEE,
 };
 use utils::{
-    deploy_dispenser_for, deposit_cycles, set_fetch_token_prices_timer,
-    set_init_canister_one_timer, set_raffle_timer, start_the_raffle, STATE,
+    deploy_dispenser_for, deposit_cycles, is_stopped, set_fetch_token_prices_timer,
+    set_init_canister_one_timer, set_raffle_timer, start_the_raffle, IS_STOPPED,
+    NEXT_RAFFLE_TIMESTAMP, STATE,
 };
 
 pub mod utils;
@@ -50,6 +48,10 @@ pub mod utils;
 
 #[update]
 async fn pledge(mut req: PledgeRequest) -> PledgeResponse {
+    if is_stopped() {
+        panic!("The canister is stopped for an upgrade");
+    }
+
     STATE.with_borrow(|s| {
         req.validate_and_escape(s, caller(), time())
             .expect("Invalid request");
@@ -80,6 +82,10 @@ async fn pledge(mut req: PledgeRequest) -> PledgeResponse {
 
 #[update]
 async fn withdraw(mut req: WithdrawRequest) -> WithdrawResponse {
+    if is_stopped() {
+        panic!("The canister is stopped for an upgrade");
+    }
+
     STATE.with_borrow(|s| {
         req.validate_and_escape(s, caller(), time())
             .expect("Invalid request")
@@ -107,6 +113,10 @@ async fn withdraw(mut req: WithdrawRequest) -> WithdrawResponse {
 
 #[update]
 fn vote_token_x(mut req: VoteTokenXRequest) -> VoteTokenXResponse {
+    if is_stopped() {
+        panic!("The canister is stopped for an upgrade");
+    }
+
     STATE.with_borrow_mut(|s| {
         req.validate_and_escape(s, caller(), time())
             .expect("Invalid request");
@@ -117,6 +127,10 @@ fn vote_token_x(mut req: VoteTokenXRequest) -> VoteTokenXResponse {
 
 #[update]
 async fn claim_reward_icp(mut req: ClaimRewardICPRequest) -> ClaimRewardICPResponse {
+    if is_stopped() {
+        panic!("The canister is stopped for an upgrade");
+    }
+
     let qty = STATE.with_borrow_mut(|s| {
         req.validate_and_escape(s, caller(), time())
             .expect("Invalid request");
@@ -153,6 +167,10 @@ async fn claim_reward_icp(mut req: ClaimRewardICPRequest) -> ClaimRewardICPRespo
 
 #[update]
 async fn deploy_dispenser(mut req: DeployDispenserRequest) -> DeployDispenserResponse {
+    if is_stopped() {
+        panic!("The canister is stopped for an upgrade");
+    }
+
     let info = STATE.with_borrow(|s| {
         req.validate_and_escape(s, caller(), time())
             .expect("Invalid request");
@@ -325,20 +343,6 @@ fn remove_supported_token(mut req: RemoveSupportedTokenRequest) -> RemoveSupport
 }
 
 #[update]
-fn set_maintenance_status(mut req: SetMaintenanceStatusRequest) -> SetMaintenanceStatusResponse {
-    STATE.with_borrow_mut(|s| {
-        req.validate_and_escape(s, caller(), time())
-            .expect("Invalid request");
-
-        let mut info = s.get_furnace_info();
-        info.is_on_maintenance = req.new_status;
-        s.set_furnace_info(info);
-    });
-
-    SetMaintenanceStatusResponse {}
-}
-
-#[update]
 fn update_dispenser_wasm(wasm: Vec<u8>) {
     STATE.with_borrow_mut(|s| {
         let info = s.get_furnace_info();
@@ -354,6 +358,10 @@ fn update_dispenser_wasm(wasm: Vec<u8>) {
 async fn create_distribution_trigger(
     mut req: CreateDistributionTriggerRequest,
 ) -> CreateDistributionTriggerResponse {
+    if is_stopped() {
+        panic!("The canister is stopped for an upgrade");
+    }
+
     let dispenser_id = STATE.with_borrow(|s| {
         req.validate_and_escape(s, caller(), time())
             .expect("Invalid request");
@@ -395,6 +403,10 @@ async fn create_distribution_trigger(
 
 #[update]
 fn start_raffle() {
+    if is_stopped() {
+        panic!("The canister is stopped for an upgrade");
+    }
+
     let info = STATE.with_borrow(|s| s.get_furnace_info());
     if !info.is_dev(&caller()) {
         panic!("Access denied");
@@ -405,6 +417,10 @@ fn start_raffle() {
 
 #[update]
 async fn upgrade_dispensers() {
+    if is_stopped() {
+        panic!("The canister is stopped for an upgrade");
+    }
+
     let info = STATE.with_borrow(|s| s.get_furnace_info());
     if !info.is_dev(&caller()) {
         panic!("Access denied");
@@ -419,28 +435,18 @@ async fn upgrade_dispensers() {
 
     let wasm = STATE.with_borrow(|s| s.dispenser_wasm.get().clone());
 
-    for dispenser in dispensers {
-        let res1 = stop_canister(CanisterIdRecord {
-            canister_id: dispenser,
-        })
-        .await;
-
+    for dispenser_id in dispensers {
         let res2 = install_code(InstallCodeArgument {
             mode: CanisterInstallMode::Upgrade(None),
             wasm_module: wasm.clone(),
-            canister_id: dispenser,
+            canister_id: dispenser_id,
             arg: encode_args(()).unwrap(),
         })
         .await;
 
-        let res3 = start_canister(CanisterIdRecord {
-            canister_id: dispenser,
-        })
-        .await;
-
         print(format!(
-            "Upgraded dispenser {}. Stop - {:?}, Install - {:?}, Start - {:?}",
-            dispenser, res1, res2, res3
+            "Upgraded dispenser {}. Install - {:?}",
+            dispenser_id, res2
         ));
     }
 }
@@ -519,10 +525,34 @@ fn get_account_ids() -> BTreeMap<String, (AccountIdentifier, Account)> {
     map
 }
 
+#[query]
+fn next_raffle_timestamp() -> u64 {
+    NEXT_RAFFLE_TIMESTAMP.with_borrow(|s| *s)
+}
+
+#[update]
+fn stop() {
+    let is_dev = STATE.with_borrow(|s| s.get_furnace_info().is_dev(&caller()));
+    if !is_dev {
+        panic!("Access denied");
+    }
+
+    IS_STOPPED.with_borrow_mut(|s| *s = true);
+}
+
+#[update]
+fn resume() {
+    let is_dev = STATE.with_borrow(|s| s.get_furnace_info().is_dev(&caller()));
+    if !is_dev {
+        panic!("Access denied");
+    }
+
+    IS_STOPPED.with_borrow_mut(|s| *s = false);
+}
+
 #[init]
 fn init_hook() {
     set_init_canister_one_timer(caller());
-    set_fetch_token_prices_timer();
 
     STATE.with_borrow_mut(|s| {
         s.add_supported_token(TokenX {
@@ -547,13 +577,13 @@ fn init_hook() {
         }
     });
 
+    set_fetch_token_prices_timer();
     set_raffle_timer();
 }
 
 #[post_upgrade]
 fn post_upgrade_hook() {
     set_fetch_token_prices_timer();
-
     set_raffle_timer();
 }
 

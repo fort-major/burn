@@ -211,8 +211,10 @@ export function WalletStore(props: IChildren) {
 
       return blockIdx;
     } finally {
-      fetchBalanceOf(tokenCanId, to.owner, optUnwrap(to.subaccount) as Uint8Array | undefined);
-      fetchPidBalance(tokenCanId);
+      await Promise.all([
+        fetchBalanceOf(tokenCanId, to.owner, optUnwrap(to.subaccount) as Uint8Array | undefined),
+        fetchPidBalance(tokenCanId),
+      ]);
 
       enable();
     }
@@ -233,7 +235,7 @@ export function WalletStore(props: IChildren) {
 
       return response.result.Ok;
     } finally {
-      fetchBalanceOf(DEFAULT_TOKENS.burn, pid()!);
+      await fetchBalanceOf(DEFAULT_TOKENS.burn, pid()!);
 
       enable();
 
@@ -274,8 +276,6 @@ export function WalletStore(props: IChildren) {
   const withdrawIcpFromPoolAccount: IWalletStoreContext["withdrawIcpFromPoolAccount"] = async (qty) => {
     assertAuthorized();
 
-    disable();
-
     try {
       const pool = newBurnerActor(agent()!);
       const response = await pool.withdraw({ qty_e8s: qty, to: pid()! });
@@ -285,15 +285,11 @@ export function WalletStore(props: IChildren) {
       const p = poolAccount()!;
       fetchBalanceOf(DEFAULT_TOKENS.icp, p.owner, optUnwrap(p.subaccount) as Uint8Array | undefined);
       fetchBalanceOf(DEFAULT_TOKENS.icp, pid()!);
-
-      enable();
     }
   };
 
   const moveIcpToPoolAccount: IWalletStoreContext["moveIcpToPoolAccount"] = async (qty) => {
     assertAuthorized();
-
-    disable();
 
     try {
       const icp = IcrcLedgerCanister.create({ canisterId: DEFAULT_TOKENS.icp, agent: agent()! });
@@ -307,15 +303,11 @@ export function WalletStore(props: IChildren) {
       const p = poolAccount()!;
       fetchBalanceOf(DEFAULT_TOKENS.icp, p.owner, optUnwrap(p.subaccount) as Uint8Array | undefined);
       fetchBalanceOf(DEFAULT_TOKENS.icp, pid()!);
-
-      enable();
     }
   };
 
   const withdrawFromBonfireAccount: IWalletStoreContext["withdrawFromBonfireAccount"] = async (tokenCanId, qty) => {
     assertAuthorized();
-
-    disable();
 
     try {
       const bonfire = newFurnaceActor(agent()!);
@@ -334,8 +326,6 @@ export function WalletStore(props: IChildren) {
   const moveToBonfireAccount: IWalletStoreContext["moveToBonfireAccount"] = async (tokenCanId, qty) => {
     assertAuthorized();
 
-    disable();
-
     try {
       const token = IcrcLedgerCanister.create({ canisterId: tokenCanId, agent: agent()! });
       const blockIdx = await token.transfer({
@@ -348,8 +338,6 @@ export function WalletStore(props: IChildren) {
       const p = poolAccount()!;
       fetchBalanceOf(tokenCanId, p.owner, optUnwrap(p.subaccount) as Uint8Array | undefined);
       fetchBalanceOf(tokenCanId, pid()!);
-
-      enable();
     }
   };
 

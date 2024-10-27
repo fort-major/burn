@@ -1,3 +1,4 @@
+import { Airdrop } from "@components/airdrop";
 import { Avatar } from "@components/avatar";
 import { BalanceOf } from "@components/balance-of";
 import { Bento, BentoBox } from "@components/bento";
@@ -8,10 +9,12 @@ import { Modal } from "@components/modal";
 import { Page } from "@components/page";
 import { PledgeForm } from "@components/pledge-form";
 import { QtyInput } from "@components/qty-input";
+import { RaffleRoundEntry } from "@components/raffle-round-entry";
 import { Timer } from "@components/timer";
 import { TokenVotingOption } from "@components/voting-option";
 import { Principal } from "@dfinity/principal";
 import { useAuth } from "@store/auth";
+import { useDispensers } from "@store/dispensers";
 import { useFurnace } from "@store/furnace";
 import { DEFAULT_TOKENS, useTokens } from "@store/tokens";
 import { useWallet } from "@store/wallet";
@@ -21,13 +24,13 @@ import { err, ErrorCode, logErr } from "@utils/error";
 import { E8s, EDs } from "@utils/math";
 import { eventHandler } from "@utils/security";
 import { getTimeUntilNextSunday15UTC } from "@utils/time";
-import { Result } from "@utils/types";
-import { batch, createEffect, createSignal, For, on, onMount, Show } from "solid-js";
+import { ONE_DAY_NS, ONE_HOUR_NS, ONE_MIN_NS, Result } from "@utils/types";
+import { batch, createEffect, createMemo, createSignal, For, on, onMount, Show } from "solid-js";
 
 export function BonfirePage() {
   const { identity, isReadyToFetch, isAuthorized, assertAuthorized } = useAuth();
   const { fetchBalanceOf, balanceOf, metadata } = useTokens();
-  const { pidBalance, moveToBonfireAccount, withdrawFromBonfireAccount, pid } = useWallet();
+  const { pidBalance, pid } = useWallet();
   const {
     pledge,
     curRoundPositions,
@@ -38,11 +41,19 @@ export function BonfirePage() {
     fetchMyShares,
     fetchMyVoteTokenX,
     supportedTokens,
+    winners,
+    fetchWinners,
   } = useFurnace();
+  const { dispenserIds } = useDispensers();
+
+  const dispenserIdsList = createMemo(() =>
+    Object.entries(dispenserIds).map(([t, d]) => [Principal.fromText(t), d] as [Principal, Principal])
+  );
 
   const [pledgeModalOpen, setPledgeModalOpen] = createSignal(false);
   const [pledgingToken, setPledgingToken] = createSignal<Principal>();
-  const [voteConfirmVisible, setVoteConfirmVisible] = createSignal(false);
+
+  const history = createMemo(() => Object.values(winners));
 
   const prizeFund = () => {
     const furnaceBalance = balanceOf(DEFAULT_TOKENS.icp, Principal.fromText(import.meta.env.VITE_FURNACE_CANISTER_ID));
@@ -65,6 +76,10 @@ export function BonfirePage() {
       if (curRoundPositions().length == 0) {
         fetchCurRoundPositions();
       }
+
+      if (Object.keys(winners).length === 0) {
+        fetchWinners();
+      }
     }
   });
 
@@ -80,6 +95,10 @@ export function BonfirePage() {
         if (curRoundPositions().length == 0) {
           fetchCurRoundPositions();
         }
+
+        if (Object.keys(winners).length === 0) {
+          fetchWinners();
+        }
       }
     })
   );
@@ -92,25 +111,12 @@ export function BonfirePage() {
       err(ErrorCode.UNREACHEABLE, "No token metadata present");
     }
 
-    await moveToBonfireAccount(token, qty);
-
-    try {
-      await pledge({
-        tokenCanId: token,
-        pid: pid()!,
-        qty: qty - meta.fee.val,
-        downvote: false,
-      });
-    } catch (e) {
-      logErr(ErrorCode.NETWORK, "Unable to pledge");
-      console.error(e);
-
-      await withdrawFromBonfireAccount(token, qty - meta.fee.val);
-    } finally {
-      fetchInfo();
-      fetchMyShares();
-      fetchCurRoundPositions();
-    }
+    await pledge({
+      tokenCanId: token,
+      pid: pid()!,
+      qty: qty - meta.fee.val,
+      downvote: false,
+    });
 
     handlePledgeModalClose();
   };
@@ -129,7 +135,11 @@ export function BonfirePage() {
   const canPledge = (tokenCanId: Principal) => {
     const b = pidBalance(tokenCanId);
     if (!b) return false;
-    if (b < 10) return false;
+
+    const meta = metadata[tokenCanId.toText()];
+    if (!meta) return false;
+
+    if (b <= meta.fee.val) return false;
 
     return true;
   };
@@ -202,6 +212,18 @@ export function BonfirePage() {
       .map((it) => it.usd)
       .reduce((prev, cur) => prev.add(cur), E8s.zero())
       .div(E8s.fromBigIntBase(BigInt(curRoundPositions().length || 1)));
+
+  const showAirdropEligibility = () => {
+    const { days, hours, minutes } = getTimeUntilNextSunday15UTC(12);
+
+    if (days + hours + minutes == 0) {
+      return false;
+    }
+
+    const ns = BigInt(days) * ONE_DAY_NS + BigInt(hours) * ONE_HOUR_NS + BigInt(minutes) * ONE_MIN_NS;
+
+    return ns < ONE_DAY_NS * 6n + ONE_HOUR_NS * 21n;
+  };
 
   return (
     <Page slim>
@@ -309,7 +331,7 @@ export function BonfirePage() {
           </Bento>
           <Bento class="flex-col col-span-2 sm:col-span-1" id={1}>
             <Show
-              when={Object.values(getTimeUntilNextSunday15UTC(12)).reduce((p, c) => p + c, 0) > 0}
+              when={showAirdropEligibility()}
               fallback={<p class="text-orange">Not eligible for next week airdrops</p>}
             >
               <Timer {...getTimeUntilNextSunday15UTC(12)} class="text-2xl" descriptionClass="text-xl" />
@@ -320,11 +342,27 @@ export function BonfirePage() {
       </div>
 
       <div class="flex flex-col gap-6">
+        <p class="font-semibold text-4xl">Airdrops</p>
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-6">
+          <For each={dispenserIdsList()}>{([t, d]) => <Airdrop tokenCanId={t} dispenserCanId={d} />}</For>
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-6">
         <p class="font-semibold text-4xl">Next Week's Burning Token</p>
-        <div class="grid grid-cols-2 gap-6">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
           <For each={supportedTokens()}>{(token) => <TokenVotingOption tokenCanId={token} id={2} />}</For>
         </div>
       </div>
+
+      <Show when={history().length > 0}>
+        <div class="flex flex-col gap-6">
+          <p class="font-semibold text-4xl">Round History</p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <For each={history()}>{(w) => <RaffleRoundEntry timestamp={w.timestampNs} />}</For>
+          </div>
+        </div>
+      </Show>
 
       <div class="flex flex-col gap-4">
         <p class="text-white font-semibold text-4xl flex gap-4 items-center">Current Round Participants</p>

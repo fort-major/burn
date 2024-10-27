@@ -1,5 +1,5 @@
-import { createContext, createEffect, on, useContext } from "solid-js";
-import { IChildren } from "../utils/types";
+import { Accessor, createContext, createEffect, createSignal, on, useContext } from "solid-js";
+import { Fetcher, IChildren } from "../utils/types";
 import { ErrorCode, err, logErr, logInfo } from "../utils/error";
 import { createStore, Store } from "solid-js/store";
 import { useAuth } from "./auth";
@@ -38,6 +38,9 @@ export interface ITokensStoreContext {
 
   icpSwapUsdExchangeRates: Store<Partial<Record<TPrincipalStr, E8s>>>;
   fetchIcpSwapUsdExchangeRates: () => Promise<void>;
+
+  totalBurnSupply: Accessor<E8s | undefined>;
+  fetchTotalBurnSupply: Fetcher;
 }
 
 const TokensContext = createContext<ITokensStoreContext>();
@@ -65,26 +68,28 @@ export function TokensStore(props: IChildren) {
   const [metadata, setMetadata] = createStore<ITokensStoreContext["metadata"]>();
   const [icpSwapUsdExchangeRates, setIcpSwapUsdExchangeRates] =
     createStore<ITokensStoreContext["icpSwapUsdExchangeRates"]>();
+  const [totalBurnSupply, setTotalBurnSupply] = createSignal<E8s>();
 
   createEffect(
     on(anonymousAgent, (a) => {
       if (!a) return;
 
-      if (Object.keys(icpSwapUsdExchangeRates).length === 0) {
-        fetchIcpSwapUsdExchangeRates();
-      }
-    })
-  );
-
-  createEffect(
-    on(isAuthorized, (ready) => {
-      if (!ready) return;
+      fetchTotalBurnSupply();
 
       if (Object.keys(icpSwapUsdExchangeRates).length === 0) {
         fetchIcpSwapUsdExchangeRates();
       }
     })
   );
+
+  const fetchTotalBurnSupply: ITokensStoreContext["fetchTotalBurnSupply"] = async () => {
+    assertReadyToFetch();
+
+    const burnToken = IcrcLedgerCanister.create({ canisterId: DEFAULT_TOKENS.burn, agent: anonymousAgent()! });
+    const totalSupply = await burnToken.totalTokensSupply({});
+
+    setTotalBurnSupply(E8s.new(totalSupply));
+  };
 
   const fetchIcpSwapUsdExchangeRates: ITokensStoreContext["fetchIcpSwapUsdExchangeRates"] = async () => {
     const actor = await newICPSwapInfoActor();
@@ -177,6 +182,9 @@ export function TokensStore(props: IChildren) {
         fetchMetadata,
         icpSwapUsdExchangeRates,
         fetchIcpSwapUsdExchangeRates,
+
+        totalBurnSupply,
+        fetchTotalBurnSupply,
       }}
     >
       {props.children}

@@ -1,4 +1,5 @@
 use candid::{Nat, Principal};
+
 use ic_e8s::d::EDs;
 use ic_stable_structures::{Cell, StableBTreeMap};
 use num_bigint::BigUint;
@@ -144,8 +145,13 @@ impl DispenserState {
                     .unwrap_or_default()
                     .to_decimals(info.token_decimals);
 
-                let kamikaze_pool_reward = cur_tick_reward_opt.unwrap()
-                    / EDs::new(BigUint::from(3333_3333u64), 8).to_decimals(info.token_decimals);
+                let kamikaze_pool_reward = if distribution.distribute_to_bonfire {
+                    cur_tick_reward_opt.unwrap()
+                        * EDs::new(BigUint::from(3333_3333u64), 8).to_decimals(info.token_decimals)
+                } else {
+                    cur_tick_reward_opt.unwrap()
+                        * EDs::new(BigUint::from(5000_0000u64), 8).to_decimals(info.token_decimals)
+                };
 
                 self.unclaimed_tokens
                     .insert(pid, unclaimed_reward + &kamikaze_pool_reward);
@@ -214,8 +220,13 @@ impl DispenserState {
             self.common_pool_members.iter()
         };
 
-        let common_pool_reward = cur_tick_reward_opt.unwrap()
-            / EDs::new(BigUint::from(3333_3333u64), 8).to_decimals(info.token_decimals);
+        let common_pool_reward = if distribution.distribute_to_bonfire {
+            cur_tick_reward_opt.unwrap()
+                * EDs::new(BigUint::from(3333_3333u64), 8).to_decimals(info.token_decimals)
+        } else {
+            cur_tick_reward_opt.unwrap()
+                * EDs::new(BigUint::from(5000_0000u64), 8).to_decimals(info.token_decimals)
+        };
 
         let mut i = 0;
 
@@ -359,12 +370,12 @@ impl DispenserState {
         let mut distribution_info = self.get_current_distribution_info();
 
         let mut iter = if let Some(id) = distribution_info.distribution_id {
-            let mut iter = self.scheduled_distributions.range(id..);
+            let mut iter = self.active_distributions.range(id..);
             iter.next();
 
             iter
         } else {
-            self.scheduled_distributions.iter()
+            self.active_distributions.iter()
         };
 
         let entry = iter.next();

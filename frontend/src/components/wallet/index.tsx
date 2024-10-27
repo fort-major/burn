@@ -363,7 +363,13 @@ function TransferForm(props: ITransferFormProps) {
         </div>
       </div>
 
-      <Btn text="Confirm" bgColor={COLORS.orange} disabled={!canTransfer()} onClick={handleTransfer} />
+      <Btn
+        text="Confirm"
+        class="font-semibold"
+        bgColor={COLORS.orange}
+        disabled={!canTransfer()}
+        onClick={handleTransfer}
+      />
     </div>
   );
 }
@@ -445,7 +451,13 @@ export function ImportTokenForm(props: { onClose: () => void }) {
         </div>
       </div>
 
-      <Btn text={btnText()} bgColor={COLORS.orange} disabled={btnDisabled()} onClick={handleImport} />
+      <Btn
+        text={btnText()}
+        class="font-semibold"
+        bgColor={COLORS.orange}
+        disabled={btnDisabled()}
+        onClick={handleImport}
+      />
     </div>
   );
 }

@@ -37,4 +37,12 @@ impl DispenserClient {
     ) -> CallResult<(CreateDistributionResponse,)> {
         call(self.0, "create_distribution", (req,)).await
     }
+
+    pub async fn stop(&self) -> CallResult<()> {
+        call(self.0, "stop", ()).await
+    }
+
+    pub async fn resume(&self) -> CallResult<()> {
+        call(self.0, "resume", ()).await
+    }
 }

@@ -319,9 +319,7 @@ export function BurnerStore(props: IChildren) {
         await burner.stake({ qty_e8s_u64: qty - 10_000n });
       }
     } finally {
-      fetchTotals();
-      fetchPidBalance(DEFAULT_TOKENS.icp);
-      fetchPoolBalance(DEFAULT_TOKENS.icp);
+      await Promise.all([fetchTotals(), fetchPidBalance(DEFAULT_TOKENS.icp), fetchPoolBalance(DEFAULT_TOKENS.icp)]);
 
       logInfo(`Successfully pledged ${E8s.new(qty).toString()} ICP`);
 

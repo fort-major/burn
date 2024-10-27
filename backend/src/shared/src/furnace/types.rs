@@ -320,6 +320,7 @@ pub struct FurnaceWinner {
     pub pid: Principal,
     pub prize_icp: E8s,
     pub claimed: bool,
+    pub share_normalized: E8s,
 }
 
 #[derive(CandidType, Deserialize, Clone)]
@@ -364,7 +365,7 @@ pub struct RaffleRoundInfo {
 impl RaffleRoundInfo {
     pub fn match_winner(&mut self, to: &E8s, position_id: Principal) -> bool {
         let mut is_winner = false;
-        let mut indices_to_remove = Vec::new();
+        let mut idx_to_remove = None;
 
         for (i, rng) in self.random_numbers.iter().enumerate() {
             if rng <= to {
@@ -374,16 +375,16 @@ impl RaffleRoundInfo {
                         .pop()
                         .expect("A prize should be available"),
                 ));
-                is_winner = true;
-            }
 
-            if is_winner {
-                indices_to_remove.push(i);
+                idx_to_remove = Some(i);
+                is_winner = true;
+
+                break;
             }
         }
 
-        for i in indices_to_remove {
-            self.random_numbers.remove(i);
+        if let Some(idx) = idx_to_remove {
+            self.random_numbers.remove(idx);
         }
 
         is_winner

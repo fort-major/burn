@@ -1,3 +1,4 @@
+import { Airdrop } from "@components/airdrop";
 import { Avatar } from "@components/avatar";
 import { BalanceOf } from "@components/balance-of";
 import { Bento } from "@components/bento";
@@ -12,22 +13,28 @@ import { Timer } from "@components/timer";
 import { Principal } from "@dfinity/principal";
 import { useAuth } from "@store/auth";
 import { useBurner } from "@store/burner";
+import { useDispensers } from "@store/dispensers";
 import { DEFAULT_TOKENS, useTokens } from "@store/tokens";
 import { useWallet } from "@store/wallet";
 import { COLORS } from "@utils/colors";
 import { avatarSrcFromPrincipal } from "@utils/common";
 import { E8s, EDs } from "@utils/math";
 import { ONE_DAY_NS } from "@utils/types";
-import { createEffect, createSignal, For, Match, on, onMount, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Match, on, onMount, Show, Switch } from "solid-js";
 
 export const PoolPage = () => {
   const { isAuthorized } = useAuth();
   const { icpSwapUsdExchangeRates } = useTokens();
   const { totals, fetchTotals, canPledgePool, pledgePool } = useBurner();
   const { claimPoolBurnReward } = useWallet();
+  const { dispenserIds } = useDispensers();
 
   const [isKamikazePool, setIsKamikazePool] = createSignal(false);
   const [pledgeModalOpen, setPledgeModalOpen] = createSignal(false);
+
+  const dispenserIdsList = createMemo(() =>
+    Object.entries(dispenserIds).map(([t, d]) => [Principal.fromText(t), d] as [Principal, Principal])
+  );
 
   const myClassicPoolShare = () => {
     const t = totals.data;
@@ -384,6 +391,13 @@ export const PoolPage = () => {
           </Bento>
         </div>
       </Show>
+
+      <div class="flex flex-col gap-6">
+        <p class="font-semibold text-4xl">Airdrops</p>
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-6">
+          <For each={dispenserIdsList()}>{([t, d]) => <Airdrop tokenCanId={t} dispenserCanId={d} />}</For>
+        </div>
+      </div>
 
       <KamikazePoolTable />
 

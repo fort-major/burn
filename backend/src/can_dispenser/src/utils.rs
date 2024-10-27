@@ -9,7 +9,7 @@ use ic_cdk::{
     },
     caller, id, print, spawn,
 };
-use ic_cdk_timers::set_timer;
+use ic_cdk_timers::{set_timer, TimerId};
 use ic_e8s::d::EDs;
 use ic_ledger_types::{
     transfer, AccountBalanceArgs, AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs,
@@ -39,7 +39,7 @@ use shared::{
     },
     icrc1::ICRC1CanisterClient,
     utils::duration_until_next_sunday_12_00,
-    ENV_VARS, ICP_FEE, MEMO_TOP_UP_CANISTER, ONE_DAY_NS, ONE_HOUR_NS, ONE_MINUTE_NS,
+    ENV_VARS, ICP_FEE, MEMO_TOP_UP_CANISTER, ONE_DAY_NS, ONE_MINUTE_NS,
 };
 
 thread_local! {
@@ -82,7 +82,15 @@ thread_local! {
                 DispenserInfo::default()
             ).expect("Unable to create dispenser info cell"),
         }
-    )
+    );
+
+    pub static TIMERS: RefCell<Vec<TimerId>> = RefCell::default();
+
+    pub static IS_STOPPED: RefCell<bool> = RefCell::default();
+}
+
+pub fn is_stopped() -> bool {
+    IS_STOPPED.with_borrow(|s| *s)
 }
 
 pub fn set_init_canister_one_timer() {
@@ -116,17 +124,23 @@ fn init_canister() {
 }
 
 pub fn set_tick_timer() {
-    set_timer(
+    if is_stopped() {
+        return;
+    }
+
+    let id = set_timer(
         Duration::from_nanos(DISPENSER_DEFAULT_TICK_DELAY_NS),
         tick_start,
     );
+
+    TIMERS.with_borrow_mut(|t| t.push(id));
 }
 
 fn tick_start() {
     let should_reschedule = STATE.with_borrow_mut(|s| {
         let mut info = s.get_dispenser_info();
 
-        if info.is_stopped || info.is_distributing || !info.initted {
+        if !info.initted {
             return true;
         }
 
@@ -324,21 +338,17 @@ async fn update_kamikaze_pool_members() {
 }
 
 pub fn set_update_bonfire_pool_members_timer() {
-    set_timer(Duration::from_nanos(0), update_bonfire_pool_members);
+    if is_stopped() {
+        return;
+    }
+
+    let id = set_timer(Duration::from_nanos(0), update_bonfire_pool_members);
+
+    TIMERS.with_borrow_mut(|t| t.push(id));
 }
 
 fn update_bonfire_pool_members() {
-    let skip = STATE.with_borrow_mut(|s| {
-        let info = s.get_dispenser_info();
-
-        info.is_distributing || info.is_stopped
-    });
-
-    if skip {
-        set_timer(
-            Duration::from_nanos(ONE_MINUTE_NS * 10),
-            update_bonfire_pool_members,
-        );
+    if is_stopped() {
         return;
     }
 
@@ -397,10 +407,16 @@ fn update_bonfire_pool_members() {
 }
 
 pub fn set_transfer_dev_fee_to_furnace_timer() {
-    set_timer(
+    if is_stopped() {
+        return;
+    }
+
+    let id = set_timer(
         Duration::from_nanos(ONE_DAY_NS),
         transfer_dev_fee_to_furnace,
     );
+
+    TIMERS.with_borrow_mut(|t| t.push(id));
 }
 
 fn transfer_dev_fee_to_furnace() {
@@ -540,10 +556,16 @@ pub async fn claim_caller_tokens(
 }
 
 pub fn set_transform_icp_fee_to_cycles_timer() {
-    set_timer(
+    if is_stopped() {
+        return;
+    }
+
+    let id = set_timer(
         Duration::from_nanos(ONE_DAY_NS),
         transform_icp_fee_to_cycles,
     );
+
+    TIMERS.with_borrow_mut(|t| t.push(id));
 }
 
 fn transform_icp_fee_to_cycles() {

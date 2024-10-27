@@ -2,15 +2,17 @@ import { Page } from "@components/page";
 import { ReturnCalculator } from "@components/return-calc";
 import { useAuth } from "@store/auth";
 import { useBurner } from "@store/burner";
-import { useTokens } from "@store/tokens";
+import { useFurnace } from "@store/furnace";
+import { DEFAULT_TOKENS, useTokens } from "@store/tokens";
 import { E8s } from "@utils/math";
 import { ONE_SEC_NS } from "@utils/types";
 import { createEffect, on, onMount, Show } from "solid-js";
 
 export const InfoPage = () => {
   const { isReadyToFetch } = useAuth();
-  const { icpSwapUsdExchangeRates } = useTokens();
+  const { icpSwapUsdExchangeRates, totalBurnSupply } = useTokens();
   const { totals, poolMembers, fetchPoolMembers } = useBurner();
+  const { totalTokensBurned } = useFurnace();
 
   onMount(() => {
     if (!isReadyToFetch()) return;
@@ -28,17 +30,25 @@ export const InfoPage = () => {
     })
   );
 
-  const circulatingSupply = () => totals.data?.totalBurnTokenMinted;
-  const totalSupply = () => {
-    const c = circulatingSupply();
-    if (!c) return;
+  const circulatingSupply = () => {
+    const sup = totalBurnSupply() ?? E8s.zero();
 
     const nonMinted = poolMembers()
       .map((it) => it.unclaimedReward)
       .reduce((prev, cur) => prev.add(cur), E8s.zero());
 
-    return c.add(nonMinted);
+    return sup.add(nonMinted);
   };
+  const totalMined = () => {
+    const sup = totals.data?.totalBurnTokenMinted ?? E8s.zero();
+
+    const nonMinted = poolMembers()
+      .map((it) => it.unclaimedReward)
+      .reduce((prev, cur) => prev.add(cur), E8s.zero());
+
+    return sup.add(nonMinted);
+  };
+  const totalBurned = () => totalTokensBurned[DEFAULT_TOKENS.burn.toText()]?.toE8s() ?? E8s.zero();
 
   const burnExchangeRate = () => icpSwapUsdExchangeRates["egjwt-lqaaa-aaaak-qi2aa-cai"] ?? E8s.zero();
   const burnUSDPrice = () =>
@@ -110,12 +120,14 @@ export const InfoPage = () => {
               data={circulatingSupply()!.toDynamic().toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 1 })}
               title="Circulating BURN Supply"
             />
-            <Show when={totalSupply()}>
-              <Stat
-                data={totalSupply()!.toDynamic().toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 1 })}
-                title="Total BURN Supply"
-              />
-            </Show>
+            <Stat
+              data={totalMined()!.toDynamic().toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 1 })}
+              title="Total Minted BURN"
+            />
+            <Stat
+              data={totalBurned()!.toDynamic().toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 1 })}
+              title="Total Burned BURN"
+            />
             <Show when={totals.data!.totalVerifiedAccounts > 0}>
               <Stat data={totals.data!.totalVerifiedAccounts.toString()} title="Verified Accounts" />
             </Show>
@@ -132,7 +144,7 @@ const Stat = (props: { title: string; data?: string }) => (
     class="flex flex-row items-center justify-between sm:items-start sm:justify-start sm:flex-col gap-5 pt-5 sm:pt-0 sm:pl-10 border-t sm:border-t-0 sm:border-l border-gray-120"
   >
     <h4 class="font-semibold text-xs sm:text-md leading-[150%] text-gray-150">{props.title}</h4>
-    <p class="font-semibold text-white text-right sm:text-left text-5xl sm:text-[80px] tracking-tight leading-[100%]">
+    <p class="font-semibold text-white text-right sm:text-left text-5xl sm:text-[60px] tracking-tight leading-[100%]">
       {props.data ?? "Loading..."}
     </p>
   </div>

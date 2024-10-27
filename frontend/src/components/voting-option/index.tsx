@@ -58,9 +58,6 @@ export function TokenVotingOption(props: ITokenVotingOptionProps) {
 
   const vote = async () => {
     await voteTokenX([{ tokenCanisterId: props.tokenCanId, normalizedWeight: E8s.one() }]);
-
-    fetchMyVoteTokenX();
-    fetchTokenXVotingAlternatives();
   };
 
   const votedForThisToken = () => {

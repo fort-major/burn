@@ -39,6 +39,13 @@ export function Header(props: IHeaderProps) {
     setAuthModalVisible(true);
   };
 
+  const handleSignOutClick = async () => {
+    setExpanded(false);
+    await deauthorize();
+
+    window.location.reload();
+  };
+
   const selectAuthProviderForm = (
     <div class="flex flex-col gap-4">
       <Btn
@@ -131,13 +138,13 @@ export function Header(props: IHeaderProps) {
             </Match>
             <Match when={isAuthorized()}>
               <div class="gap-4 items-center flex pb-4 md:pb-0 md:pl-4 md:border-l border-l-gray-120">
-                <ProfileMini onClick={deauthorize} avatarSize="md" />
+                <ProfileMini avatarSize="md" />
                 <Icon
                   kind={EIconKind.Logout}
                   class="cursor-pointer"
                   color={COLORS.gray[140]}
                   hoverColor={COLORS.white}
-                  onClick={deauthorize}
+                  onClick={handleSignOutClick}
                 />
               </div>
             </Match>

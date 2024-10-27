@@ -7,13 +7,12 @@ use sha2::Digest;
 
 use crate::{
     burner::types::{TCycles, TimestampNs},
-    ONE_DAY_NS, ONE_HOUR_NS, ONE_MINUTE_NS,
+    ONE_DAY_NS, ONE_HOUR_NS,
 };
 
 pub type DistributionId = u64;
 
-//pub const DISPENSER_DEFAULT_TICK_DELAY_NS: u64 = ONE_HOUR_NS;
-pub const DISPENSER_DEFAULT_TICK_DELAY_NS: u64 = ONE_MINUTE_NS;
+pub const DISPENSER_DEFAULT_TICK_DELAY_NS: u64 = ONE_HOUR_NS;
 pub const UPDATE_DISPENSER_SEED_DOMAIN: &[u8] = b"msq-burn-dispenser-update-seed";
 pub const DISPENSER_DISTRIBUTION_SUBACCOUNT: [u8; 32] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
@@ -44,9 +43,6 @@ pub struct DispenserInfo {
 
     pub distribution_id_gen: DistributionId,
 
-    pub is_distributing: bool,
-    pub is_stopped: bool,
-
     pub total_common_pool_members_weight: TCycles,
     pub total_bonfire_pool_members_weight: TCycles,
     pub total_kamikaze_pool_members_weight: TCycles,
@@ -65,9 +61,6 @@ pub struct DispenserInfoPub {
     pub prev_tick_timestamp: TimestampNs,
     pub tick_delay_ns: u64,
     pub cur_tick: u64,
-
-    pub is_distributing: bool,
-    pub is_stopped: bool,
 }
 
 impl DispenserInfo {
@@ -81,8 +74,6 @@ impl DispenserInfo {
             prev_tick_timestamp: self.prev_tick_timestamp,
             tick_delay_ns: self.tick_delay_ns,
             cur_tick: self.cur_tick,
-            is_distributing: self.is_distributing,
-            is_stopped: self.is_stopped,
         }
     }
 
@@ -97,18 +88,12 @@ impl DispenserInfo {
 
     pub fn start_round(&mut self) {
         self.cur_tick += 1;
-        self.is_distributing = true;
     }
 
     pub fn complete_round(&mut self, now: TimestampNs) {
         self.total_common_pool_members_weight = TCycles::zero();
         self.total_kamikaze_pool_members_weight = TCycles::zero();
         self.prev_tick_timestamp = now;
-        self.is_distributing = false;
-    }
-
-    pub fn is_stopped(&self) -> bool {
-        self.is_distributing || self.is_stopped
     }
 
     pub fn generate_distribution_id(&mut self) -> DistributionId {
@@ -189,7 +174,7 @@ impl Distribution {
         if self.leftover_qty.val < fee.0 {
             None
         } else if self.leftover_qty < self.cur_tick_reward {
-            Some(self.leftover_qty.clone())
+            None
         } else {
             Some(self.cur_tick_reward.clone())
         }

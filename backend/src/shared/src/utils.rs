@@ -1,8 +1,9 @@
 use std::time::Duration;
 
+use chrono::Datelike;
 use ic_e8s::c::E8s;
 
-use crate::{burner::types::TimestampNs, ONE_DAY_NS, ONE_HOUR_NS};
+use crate::{burner::types::TimestampNs, ONE_DAY_NS, ONE_HOUR_NS, ONE_WEEK_NS};
 
 pub fn f64_to_e8s(n: f64) -> E8s {
     if n < 0.0 {
@@ -14,36 +15,45 @@ pub fn f64_to_e8s(n: f64) -> E8s {
     E8s::from(n_u128)
 }
 
-fn next_sunday_n_utc(now: TimestampNs, n: u64) -> u64 {
-    let days_since_epoch = now / ONE_DAY_NS;
-    let current_weekday = (days_since_epoch + 4) % 7; // 1970-01-01 was a Thursday (day 4)
+fn next_sunday_n_utc(current_timestamp_nanos: u64, n: u64) -> Duration {
+    if n >= 24 {
+        unreachable!("Invalid hour"); // Invalid hour, must be between 0 and 23
+    }
 
-    // Calculate the number of days until next Sunday
-    let days_to_next_sunday = if current_weekday == 0 {
-        7
+    // Calculate the current time in days, hours, and seconds
+    let current_days = current_timestamp_nanos / ONE_DAY_NS;
+    let current_nanoseconds_of_day = current_timestamp_nanos % ONE_DAY_NS;
+
+    // Calculate the current day of the week (0 = Thursday 1970-01-01)
+    let current_day_of_week = (current_days + 4) % 7;
+
+    // Calculate the target time for the next Sunday at N:00 UTC
+    let days_until_sunday = if current_day_of_week == 0 {
+        0
     } else {
-        7 - current_weekday
+        7 - current_day_of_week
     };
+    let target_nanoseconds_of_day = n * ONE_HOUR_NS;
 
-    // Calculate next Sunday's date (00:00:00 UTC)
-    let next_sunday_start_ns = now + days_to_next_sunday * ONE_DAY_NS;
+    // Calculate the time difference in seconds
+    let mut duration_until_target = days_until_sunday * ONE_DAY_NS + target_nanoseconds_of_day;
+    if current_nanoseconds_of_day > target_nanoseconds_of_day {
+        duration_until_target += ONE_WEEK_NS;
+    }
+    duration_until_target -= current_nanoseconds_of_day;
 
-    // Add N hours (N:00 UTC) to the start of Sunday
-    next_sunday_start_ns + n * ONE_HOUR_NS
+    // Convert the duration to nanoseconds
+    Duration::from_nanos(duration_until_target)
 }
 
 /// Calculates the duration in seconds until next Sunday 15:00 UTC
 pub fn duration_until_next_sunday_15_00(now: u64) -> Duration {
-    let next_sunday_secs = next_sunday_n_utc(now, 15);
-
-    Duration::from_nanos(next_sunday_secs - now)
+    next_sunday_n_utc(now, 15)
 }
 
 /// Calculates the duration in seconds until next Sunday 12:00 UTC
 pub fn duration_until_next_sunday_12_00(now: u64) -> Duration {
-    let next_sunday_secs = next_sunday_n_utc(now, 12);
-
-    Duration::from_nanos(next_sunday_secs - now)
+    next_sunday_n_utc(now, 12)
 }
 
 pub fn escape_script_tag(s: &str) -> String {

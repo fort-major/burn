@@ -85,7 +85,15 @@ thread_local! {
                 MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(12))),
             ),
         }
-    )
+    );
+
+    pub static IS_STOPPED: RefCell<bool> = RefCell::default();
+
+    pub static NEXT_RAFFLE_TIMESTAMP: RefCell<u64> = RefCell::default();
+}
+
+pub fn is_stopped() -> bool {
+    IS_STOPPED.with_borrow(|s| *s)
 }
 
 pub fn set_init_canister_one_timer(caller: Principal) {
@@ -101,6 +109,10 @@ fn init_canister(caller: Principal) {
 }
 
 pub fn set_fetch_token_prices_timer() {
+    if is_stopped() {
+        return;
+    }
+
     set_timer(Duration::from_nanos(0), fetch_token_prices);
 }
 
@@ -120,7 +132,13 @@ fn fetch_token_prices() {
 }
 
 pub fn set_raffle_timer() {
-    let duration = duration_until_next_sunday_15_00(time());
+    if is_stopped() {
+        return;
+    }
+
+    let now = time();
+    let duration = duration_until_next_sunday_15_00(now);
+    NEXT_RAFFLE_TIMESTAMP.with_borrow_mut(|s| *s = now + duration.as_nanos() as u64);
 
     set_timer(duration, start_the_raffle);
 }

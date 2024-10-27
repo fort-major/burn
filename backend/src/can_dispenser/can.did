@@ -12,10 +12,8 @@ type CreateDistributionRequest = record {
   start_condition : DistributionStartCondition;
 };
 type DispenserInfoPub = record {
-  is_stopped : bool;
   tick_delay_ns : nat64;
   prev_tick_timestamp : nat64;
-  is_distributing : bool;
   cur_tick : nat64;
   token_fee : nat;
   token_decimals : nat8;
@@ -79,7 +77,10 @@ service : (InitArgs) -> {
     ) query;
   get_info : () -> (DispenserInfoPub) query;
   get_unclaimed_tokens : () -> (EDs) query;
+  is_stopped : () -> (bool) query;
   receive_cycles : () -> ();
+  resume : () -> ();
+  stop : () -> ();
   subaccount_of : (principal) -> (blob) query;
   withdraw_canceled_funds : (WithdrawCanceledRequest) -> (ClaimTokensResponse);
   withdraw_user_tokens : (WithdrawUserTokensRequest) -> (

@@ -325,10 +325,18 @@ impl FurnaceState {
 
         let mut result = Vec::new();
         for (pid, prize_icp) in raffle_round_info.winners {
+            let share = self
+                .cur_round_positions
+                .get(&pid)
+                .unwrap_or_default()
+                .to_decimals(8)
+                .to_const::<8>();
+
             let entry = FurnaceWinner {
                 prize_icp,
                 pid,
                 claimed: false,
+                share_normalized: share / &furnace_info.cur_round_pledged_usd,
             };
 
             result.push(entry);
