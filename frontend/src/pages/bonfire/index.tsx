@@ -43,17 +43,45 @@ export function BonfirePage() {
     supportedTokens,
     winners,
     fetchWinners,
+    totalTokensPledged,
   } = useFurnace();
-  const { dispenserIds } = useDispensers();
-
-  const dispenserIdsList = createMemo(() =>
-    Object.entries(dispenserIds).map(([t, d]) => [Principal.fromText(t), d] as [Principal, Principal])
-  );
+  const { distributionTriggerByTokenId } = useDispensers();
 
   const [pledgeModalOpen, setPledgeModalOpen] = createSignal(false);
   const [pledgingToken, setPledgingToken] = createSignal<Principal>();
 
   const history = createMemo(() => Object.values(winners));
+  const tokenX = () => info()?.curTokenX;
+  const tokenXMeta = () => (tokenX() ? metadata[tokenX()!.toText()] : undefined);
+
+  const totalPledgedBurn = () => totalTokensPledged[DEFAULT_TOKENS.burn.toText()];
+  const totalPledgedTokenX = () => (tokenX() ? totalTokensPledged[tokenX()!.toText()] : EDs.zero(8));
+
+  const pledgedBurnTriggers = createMemo(() => {
+    return Object.values(distributionTriggerByTokenId)
+      .map((it) =>
+        Object.values(it!)
+          .map((it) => ("TokenTotalPledged" in it ? it.TokenTotalPledged : undefined))
+          .filter((it) => it && it.token_can_id.compareTo(DEFAULT_TOKENS.burn) === "eq")
+          .map((it) => EDs.new(it!.threshold, 8))
+      )
+      .reduce((prev, cur) => [...prev, ...cur], [])
+      .toSorted((a, b) => (a.gt(b) ? 1 : a.lt(b) ? -1 : 0));
+  });
+
+  const pledgedTokenXTriggers = createMemo(() => {
+    if (!tokenX()) return [];
+
+    return Object.values(distributionTriggerByTokenId)
+      .map((it) =>
+        Object.values(it!)
+          .map((it) => ("TokenTotalPledged" in it ? it.TokenTotalPledged : undefined))
+          .filter((it) => it && it.token_can_id.compareTo(tokenX()!) === "eq")
+          .map((it) => EDs.new(it!.threshold, 8))
+      )
+      .reduce((prev, cur) => [...prev, ...cur], [])
+      .toSorted((a, b) => (a.gt(b) ? 1 : a.lt(b) ? -1 : 0));
+  });
 
   const prizeFund = () => {
     const furnaceBalance = balanceOf(DEFAULT_TOKENS.icp, Principal.fromText(import.meta.env.VITE_FURNACE_CANISTER_ID));
@@ -341,11 +369,45 @@ export function BonfirePage() {
         </div>
       </div>
 
-      <div class="flex flex-col gap-6">
-        <p class="font-semibold text-4xl">Airdrops</p>
-        <div class="grid grid-cols-1 sm:grid-cols-4 gap-6">
-          <For each={dispenserIdsList()}>{([t, d]) => <Airdrop tokenCanId={t} dispenserCanId={d} />}</For>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div class="flex flex-col gap-4">
+          <div class="flex flex-col gap-2">
+            <p class="font-semibold text-6xl">
+              {totalPledgedBurn()?.toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}{" "}
+              <span class="text-2xl text-gray-140">BURN</span>
+            </p>
+            <p class="text-2xl">Total Pledged</p>
+          </div>
+          <Show when={pledgedBurnTriggers().length > 0}>
+            <div>
+              <div>
+                <Icon kind={EIconKind.Gift} color={COLORS.orange} size={30} class="animate-pulse" />
+                <p>at</p>
+                <p>{pledgedBurnTriggers()[0].toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}</p>
+              </div>
+            </div>
+          </Show>
         </div>
+        <Show when={tokenX() && tokenX()!.compareTo(DEFAULT_TOKENS.burn) !== "eq"}>
+          <div class="flex items-end gap-4">
+            <div class="flex flex-col gap-2">
+              <p class="font-semibold text-6xl">
+                {totalPledgedTokenX()?.toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}{" "}
+                <span class="text-2xl text-gray-140">{tokenXMeta()?.ticker}</span>
+              </p>
+              <p class="text-2xl">Total Pledged</p>
+            </div>
+            <Show when={pledgedTokenXTriggers().length > 0}>
+              <div class="flex items-center gap-2">
+                <Icon kind={EIconKind.Gift} color={COLORS.orange} size={30} class="animate-pulse" />
+                <p>at</p>
+                <p class="font-semibold text-2xl">
+                  {pledgedTokenXTriggers()[0].toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}
+                </p>
+              </div>
+            </Show>
+          </div>
+        </Show>
       </div>
 
       <div class="flex flex-col gap-6">

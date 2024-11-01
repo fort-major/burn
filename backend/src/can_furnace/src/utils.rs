@@ -84,6 +84,10 @@ thread_local! {
             distribution_triggers: StableBTreeMap::init(
                 MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(12))),
             ),
+
+            total_pledged_tokens: StableBTreeMap::init(
+                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(13))),
+            ),
         }
     );
 
@@ -318,7 +322,7 @@ pub fn select_next_token_x() {
 }
 
 pub fn process_next_token_x_triggers() {
-    print(format!("Processing triggers"));
+    print(format!("Processing endround triggers"));
 
     let (triggers_to_execute_opt, should_reschedule) = STATE.with_borrow_mut(|s| {
         let token_x_can_id = s.get_furnace_info().cur_token_x.can_id;
@@ -350,6 +354,50 @@ pub fn process_next_token_x_triggers() {
         set_timer(Duration::from_nanos(0), process_next_token_x_triggers);
     } else {
         set_timer(Duration::from_nanos(0), complete_raffle);
+    }
+}
+
+pub fn process_pledge_triggers(token_can_id: Principal) {
+    print(format!("Processing pledge triggers"));
+
+    let (triggers_to_execute_opt, should_reschedule) = STATE.with_borrow_mut(|s| {
+        let reached = s
+            .total_pledged_tokens
+            .get(&token_can_id)
+            .map(|it| Nat(it.val))
+            .unwrap_or_default();
+
+        let trigger_kind = DistributionTriggerKind::TokenTotalPledged {
+            token_can_id,
+            threshold: reached,
+        };
+
+        s.process_triggers_batch(50, trigger_kind)
+    });
+
+    if let Some(triggers_to_execute) = triggers_to_execute_opt {
+        for trigger in triggers_to_execute {
+            let dispenser_id = STATE.with_borrow(|s| {
+                s.dispenser_of(&trigger.dispenser_token_can_id)
+                    .unwrap()
+                    .unwrap()
+            });
+
+            // ignore results
+            let _ = notify(
+                dispenser_id,
+                "furnace_trigger_distribution",
+                (FurnaceTriggerDistributionRequest {
+                    distribution_id: trigger.distribution_id,
+                },),
+            );
+        }
+    }
+
+    if should_reschedule {
+        set_timer(Duration::from_nanos(0), move || {
+            process_pledge_triggers(token_can_id)
+        });
     }
 }
 

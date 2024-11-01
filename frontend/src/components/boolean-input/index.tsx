@@ -3,8 +3,9 @@ import { eventHandler } from "@utils/security";
 import { EIconKind, Icon } from "@components/icon";
 import { COLORS } from "@utils/colors";
 import { useAuth } from "@store/auth";
+import { IClass } from "@utils/types";
 
-export interface IBooleanInputProps {
+export interface IBooleanInputProps extends IClass {
   value: boolean;
   onChange: (v: boolean) => void;
   disabled?: boolean;
@@ -35,8 +36,8 @@ export function BooleanInput(props: IBooleanInputProps) {
   return (
     <div
       onClick={handleClick}
-      class="flex gap-2 items-center justify-end px-2 py-3"
-      classList={{ "cursor-pointer": !d() }}
+      class="flex gap-2 items-center py-3"
+      classList={{ "cursor-pointer": !d(), [props.class!]: !!props.class }}
     >
       <p class="select-none font-medium text-xs text-gray-150">
         <Show when={props.value} fallback={labelOff()}>

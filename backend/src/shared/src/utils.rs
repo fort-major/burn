@@ -1,9 +1,9 @@
 use std::time::Duration;
 
-use chrono::Datelike;
+
 use ic_e8s::c::E8s;
 
-use crate::{burner::types::TimestampNs, ONE_DAY_NS, ONE_HOUR_NS, ONE_WEEK_NS};
+use crate::{ONE_DAY_NS, ONE_HOUR_NS, ONE_WEEK_NS};
 
 pub fn f64_to_e8s(n: f64) -> E8s {
     if n < 0.0 {

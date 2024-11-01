@@ -2,11 +2,12 @@ import { Bento } from "@components/bento";
 import { EIconKind, Icon } from "@components/icon";
 import { Principal } from "@dfinity/principal";
 import { useAuth } from "@store/auth";
+import { useDispensers } from "@store/dispensers";
 import { useFurnace } from "@store/furnace";
 import { useTokens } from "@store/tokens";
 import { COLORS } from "@utils/colors";
 import { E8s } from "@utils/math";
-import { createEffect, createSignal, on, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, on, Show } from "solid-js";
 
 export interface ITokenVotingOptionProps {
   id: number;
@@ -16,15 +17,8 @@ export interface ITokenVotingOptionProps {
 export function TokenVotingOption(props: ITokenVotingOptionProps) {
   const { isAuthorized, disabled } = useAuth();
   const { metadata, fetchMetadata } = useTokens();
-  const {
-    tokenXVotingAlternatives,
-    voteTokenX,
-    myShares,
-    myVoteTokenX,
-    info,
-    fetchMyVoteTokenX,
-    fetchTokenXVotingAlternatives,
-  } = useFurnace();
+  const { tokenXVotingAlternatives, voteTokenX, myShares, myVoteTokenX, info, getTotalUsedVotingPower } = useFurnace();
+  const { distributionTriggerByTokenId } = useDispensers();
 
   const [tickerImg, setTickerImg] = createSignal<string>();
   const [tickerImgIsPortrait, setTickerImgIsPortrait] = createSignal(false);
@@ -35,6 +29,13 @@ export function TokenVotingOption(props: ITokenVotingOptionProps) {
   const votes = () =>
     tokenXVotingAlternatives().find((it) => it.tokenCanisterId.compareTo(props.tokenCanId) === "eq")?.votes;
 
+  const hasTriggers = createMemo(() => {
+    return Object.values(distributionTriggerByTokenId)
+      .map((it) => Object.values(it!).filter((it) => "TokenXVotingWinner" in it))
+      .reduce((prev, cur) => [...prev, ...cur], [])
+      .find((it) => it.TokenXVotingWinner.compareTo(props.tokenCanId) === "eq");
+  });
+
   const votesShare = () => {
     const v = votes();
     if (!v) return E8s.zero();
@@ -42,9 +43,11 @@ export function TokenVotingOption(props: ITokenVotingOptionProps) {
     const i = info();
     if (!i) return E8s.zero();
 
-    if (i.curRoundPledgedBurnUsd.isZero()) return E8s.zero();
+    const total = getTotalUsedVotingPower();
 
-    return v.div(i.curRoundPledgedBurnUsd);
+    if (total.isZero()) return E8s.zero();
+
+    return v.div(total);
   };
 
   const canVote = () => {
@@ -108,11 +111,14 @@ export function TokenVotingOption(props: ITokenVotingOptionProps) {
           style={{ height: `${votesShare()?.toPercentNum() || 0}%` }}
         ></div>
 
-        <div class="relative flex flex-col gap-2">
+        <div class="relative flex justify-between items-center">
           <div class="flex items-center gap-4">
             <img src={meta()!.logoSrc} class="w-10 h-10 rounded-full" />
             <p class="font-semibold text-2xl">{meta()!.name}</p>
           </div>
+          <Show when={hasTriggers()}>
+            <Icon kind={EIconKind.Gift} color={COLORS.orange} class="animate-pulse" />
+          </Show>
         </div>
 
         <div class="relative flex items-center justify-between">

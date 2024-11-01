@@ -1,7 +1,7 @@
 use std::u32;
 
 use candid::{decode_one, encode_one, CandidType, Nat, Principal};
-use ic_e8s::c::E8s;
+use ic_e8s::{c::E8s};
 use ic_stable_structures::{storable::Bound, Storable};
 use serde::Deserialize;
 use sha2::Digest;
@@ -434,6 +434,10 @@ pub struct DistributionTrigger {
 #[derive(CandidType, Deserialize, Clone)]
 pub enum DistributionTriggerKind {
     TokenXVotingWinner(Principal),
+    TokenTotalPledged {
+        token_can_id: Principal,
+        threshold: Nat,
+    },
 }
 
 impl Storable for DistributionTrigger {

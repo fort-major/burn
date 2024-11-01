@@ -363,10 +363,28 @@ impl Guard<FurnaceState> for CreateDistributionTriggerRequest {
             return Err(String::from("Dispenser not found"));
         }
 
-        match self.trigger.kind {
+        match &self.trigger.kind {
             DistributionTriggerKind::TokenXVotingWinner(token_can_id) => {
                 if state.get_supported_token(&token_can_id).is_none() {
                     return Err(String::from("Dependent token is not supported"));
+                }
+            }
+            DistributionTriggerKind::TokenTotalPledged {
+                token_can_id,
+                threshold,
+            } => {
+                if state.get_supported_token(&token_can_id).is_none() {
+                    return Err(String::from("Dependent token is not supported"));
+                }
+
+                let cur_pledged = state
+                    .total_pledged_tokens
+                    .get(&token_can_id)
+                    .map(|it| Nat(it.val))
+                    .unwrap_or_default();
+
+                if threshold.le(&cur_pledged) {
+                    return Err(String::from("Pledging goal is already reached"));
                 }
             }
         }
@@ -377,3 +395,14 @@ impl Guard<FurnaceState> for CreateDistributionTriggerRequest {
 
 #[derive(CandidType, Deserialize, Validate)]
 pub struct CreateDistributionTriggerResponse {}
+
+#[derive(CandidType, Deserialize)]
+pub struct GetDistributionTriggersRequest {
+    pub start: Option<u64>,
+    pub take: u64,
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct GetDistributionTriggersResponse {
+    pub triggers: Vec<DistributionTrigger>,
+}

@@ -541,6 +541,8 @@ impl DispenserState {
             distribute_to_bonfire: req.distribute_to_bonfire,
         };
 
+        self.set_dispenser_info(info);
+
         if matches!(status, DistributionStatus::InProgress) {
             self.active_distributions.insert(id, distribution);
         } else {

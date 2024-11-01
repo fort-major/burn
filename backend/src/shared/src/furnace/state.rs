@@ -37,6 +37,8 @@ pub struct FurnaceState {
     pub total_burned_tokens: StableBTreeMap<Principal, EDs, Memory>,
 
     pub distribution_triggers: StableBTreeMap<u64, DistributionTrigger, Memory>,
+
+    pub total_pledged_tokens: StableBTreeMap<Principal, EDs, Memory>,
 }
 
 impl FurnaceState {
@@ -244,12 +246,31 @@ impl FurnaceState {
     pub fn pledge(&mut self, req: PledgeRequest) -> PledgeResponse {
         let mut info = self.get_furnace_info();
 
-        let usd_value = if req.token_can_id == info.cur_token_x.can_id {
-            self.get_usd_value(&req.token_can_id, req.qty, info.cur_token_x.decimals)
+        let (usd_value, decimals) = if req.token_can_id == info.cur_token_x.can_id {
+            let usd_value = self.get_usd_value(
+                &req.token_can_id,
+                req.qty.clone(),
+                info.cur_token_x.decimals,
+            );
+
+            (usd_value, info.cur_token_x.decimals)
         } else {
-            self.get_usd_value(&ENV_VARS.burn_token_canister_id, req.qty, 8)
-                * E8s::from(9500_0000u64)
+            let usd_value =
+                self.get_usd_value(&ENV_VARS.burn_token_canister_id, req.qty.clone(), 8)
+                    * E8s::from(9500_0000u64);
+
+            (usd_value, 8)
         };
+
+        let prev_pledged = self
+            .total_pledged_tokens
+            .get(&req.token_can_id)
+            .unwrap_or_default()
+            .to_decimals(decimals);
+        let new_total_pledged = prev_pledged + EDs::new(req.qty.0, decimals);
+
+        self.total_pledged_tokens
+            .insert(req.token_can_id, new_total_pledged);
 
         if req.token_can_id == ENV_VARS.burn_token_canister_id {
             info.note_pledged_burn_usd(&usd_value);
@@ -449,16 +470,33 @@ impl FurnaceState {
 
             info.distribution_trigger_cursor = Some(id);
 
-            match trigger_kind {
+            match &trigger_kind {
                 DistributionTriggerKind::TokenXVotingWinner(expected_can_id) => {
                     match trigger.kind {
                         DistributionTriggerKind::TokenXVotingWinner(actual_can_id) => {
-                            if expected_can_id == actual_can_id {
+                            if *expected_can_id == actual_can_id {
                                 ids_to_remove.push(id);
                             }
                         }
+                        _ => {}
                     }
                 }
+                DistributionTriggerKind::TokenTotalPledged {
+                    token_can_id: expected_token_can_id,
+                    threshold: current_pledged,
+                } => match trigger.kind {
+                    DistributionTriggerKind::TokenTotalPledged {
+                        token_can_id: actual_token_can_id,
+                        threshold,
+                    } => {
+                        if *expected_token_can_id == actual_token_can_id
+                            && current_pledged.clone() >= threshold
+                        {
+                            ids_to_remove.push(id);
+                        }
+                    }
+                    _ => {}
+                },
             }
 
             i += 1;

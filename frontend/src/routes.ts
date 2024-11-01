@@ -4,6 +4,8 @@ import { HomePage } from "@pages/home";
 import { PoolPage } from "@pages/pool";
 import { InfoPage } from "@pages/info";
 import { BonfirePage } from "@pages/bonfire";
+import { CreateAirdropPage } from "@pages/create-airdrop";
+import { AirdropsPage } from "@pages/airdrops";
 
 export interface IRoute {
   parent?: IRoute;
@@ -29,6 +31,16 @@ export const ROOT = route({
     }),
     bonfire: route({
       component: BonfirePage,
+    }),
+    airdrops: route({
+      $: {
+        "/": route({
+          component: AirdropsPage,
+        }),
+        create: route({
+          component: CreateAirdropPage,
+        }),
+      },
     }),
     info: route({
       component: InfoPage,

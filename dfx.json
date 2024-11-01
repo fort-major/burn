@@ -32,6 +32,11 @@
       ],
       "type": "assets"
     },
+    "test_token": {
+      "candid": "backend/src/can_burn_token/can.did",
+      "type": "custom",
+      "wasm": "backend/src/can_burn_token/burn.wasm"
+    },
     "internet_identity": {
       "type": "custom",
       "candid": "https://github.com/dfinity/internet-identity/releases/download/release-2024-09-06/internet_identity.did",

@@ -13,6 +13,7 @@ export interface IWalletStoreContext {
   pid: Accessor<Principal | undefined>;
   poolAccount: Accessor<Account | undefined>;
   bonfireAccount: Accessor<Account | undefined>;
+  subaccount: Accessor<Uint8Array | undefined>;
 
   pidBalance: (tokenCanId: Principal) => bigint | undefined;
   fetchPidBalance: (tokenCanId: Principal) => Promise<void>;
@@ -347,6 +348,7 @@ export function WalletStore(props: IChildren) {
         pid,
         poolAccount,
         bonfireAccount,
+        subaccount,
 
         pidBalance,
         fetchPidBalance,

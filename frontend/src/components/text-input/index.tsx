@@ -52,9 +52,8 @@ export function TextInput(props: ITextInputProps) {
     <div class="relative flex flex-col gap-1 flex-1">
       <input
         type="text"
-        class="flex p-2 placeholder-gray-115 font-primary focus:outline-none text-sm leading-6 flex-1 bg-black border-b-gray-140 border-b-[1px] focus:border-b-gray-190"
+        class="flex p-2 placeholder-gray-115 font-primary text-sm leading-6 flex-1 bg-black border-b-gray-140 border-b-[1px] focus:outline-none focus:border-b-gray-190"
         classList={{
-          italic: props.value === "",
           "bg-gray-110": d(),
           "text-white": !d(),
           "text-gray-140": d(),

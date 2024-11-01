@@ -82,6 +82,7 @@ export interface IFurnaceStoreContext {
 
   tokenXVotingAlternatives: Accessor<ITokenXAlternative[]>;
   fetchTokenXVotingAlternatives: Fetcher;
+  getTotalUsedVotingPower: Accessor<E8s>;
 
   pledge: (req: IPledgeRequest) => Promise<bigint>;
   voteTokenX: (vote: TTokenXVote) => Promise<void>;
@@ -93,7 +94,12 @@ export interface IFurnaceStoreContext {
   fetchMyShares: Fetcher;
 
   totalTokensBurned: Store<Partial<Record<string, EDs>>>;
+  getTotalTokensBurned: (tokenCanId: Principal) => EDs;
   fetchTotalTokensBurned: Fetcher;
+
+  totalTokensPledged: Store<Partial<Record<string, EDs>>>;
+  getTotalTokensPledged: (tokenCanId: Principal) => EDs;
+  fetchTotalTokensPledged: Fetcher;
 }
 
 const FurnaceContext = createContext<IFurnaceStoreContext>();
@@ -123,6 +129,7 @@ export function FurnaceStore(props: IChildren) {
   const [myShares, setMyShares] = createSignal<IMyShares>();
   const [myVoteTokenX, setMyVoteTokenX] = createSignal<TTokenXVote>();
   const [totalTokensBurned, setTotalTokensBurned] = createStore<IFurnaceStoreContext["totalTokensBurned"]>();
+  const [totalTokensPledged, setTotalTokensPledged] = createStore<IFurnaceStoreContext["totalTokensPledged"]>();
 
   createEffect(
     on(isReadyToFetch, (ready) => {
@@ -131,6 +138,7 @@ export function FurnaceStore(props: IChildren) {
         fetchSupportedTokens();
         fetchTokenXVotingAlternatives();
         fetchTotalTokensBurned();
+        fetchTotalTokensPledged();
       }
     })
   );
@@ -141,6 +149,7 @@ export function FurnaceStore(props: IChildren) {
       fetchSupportedTokens();
       fetchTokenXVotingAlternatives();
       fetchTotalTokensBurned();
+      fetchTotalTokensPledged();
     }
   });
 
@@ -154,6 +163,21 @@ export function FurnaceStore(props: IChildren) {
     })
   );
 
+  const fetchTotalTokensPledged: IFurnaceStoreContext["fetchTotalTokensPledged"] = async () => {
+    assertReadyToFetch();
+
+    const furnace = newFurnaceActor(anonymousAgent()!);
+    const resp = await furnace.get_total_pledged_tokens();
+
+    for (let [tokenCanId, num] of resp) {
+      setTotalTokensPledged(tokenCanId.toText(), EDs.new(num.val, num.decimals));
+    }
+  };
+
+  const getTotalTokensPledged: IFurnaceStoreContext["getTotalTokensPledged"] = (tokenCanId: Principal) => {
+    return totalTokensPledged[tokenCanId.toText()] ?? EDs.zero(8);
+  };
+
   const fetchTotalTokensBurned: IFurnaceStoreContext["fetchTotalTokensBurned"] = async () => {
     assertReadyToFetch();
 
@@ -163,6 +187,10 @@ export function FurnaceStore(props: IChildren) {
     for (let [tokenCanId, num] of resp) {
       setTotalTokensBurned(tokenCanId.toText(), EDs.new(num.val, num.decimals));
     }
+  };
+
+  const getTotalTokensBurned: IFurnaceStoreContext["getTotalTokensBurned"] = (tokenCanId: Principal) => {
+    return totalTokensBurned[tokenCanId.toText()] ?? EDs.zero(8);
   };
 
   const fetchMyVoteTokenX: IFurnaceStoreContext["fetchMyVoteTokenX"] = async () => {
@@ -317,6 +345,12 @@ export function FurnaceStore(props: IChildren) {
     setTokenXVotingAlternatives(alternatives);
   };
 
+  const getTotalUsedVotingPower: IFurnaceStoreContext["getTotalUsedVotingPower"] = () => {
+    return tokenXVotingAlternatives()
+      .map((it) => it.votes)
+      .reduce((prev, cur) => prev.add(cur), E8s.zero());
+  };
+
   const pledge: IFurnaceStoreContext["pledge"] = async (req: IPledgeRequest) => {
     assertAuthorized();
 
@@ -390,6 +424,7 @@ export function FurnaceStore(props: IChildren) {
 
         tokenXVotingAlternatives,
         fetchTokenXVotingAlternatives,
+        getTotalUsedVotingPower,
 
         pledge,
         voteTokenX,
@@ -400,7 +435,12 @@ export function FurnaceStore(props: IChildren) {
         fetchMyShares,
 
         totalTokensBurned,
+        getTotalTokensBurned,
         fetchTotalTokensBurned,
+
+        totalTokensPledged,
+        getTotalTokensPledged,
+        fetchTotalTokensPledged,
       }}
     >
       {props.children}

@@ -15,7 +15,10 @@ type DistributionTrigger = record {
   distribution_id : nat64;
   dispenser_token_can_id : principal;
 };
-type DistributionTriggerKind = variant { TokenXVotingWinner : principal };
+type DistributionTriggerKind = variant {
+  TokenTotalPledged : record { threshold : nat; token_can_id : principal };
+  TokenXVotingWinner : principal;
+};
 type EDs = record { val : nat; decimals : nat8 };
 type FurnaceInfoPub = record {
   cur_round_pledged_usd : nat;
@@ -50,6 +53,13 @@ type GetCurRoundPositionsRequest = record {
   take : nat64;
 };
 type GetCurRoundPositionsResponse = record { positions : vec Position };
+type GetDistributionTriggersRequest = record {
+  take : nat64;
+  start : opt nat64;
+};
+type GetDistributionTriggersResponse = record {
+  triggers : vec DistributionTrigger;
+};
 type GetWinnersRequest = record { skip : nat64; take : nat64 };
 type GetWinnersResponse = record { winners : vec FurnaceWinnerHistoryEntry };
 type ICPSwapTokenInfo = record { exchange_rate_usd : nat; can_id : principal };
@@ -86,10 +96,14 @@ service : () -> {
       GetCurRoundPositionsResponse,
     ) query;
   get_cycles_balance : () -> (nat) query;
+  get_distribution_triggers : (GetDistributionTriggersRequest) -> (
+      GetDistributionTriggersResponse,
+    ) query;
   get_furnace_info : () -> (FurnaceInfoPub) query;
   get_my_cur_round_positions : () -> (nat, nat) query;
   get_my_vote_token_x : () -> (opt TokenXVote) query;
   get_total_burned_tokens : () -> (vec record { principal; EDs }) query;
+  get_total_pledged_tokens : () -> (vec record { principal; EDs }) query;
   get_winners : (GetWinnersRequest) -> (GetWinnersResponse) query;
   list_dispensers : () -> (vec record { principal; opt principal }) query;
   list_exchange_rates : () -> (

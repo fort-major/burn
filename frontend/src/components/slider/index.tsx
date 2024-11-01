@@ -1,11 +1,12 @@
-import { EDs } from "@utils/math";
 import { eventHandler } from "@utils/security";
-import { createEffect, createSignal, Show } from "solid-js";
+import { createSignal } from "solid-js";
 
 export interface ISliderProps {
-  min: string;
-  max: string;
-  onChange: (val: EDs) => void;
+  minLabel: string;
+  maxLabel: string;
+  min: number;
+  max: number;
+  onChange: (val: number) => void;
 }
 
 export const Slider = (props: ISliderProps) => {
@@ -13,17 +14,16 @@ export const Slider = (props: ISliderProps) => {
 
   const handleChange = eventHandler((e: Event & { target: HTMLInputElement }) => {
     const val = parseInt(e.target.value);
-    const e8sVal = EDs.fromBigIntBase(BigInt(val)).div(EDs.fromBigIntBase(100n));
 
-    props.onChange(e8sVal);
+    props.onChange(val);
     setValue(val);
   });
 
   return (
     <div class="flex gap-1 items-center">
-      <p class="text-sm font-semibold text-gray-140 w-20">{props.min}</p>
-      <input type="range" min={0} max={100} value={value()} onChange={handleChange} />
-      <p class="text-sm font-semibold text-gray-140 w-20">{props.max}</p>
+      <p class="text-sm font-semibold text-gray-140 w-20">{props.minLabel}</p>
+      <input type="range" min={props.min} max={props.max} value={value()} onChange={handleChange} />
+      <p class="text-sm font-semibold text-gray-140 w-20">{props.maxLabel}</p>
     </div>
   );
 };

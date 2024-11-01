@@ -71,7 +71,7 @@ export function QtyInput(props: IQtyInputProps) {
       <div class="relative flex flex-col gap-1 min-w-52 bg-black border-b-[1px] border-gray-140">
         <div class="flex items-center justify-between p-2 gap-1">
           <input
-            class="font-primary text-md placeholder-gray-140 font-medium leading-6 text-white bg-black focus:outline-none flex-grow"
+            class="font-primary text-md placeholder-gray-115 leading-6 text-white bg-black focus:border-b-gray-190 focus:outline-none flex-grow"
             placeholder={props.placeholder ? props.placeholder : max() ? `Max is ${max()!.toString()}` : "Amount..."}
             type="text"
             value={props.value.unwrap().toString()}

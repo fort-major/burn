@@ -22,7 +22,8 @@ use shared::{
             AddSupportedTokenRequest, AddSupportedTokenResponse, ClaimRewardICPRequest,
             ClaimRewardICPResponse, CreateDistributionTriggerRequest,
             CreateDistributionTriggerResponse, DeployDispenserRequest, DeployDispenserResponse,
-            GetCurRoundPositionsRequest, GetCurRoundPositionsResponse, GetWinnersRequest,
+            GetCurRoundPositionsRequest, GetCurRoundPositionsResponse,
+            GetDistributionTriggersRequest, GetDistributionTriggersResponse, GetWinnersRequest,
             GetWinnersResponse, PledgeRequest, PledgeResponse, Position,
             RemoveSupportedTokenRequest, RemoveSupportedTokenResponse, VoteTokenXRequest,
             VoteTokenXResponse, WithdrawRequest, WithdrawResponse,
@@ -37,14 +38,12 @@ use shared::{
     CanisterMode, Guard, ENV_VARS, ICP_FEE,
 };
 use utils::{
-    deploy_dispenser_for, deposit_cycles, is_stopped, set_fetch_token_prices_timer,
-    set_init_canister_one_timer, set_raffle_timer, start_the_raffle, IS_STOPPED,
-    NEXT_RAFFLE_TIMESTAMP, STATE,
+    deploy_dispenser_for, deposit_cycles, is_stopped, process_pledge_triggers,
+    set_fetch_token_prices_timer, set_init_canister_one_timer, set_raffle_timer, start_the_raffle,
+    IS_STOPPED, NEXT_RAFFLE_TIMESTAMP, STATE,
 };
 
 pub mod utils;
-
-// TODO: add stopped check everywhere !!!!
 
 #[update]
 async fn pledge(mut req: PledgeRequest) -> PledgeResponse {
@@ -57,7 +56,9 @@ async fn pledge(mut req: PledgeRequest) -> PledgeResponse {
             .expect("Invalid request");
     });
 
-    let token = ICRC1CanisterClient::new(req.token_can_id);
+    let token_can_id = req.token_can_id;
+
+    let token = ICRC1CanisterClient::new(token_can_id);
     let caller_subaccount = Subaccount::from(caller()).0;
 
     token
@@ -77,7 +78,12 @@ async fn pledge(mut req: PledgeRequest) -> PledgeResponse {
         .0
         .expect("Unable to pledge");
 
-    STATE.with_borrow_mut(|s| s.pledge(req))
+    let response = STATE.with_borrow_mut(|s| s.pledge(req));
+
+    // TODO: maybe move it to a timer
+    process_pledge_triggers(token_can_id);
+
+    response
 }
 
 #[update]
@@ -222,6 +228,11 @@ fn get_my_vote_token_x() -> Option<TokenXVote> {
 #[query]
 fn get_total_burned_tokens() -> Vec<(Principal, EDs)> {
     STATE.with_borrow(|s| s.total_burned_tokens.iter().collect())
+}
+
+#[query]
+fn get_total_pledged_tokens() -> Vec<(Principal, EDs)> {
+    STATE.with_borrow(|s| s.total_pledged_tokens.iter().collect())
 }
 
 #[query]
@@ -399,6 +410,42 @@ async fn create_distribution_trigger(
     });
 
     CreateDistributionTriggerResponse {}
+}
+
+#[query]
+fn get_distribution_triggers(
+    req: GetDistributionTriggersRequest,
+) -> GetDistributionTriggersResponse {
+    STATE.with_borrow(|s| {
+        let mut iter = if let Some(cursor) = req.start {
+            let mut i = s.distribution_triggers.range(cursor..);
+            i.next();
+
+            i
+        } else {
+            s.distribution_triggers.iter()
+        };
+
+        let mut triggers = Vec::new();
+        let mut i = 0;
+
+        loop {
+            let entry = iter.next();
+            if entry.is_none() {
+                break;
+            }
+
+            let (_, trigger) = entry.unwrap();
+            triggers.push(trigger);
+
+            i += 1;
+            if i == req.take {
+                break;
+            }
+        }
+
+        GetDistributionTriggersResponse { triggers }
+    })
 }
 
 #[update]
