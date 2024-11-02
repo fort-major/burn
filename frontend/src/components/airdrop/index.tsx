@@ -102,8 +102,8 @@ export function Airdrop(props: IAirdropProps) {
   const handleClaimClick = async () => {
     const u = unclaimed()!;
 
-    await claimDispenserUnclaimedTokens(props.dispenserCanId, u);
-    fetchDispenserUnclaimedTokens(props.dispenserCanId);
+    await claimDispenserUnclaimedTokens(props.tokenCanId, u);
+    fetchDispenserUnclaimedTokens(props.tokenCanId);
   };
 
   return (
@@ -237,14 +237,16 @@ export function Distribution(props: IDistributionProps) {
       </Show>
 
       <div class="flex items-center justify-between">
-        <p class="font-semibold flex items-baseline gap-1">
-          <span>
-            <Show when={!props.d.isHidden || props.d.status === "InProgress"} fallback="???">
-              {props.d.curTickReward.toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}
-            </Show>
-          </span>{" "}
-          <span class="text-gray-140">{meta()!.ticker}</span> <span class="text-gray-140 text-xs">per hour</span>
-        </p>
+        <Show when={meta()}>
+          <p class="font-semibold flex items-baseline gap-1">
+            <span>
+              <Show when={!props.d.isHidden || props.d.status === "InProgress"} fallback="???">
+                {props.d.curTickReward.toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}
+              </Show>
+            </span>{" "}
+            <span class="text-gray-140">{meta()!.ticker}</span> <span class="text-gray-140 text-xs">per hour</span>
+          </p>
+        </Show>
         <p class="flex font-semibold gap-2 items-baseline">
           <span class="text-xl">
             <Show when={!props.d.isHidden || props.d.status === "InProgress"} fallback="???">
