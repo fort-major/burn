@@ -23,8 +23,9 @@ use shared::{
             WithdrawCanceledResponse, WithdrawUserTokensRequest, WithdrawUserTokensResponse,
         },
         types::{
-            DispenserInfoPub, Distribution, DistributionId, DISPENSER_DEV_FEE_SUBACCOUNT,
-            DISPENSER_DISTRIBUTION_SUBACCOUNT, DISPENSER_ICP_FEE_SUBACCOUNT,
+            CurrentDistributionInfo, DispenserInfoPub, Distribution, DistributionId,
+            DISPENSER_DEV_FEE_SUBACCOUNT, DISPENSER_DISTRIBUTION_SUBACCOUNT,
+            DISPENSER_ICP_FEE_SUBACCOUNT,
         },
     },
     icrc1::ICRC1CanisterClient,
@@ -257,6 +258,11 @@ fn subaccount_of(pid: Principal) -> Subaccount {
 }
 
 #[query]
+fn get_current_distribution_info() -> CurrentDistributionInfo {
+    STATE.with_borrow(|s| s.get_current_distribution_info())
+}
+
+#[query]
 fn get_account_ids() -> BTreeMap<String, (AccountIdentifier, Account)> {
     let mut map = BTreeMap::new();
 
@@ -323,7 +329,7 @@ fn resume() {
     IS_STOPPED.with_borrow_mut(|s| *s = false);
 
     set_transform_icp_fee_to_cycles_timer();
-    set_tick_timer();
+    set_tick_timer(false);
     set_update_bonfire_pool_members_timer();
     set_transfer_dev_fee_to_furnace_timer();
 }
@@ -339,7 +345,7 @@ fn init_hook(args: InitArgs) {
     set_init_canister_one_timer();
 
     set_transform_icp_fee_to_cycles_timer();
-    set_tick_timer();
+    set_tick_timer(false);
     set_update_bonfire_pool_members_timer();
     set_transfer_dev_fee_to_furnace_timer();
 }
@@ -347,7 +353,7 @@ fn init_hook(args: InitArgs) {
 #[post_upgrade]
 fn post_upgrade_hook() {
     set_transform_icp_fee_to_cycles_timer();
-    set_tick_timer();
+    set_tick_timer(true);
     set_update_bonfire_pool_members_timer();
     set_transfer_dev_fee_to_furnace_timer();
 }

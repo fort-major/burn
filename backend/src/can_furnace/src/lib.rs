@@ -5,7 +5,10 @@ use ic_cdk::{
     api::{
         call::{msg_cycles_accept128, msg_cycles_available128},
         canister_balance128,
-        management_canister::main::{install_code, CanisterInstallMode, InstallCodeArgument},
+        management_canister::main::{
+            install_code, start_canister, stop_canister, CanisterIdRecord, CanisterInstallMode,
+            InstallCodeArgument,
+        },
         time,
     },
     caller, export_candid, id, init, post_upgrade, print, query, update,
@@ -485,11 +488,21 @@ async fn upgrade_dispensers() {
     let wasm = STATE.with_borrow(|s| s.dispenser_wasm.get().clone());
 
     for dispenser_id in dispensers {
+        let _ = stop_canister(CanisterIdRecord {
+            canister_id: dispenser_id,
+        })
+        .await;
+
         let res2 = install_code(InstallCodeArgument {
             mode: CanisterInstallMode::Upgrade(None),
             wasm_module: wasm.clone(),
             canister_id: dispenser_id,
             arg: encode_args(()).unwrap(),
+        })
+        .await;
+
+        let _ = start_canister(CanisterIdRecord {
+            canister_id: dispenser_id,
         })
         .await;
 

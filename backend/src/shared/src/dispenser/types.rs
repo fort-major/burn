@@ -7,7 +7,7 @@ use sha2::Digest;
 
 use crate::{
     burner::types::{TCycles, TimestampNs},
-    ONE_DAY_NS, ONE_HOUR_NS, ONE_MINUTE_NS,
+    ONE_DAY_NS, ONE_HOUR_NS,
 };
 
 pub type DistributionId = u64;

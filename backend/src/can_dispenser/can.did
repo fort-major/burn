@@ -11,6 +11,14 @@ type CreateDistributionRequest = record {
   duration_ticks : nat64;
   start_condition : DistributionStartCondition;
 };
+type CurrentDistributionInfo = record {
+  bonfire_pool_cursor : opt principal;
+  distribution_id : opt nat64;
+  kamikaze_pool_counter : opt nat;
+  kamikaze_random_number : opt nat;
+  kamikaze_pool_cursor : opt principal;
+  common_pool_cursor : opt principal;
+};
 type DispenserInfoPub = record {
   tick_delay_ns : nat64;
   prev_tick_timestamp : nat64;
@@ -70,6 +78,7 @@ service : (InitArgs) -> {
     );
   furnace_trigger_distribution : (CancelDistributionRequest) -> (record {});
   get_account_ids : () -> (vec record { text; record { blob; Account } }) query;
+  get_current_distribution_info : () -> (CurrentDistributionInfo) query;
   get_cycles_balance : () -> (nat) query;
   get_distribution : (nat64) -> (opt Distribution) query;
   get_distributions : (GetDistributionsRequest) -> (

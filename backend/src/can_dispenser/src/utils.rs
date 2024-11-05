@@ -123,13 +123,17 @@ fn init_canister() {
     });
 }
 
-pub fn set_tick_timer() {
+pub fn set_tick_timer(immediate: bool) {
     if is_stopped() {
         return;
     }
 
     let id = set_timer(
-        Duration::from_nanos(DISPENSER_DEFAULT_TICK_DELAY_NS),
+        Duration::from_nanos(if immediate {
+            0
+        } else {
+            DISPENSER_DEFAULT_TICK_DELAY_NS
+        }),
         tick_start,
     );
 
@@ -146,6 +150,8 @@ fn tick_start() {
 
         info.start_round();
         s.set_dispenser_info(info);
+
+        s.set_current_distribution_info(CurrentDistributionInfo::default());
 
         false
     });
@@ -217,7 +223,7 @@ fn try_complete_active_distributions() {
     STATE.with_borrow_mut(|s| s.complete_tick(time()));
 
     // restart
-    set_tick_timer();
+    set_tick_timer(false);
 }
 
 fn dispense_to_common_pool_members() {
