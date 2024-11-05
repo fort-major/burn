@@ -8,7 +8,7 @@ use ic_cdk::{
     },
     caller, export_candid, id, init, post_upgrade, query, update,
 };
-use ic_cdk_timers::{clear_timer};
+use ic_cdk_timers::clear_timer;
 use ic_e8s::d::EDs;
 use ic_ledger_types::{AccountIdentifier, Subaccount};
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
@@ -70,7 +70,16 @@ async fn create_distribution(mut req: CreateDistributionRequest) -> CreateDistri
         req.qty.clone()
     };
 
-    charge_caller_tokens(info.token_can_id.unwrap(), info.token_fee, qty).await;
+    req.qty = qty - info.token_fee.clone();
+
+    charge_caller_tokens(
+        info.token_can_id.unwrap(),
+        info.token_fee.clone(),
+        req.qty.clone(),
+    )
+    .await;
+
+    req.qty -= info.token_fee;
 
     // request validity does not depend on the state - safe to continue without checking validity again
 

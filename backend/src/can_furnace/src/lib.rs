@@ -390,7 +390,9 @@ async fn create_distribution_trigger(
         .0
         .expect("Distribution not found");
 
-    if distribution.owner != caller() {
+    let info = STATE.with_borrow(|s| s.get_furnace_info());
+
+    if distribution.owner != caller() && !info.is_dev(&caller()) {
         panic!("Access denied");
     }
 

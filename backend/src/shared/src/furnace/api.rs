@@ -298,14 +298,14 @@ impl Guard<FurnaceState> for GetCurRoundPositionsRequest {
     }
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Debug)]
 pub struct Position {
     pub pid: Principal,
     pub usd: E8s,
     pub vp: E8s,
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Debug)]
 pub struct GetCurRoundPositionsResponse {
     pub positions: Vec<Position>,
 }

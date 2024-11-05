@@ -1,5 +1,6 @@
 use candid::{Nat, Principal};
 
+use ic_cdk::print;
 use ic_e8s::d::EDs;
 use ic_stable_structures::{Cell, StableBTreeMap};
 use num_bigint::BigUint;
@@ -153,6 +154,11 @@ impl DispenserState {
                         * EDs::new(BigUint::from(5000_0000u64), 8).to_decimals(info.token_decimals)
                 };
 
+                print(format!(
+                    "Counter: {}, random number: {}, reward: {}, id: {}",
+                    counter, random_number, kamikaze_pool_reward, pid
+                ));
+
                 self.unclaimed_tokens
                     .insert(pid, unclaimed_reward + &kamikaze_pool_reward);
 
@@ -244,6 +250,11 @@ impl DispenserState {
                 .to_decimals(common_pool_reward.decimals)
                 * &common_pool_reward;
 
+            print(format!(
+                "Whole reward: {}, reward: {}, id: {}",
+                common_pool_reward, new_reward, pid
+            ));
+
             let unclaimed_reward = self
                 .unclaimed_tokens
                 .get(&pid)
@@ -334,6 +345,11 @@ impl DispenserState {
                 .to_decimals(bonfire_pool_reward.decimals)
                 * &bonfire_pool_reward;
 
+            print(format!(
+                "Whole reward: {}, reward: {}, id: {}",
+                bonfire_pool_reward, new_reward, pid
+            ));
+
             let unclaimed_reward = self
                 .unclaimed_tokens
                 .get(&pid)
@@ -378,17 +394,33 @@ impl DispenserState {
             self.active_distributions.iter()
         };
 
-        let entry = iter.next();
-        if entry.is_none() {
-            return false;
+        let info = self.get_dispenser_info();
+
+        loop {
+            let entry = iter.next();
+            if entry.is_none() {
+                distribution_info.distribution_id = None;
+                self.set_current_distribution_info(distribution_info);
+
+                return false;
+            }
+
+            let (id, distribution) = entry.unwrap();
+
+            if distribution
+                .get_cur_tick_reward(info.token_fee.clone())
+                .is_none()
+            {
+                continue;
+            }
+
+            print(format!("Next distribution ID: {}", id));
+
+            distribution_info.distribution_id = Some(id);
+            self.set_current_distribution_info(distribution_info);
+
+            return true;
         }
-
-        let (id, _) = entry.unwrap();
-
-        distribution_info.distribution_id = Some(id);
-        self.set_current_distribution_info(distribution_info);
-
-        true
     }
 
     pub fn complete_active_distributions_batch(&mut self, batch_size: u64) -> bool {
@@ -402,6 +434,7 @@ impl DispenserState {
 
         let info = self.get_dispenser_info();
         let mut distributions_to_remove = Vec::new();
+        let mut distributions_to_update = Vec::new();
 
         let mut i = 0;
         let should_reschedule = loop {
@@ -416,9 +449,13 @@ impl DispenserState {
 
             let is_complete_now = distribution.try_complete(info.token_fee.clone());
 
+            print(format!("Distribution {:?}", distribution));
+
             if is_complete_now {
                 distributions_to_remove.push(id);
                 self.past_distributions.insert(id, distribution);
+            } else {
+                distributions_to_update.push(distribution);
             }
 
             i += 1;
@@ -429,6 +466,10 @@ impl DispenserState {
 
         for id in distributions_to_remove {
             self.active_distributions.remove(&id);
+        }
+
+        for d in distributions_to_update {
+            self.active_distributions.insert(d.id, d);
         }
 
         if !should_reschedule {
@@ -450,6 +491,7 @@ impl DispenserState {
         };
 
         let mut distributions_to_activate = Vec::new();
+        let mut distributions_to_update = Vec::new();
 
         let mut i = 0;
         let should_reschedule = loop {
@@ -464,9 +506,13 @@ impl DispenserState {
 
             let is_active_now = distribution.try_activate();
 
+            print(format!("Distribution {:?}", distribution));
+
             if is_active_now {
                 distributions_to_activate.push(id);
                 self.active_distributions.insert(id, distribution);
+            } else {
+                distributions_to_update.push(distribution);
             }
 
             i += 1;
@@ -477,6 +523,10 @@ impl DispenserState {
 
         for id in distributions_to_activate {
             self.scheduled_distributions.remove(&id);
+        }
+
+        for d in distributions_to_update {
+            self.scheduled_distributions.insert(d.id, d);
         }
 
         if !should_reschedule {

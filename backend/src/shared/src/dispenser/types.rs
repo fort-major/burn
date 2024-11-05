@@ -7,7 +7,7 @@ use sha2::Digest;
 
 use crate::{
     burner::types::{TCycles, TimestampNs},
-    ONE_DAY_NS, ONE_HOUR_NS,
+    ONE_DAY_NS, ONE_HOUR_NS, ONE_MINUTE_NS,
 };
 
 pub type DistributionId = u64;
@@ -23,7 +23,7 @@ pub const DISPENSER_ICP_FEE_SUBACCOUNT: [u8; 32] = [
 pub const DISPENSER_DEV_FEE_SUBACCOUNT: [u8; 32] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3,
 ];
-pub const DISPENSER_ICP_FEE_E8S: u64 = 9990_0000;
+pub const DISPENSER_ICP_FEE_E8S: u64 = 1_0000_0000;
 pub const DISPENSER_ICP_FEE_TRANSFORM_DELAY_NS: u64 = ONE_DAY_NS;
 
 #[derive(CandidType, Deserialize, Clone, Default)]
@@ -137,7 +137,7 @@ impl Storable for DispenserInfo {
     const BOUND: Bound = Bound::Unbounded;
 }
 
-#[derive(CandidType, Deserialize, Clone)]
+#[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct Distribution {
     pub id: DistributionId,
     pub owner: Principal,
@@ -172,12 +172,10 @@ impl Distribution {
 
     pub fn get_cur_tick_reward(&self, fee: Nat) -> Option<EDs> {
         if self.leftover_qty.val < fee.0 {
-            None
-        } else if self.leftover_qty < self.cur_tick_reward {
-            None
-        } else {
-            Some(self.cur_tick_reward.clone())
+            return None;
         }
+
+        Some(self.cur_tick_reward.clone())
     }
 
     pub fn try_activate(&mut self) -> bool {
@@ -197,6 +195,10 @@ impl Distribution {
     }
 
     pub fn try_complete(&mut self, fee: Nat) -> bool {
+        if self.leftover_qty < self.cur_tick_reward {
+            self.cur_tick_reward = self.leftover_qty.clone();
+        }
+
         if self.get_cur_tick_reward(fee).is_some() {
             false
         } else {
@@ -218,19 +220,19 @@ impl Storable for Distribution {
     const BOUND: Bound = Bound::Unbounded;
 }
 
-#[derive(CandidType, Deserialize, Clone)]
+#[derive(CandidType, Deserialize, Clone, Debug)]
 pub enum DistributionScheme {
     Linear,
     Logarithmic,
 }
 
-#[derive(CandidType, Deserialize, Clone, Validate)]
+#[derive(CandidType, Deserialize, Clone, Validate, Debug)]
 pub enum DistributionStartCondition {
     AtTickDelay(#[garde(range(max = 720))] u64),
     AtFurnaceTrigger,
 }
 
-#[derive(CandidType, Deserialize, Clone, Copy)]
+#[derive(CandidType, Deserialize, Clone, Copy, Debug)]
 pub enum DistributionStatus {
     Scheduled,
     InProgress,

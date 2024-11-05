@@ -373,7 +373,7 @@ export function BonfirePage() {
         <div class="flex flex-col gap-4">
           <div class="flex flex-col gap-2">
             <p class="font-semibold text-6xl">
-              {totalPledgedBurn()?.toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}{" "}
+              {totalPledgedBurn()?.toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 }) ?? "0"}{" "}
               <span class="text-2xl text-gray-140">BURN</span>
             </p>
             <p class="text-2xl">Total Pledged</p>
@@ -392,7 +392,7 @@ export function BonfirePage() {
           <div class="flex items-end gap-4">
             <div class="flex flex-col gap-2">
               <p class="font-semibold text-6xl">
-                {totalPledgedTokenX()?.toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}{" "}
+                {totalPledgedTokenX()?.toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 }) ?? "0"}{" "}
                 <span class="text-2xl text-gray-140">{tokenXMeta()?.ticker}</span>
               </p>
               <p class="text-2xl">Total Pledged</p>

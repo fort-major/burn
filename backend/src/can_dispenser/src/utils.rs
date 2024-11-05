@@ -361,7 +361,7 @@ fn update_bonfire_pool_members() {
     });
 
     spawn(async {
-        let client = FurnaceClient(ENV_VARS.burner_canister_id);
+        let client = FurnaceClient(ENV_VARS.furnace_canister_id);
 
         let take = 100;
         let mut skip = None;
@@ -370,6 +370,8 @@ fn update_bonfire_pool_members() {
             let call_result = client
                 .get_cur_round_positions(GetCurRoundPositionsRequest { skip, take })
                 .await;
+
+            print(format!("Bonfire participants: {:?}", call_result));
 
             if let Ok((response,)) = call_result {
                 let should_stop = STATE.with_borrow_mut(|s| {

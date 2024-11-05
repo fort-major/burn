@@ -33,3 +33,4 @@ sha2 = "0.10"
 garde = { version = "0.18", features = ["derive", "url", "unicode"] }
 html-escape = "0.2"
 url = "2.5"
+ic-utils = "0.39"
