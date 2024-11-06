@@ -202,13 +202,13 @@ export const PoolPage = () => {
   return (
     <Page slim>
       <div class="grid grid-cols-4 gap-6">
-        <Show when={isAuthorized()} fallback={<div class="col-span-3"></div>}>
+        <Show when={isAuthorized()}>
           <Bento class="col-span-4 flex-row justify-between items-center gap-2" id={1}>
             <ProfileFull />
           </Bento>
         </Show>
 
-        <Bento class="col-span-3 flex-col gap-8 self-start" id={1}>
+        <Bento class="col-span-4 sm:col-span-3 flex-col gap-8 self-start" id={1}>
           <p class="font-semibold text-xl">Hourly Pool Rewards</p>
 
           <Show when={poolHourlyRewards()}>
@@ -246,7 +246,7 @@ export const PoolPage = () => {
           </Show>
         </Bento>
 
-        <Bento id={1} class="col-span-1 flex-col gap-4 justify-between self-start">
+        <Bento id={1} class="col-span-4 sm:col-span-1 flex-col gap-4 justify-between self-start">
           <Show when={totals.data && spikeAccountBalance()}>
             <p class="font-semibold text-xl">Massive Burn Incoming</p>
             <div class="flex flex-col">
