@@ -34,8 +34,8 @@ use shared::{
 use utils::{
     charge_caller_distribution_creation_fee_icp, charge_caller_tokens, charge_dev_fee,
     claim_caller_tokens, set_init_canister_one_timer, set_tick_timer,
-    set_transfer_dev_fee_to_furnace_timer, set_transform_icp_fee_to_cycles_timer,
-    set_update_bonfire_pool_members_timer, IS_STOPPED, STATE, TIMERS,
+    set_transfer_dev_fee_to_furnace_timer, set_transform_icp_fee_to_cycles_timer, IS_STOPPED,
+    STATE, TIMERS,
 };
 
 pub mod utils;
@@ -330,7 +330,6 @@ fn resume() {
 
     set_transform_icp_fee_to_cycles_timer();
     set_tick_timer(false);
-    set_update_bonfire_pool_members_timer();
     set_transfer_dev_fee_to_furnace_timer();
 }
 
@@ -346,7 +345,6 @@ fn init_hook(args: InitArgs) {
 
     set_transform_icp_fee_to_cycles_timer();
     set_tick_timer(false);
-    set_update_bonfire_pool_members_timer();
     set_transfer_dev_fee_to_furnace_timer();
 }
 
@@ -354,7 +352,6 @@ fn init_hook(args: InitArgs) {
 fn post_upgrade_hook() {
     set_transform_icp_fee_to_cycles_timer();
     set_tick_timer(true);
-    set_update_bonfire_pool_members_timer();
     set_transfer_dev_fee_to_furnace_timer();
 }
 

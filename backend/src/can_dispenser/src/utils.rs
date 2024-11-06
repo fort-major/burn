@@ -169,6 +169,7 @@ fn tick_start() {
     spawn(async {
         update_common_pool_members().await;
         update_kamikaze_pool_members().await;
+        update_bonfire_pool_members().await;
 
         print(format!("Updated pool members"));
 
@@ -343,21 +344,7 @@ async fn update_kamikaze_pool_members() {
     }
 }
 
-pub fn set_update_bonfire_pool_members_timer() {
-    if is_stopped() {
-        return;
-    }
-
-    let id = set_timer(Duration::from_nanos(0), update_bonfire_pool_members);
-
-    TIMERS.with_borrow_mut(|t| t.push(id));
-}
-
-fn update_bonfire_pool_members() {
-    if is_stopped() {
-        return;
-    }
-
+async fn update_bonfire_pool_members() {
     STATE.with_borrow_mut(|s| {
         s.bonfire_pool_members.clear_new();
 
@@ -366,52 +353,45 @@ fn update_bonfire_pool_members() {
         s.set_dispenser_info(info);
     });
 
-    spawn(async {
-        let client = FurnaceClient(ENV_VARS.furnace_canister_id);
+    let client = FurnaceClient(ENV_VARS.furnace_canister_id);
 
-        let take = 100;
-        let mut skip = None;
+    let take = 100;
+    let mut skip = None;
 
-        loop {
-            let call_result = client
-                .get_cur_round_positions(GetCurRoundPositionsRequest { skip, take })
-                .await;
+    loop {
+        let call_result = client
+            .get_cur_round_positions(GetCurRoundPositionsRequest { skip, take })
+            .await;
 
-            print(format!("Bonfire participants: {:?}", call_result));
+        print(format!("Bonfire participants: {:?}", call_result));
 
-            if let Ok((response,)) = call_result {
-                let should_stop = STATE.with_borrow_mut(|s| {
-                    let should_stop = response.positions.len() < take as usize;
+        if let Ok((response,)) = call_result {
+            let should_stop = STATE.with_borrow_mut(|s| {
+                let should_stop = response.positions.len() < take as usize;
 
-                    let mut total_shares = EDs::zero(12);
+                let mut total_shares = EDs::zero(12);
 
-                    for positions in response.positions {
-                        let share = positions.usd.to_dynamic().to_decimals(12);
-                        total_shares += &share;
+                for positions in response.positions {
+                    let share = positions.usd.to_dynamic().to_decimals(12);
+                    total_shares += &share;
 
-                        s.bonfire_pool_members.insert(positions.pid, share);
+                    s.bonfire_pool_members.insert(positions.pid, share);
 
-                        skip = Some(positions.pid);
-                    }
-
-                    let mut info = s.get_dispenser_info();
-                    info.total_bonfire_pool_members_weight += total_shares.to_const();
-                    s.set_dispenser_info(info);
-
-                    should_stop
-                });
-
-                if should_stop {
-                    break;
+                    skip = Some(positions.pid);
                 }
+
+                let mut info = s.get_dispenser_info();
+                info.total_bonfire_pool_members_weight += total_shares.to_const();
+                s.set_dispenser_info(info);
+
+                should_stop
+            });
+
+            if should_stop {
+                break;
             }
         }
-    });
-
-    set_timer(
-        duration_until_next_sunday_12_00(time()),
-        update_bonfire_pool_members,
-    );
+    }
 }
 
 pub fn set_transfer_dev_fee_to_furnace_timer() {
