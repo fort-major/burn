@@ -30,6 +30,7 @@ type GetTotalsResponse = record {
   current_burn_token_reward : nat;
   your_unclaimed_reward_e8s : nat;
   is_lottery_enabled : bool;
+  icp_spike_target : nat;
   current_pos_round : nat64;
   current_share_fee : nat;
 };

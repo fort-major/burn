@@ -100,6 +100,8 @@ export interface IFurnaceStoreContext {
   totalTokensPledged: Store<Partial<Record<string, EDs>>>;
   getTotalTokensPledged: (tokenCanId: Principal) => EDs;
   fetchTotalTokensPledged: Fetcher;
+
+  redistributionAccountBalance: (tokenCanId: Principal) => bigint;
 }
 
 const FurnaceContext = createContext<IFurnaceStoreContext>();
@@ -116,7 +118,7 @@ export function useFurnace(): IFurnaceStoreContext {
 
 export function FurnaceStore(props: IChildren) {
   const { assertReadyToFetch, isReadyToFetch, assertAuthorized, anonymousAgent, agent, disable, enable } = useAuth();
-  const { metadata, fetchMetadata } = useTokens();
+  const { metadata, fetchMetadata, balanceOf, fetchBalanceOf } = useTokens();
   const { fetchBonfireBalance, moveToBonfireAccount, withdrawFromBonfireAccount } = useWallet();
 
   const [curRoundPositions, setCurRoundPositions] = createSignal<IPosition[]>([]);
@@ -158,10 +160,28 @@ export function FurnaceStore(props: IChildren) {
       for (let token of tokens) {
         if (!metadata[token.toText()]) {
           fetchMetadata(token);
+
+          fetchBalanceOf(
+            token,
+            Principal.fromText(import.meta.env.VITE_FURNACE_CANISTER_ID),
+            new Uint8Array([
+              0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+            ])
+          );
         }
       }
     })
   );
+
+  const redistributionAccountBalance: IFurnaceStoreContext["redistributionAccountBalance"] = (token) => {
+    const b = balanceOf(
+      token,
+      Principal.fromText(import.meta.env.VITE_FURNACE_CANISTER_ID),
+      new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+    );
+
+    return b ?? 0n;
+  };
 
   const fetchTotalTokensPledged: IFurnaceStoreContext["fetchTotalTokensPledged"] = async () => {
     assertReadyToFetch();
@@ -441,6 +461,8 @@ export function FurnaceStore(props: IChildren) {
         totalTokensPledged,
         getTotalTokensPledged,
         fetchTotalTokensPledged,
+
+        redistributionAccountBalance,
       }}
     >
       {props.children}

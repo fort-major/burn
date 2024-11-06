@@ -569,6 +569,8 @@ impl BurnerState {
             .unwrap_or((TCycles::zero(), None));
         let is_kamikaze_pool_enabled = info.is_kamikaze_pool_enabled();
 
+        let spike_target = E8s::from(info.get_icp_burn_spike_target());
+
         GetTotalsResponse {
             total_share_supply: info.total_shares_supply,
             total_tcycles_burned: info.total_tcycles_burned,
@@ -594,6 +596,8 @@ impl BurnerState {
             your_unclaimed_reward_e8s: unclaimed_reward,
             your_decide_id_verification_status: verified_via_decide_id,
             your_lottery_eligibility_status: eligible_for_lottery,
+
+            icp_spike_target: spike_target,
         }
     }
 }

@@ -1,4 +1,4 @@
-import { createContext, createEffect, createSignal, on, onCleanup, onMount, useContext } from "solid-js";
+import { Accessor, createContext, createEffect, createSignal, on, onCleanup, onMount, useContext } from "solid-js";
 import { IChildren, ONE_WEEK_NS } from "../utils/types";
 import { ErrorCode, err, logErr, logInfo } from "../utils/error";
 import { createStore, Store } from "solid-js/store";
@@ -7,12 +7,12 @@ import { newBurnerActor, optUnwrap } from "@utils/backend";
 import { DEFAULT_TOKENS, useTokens } from "./tokens";
 import { E8s, EDs } from "@utils/math";
 import { Principal } from "@dfinity/principal";
-import { debugStringify } from "@utils/encoding";
 import {
   requestVerifiablePresentation,
   VerifiablePresentationResponse,
 } from "@dfinity/verifiable-credentials/request-verifiable-presentation";
 import { useWallet } from "./wallet";
+import { AccountIdentifier } from "@dfinity/ledger-icp";
 
 export interface ITotals {
   totalSharesSupply: EDs;
@@ -40,6 +40,8 @@ export interface ITotals {
   yourUnclaimedReward: E8s;
   yourDecideIdVerificationStatus: boolean;
   yourLotteryEligibilityStatus: boolean;
+
+  icpSpikeTarget: E8s;
 }
 
 export interface IPoolMember {
@@ -75,6 +77,8 @@ export interface IBurnerStoreContext {
 
   canVerifyDecideId: () => boolean;
   verifyDecideId: () => Promise<void>;
+
+  spikeAccountBalance: Accessor<E8s | undefined>;
 }
 
 const BurnerContext = createContext<IBurnerStoreContext>();
@@ -134,6 +138,11 @@ export function BurnerStore(props: IChildren) {
       if (!a) return;
 
       fetchTotals();
+      fetchBalanceOf(
+        DEFAULT_TOKENS.icp,
+        Principal.from(import.meta.env.VITE_BURNER_CANISTER_ID),
+        new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+      );
     })
   );
 
@@ -142,6 +151,13 @@ export function BurnerStore(props: IChildren) {
       if (a!) {
         fetchSubaccountOf(identity()!.getPrincipal());
         fetchTotals();
+        fetchBalanceOf(
+          DEFAULT_TOKENS.icp,
+          Principal.from(import.meta.env.VITE_BURNER_CANISTER_ID),
+          new Uint8Array([
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+          ])
+        );
 
         if (authProvider() === "MSQ") {
           fetchCanMigrateMsqAccount();
@@ -149,6 +165,18 @@ export function BurnerStore(props: IChildren) {
       }
     })
   );
+
+  const spikeAccountBalance: IBurnerStoreContext["spikeAccountBalance"] = () => {
+    const b = balanceOf(
+      DEFAULT_TOKENS.icp,
+      Principal.from(import.meta.env.VITE_BURNER_CANISTER_ID),
+      new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+    );
+
+    if (b === undefined) return undefined;
+
+    return E8s.new(b);
+  };
 
   const fetchTotals: IBurnerStoreContext["fetchTotals"] = async () => {
     assertReadyToFetch();
@@ -189,6 +217,8 @@ export function BurnerStore(props: IChildren) {
       yourUnclaimedReward: E8s.new(resp.your_unclaimed_reward_e8s),
       yourDecideIdVerificationStatus: resp.your_decide_id_verification_status,
       yourLotteryEligibilityStatus: resp.your_lottery_eligibility_status,
+
+      icpSpikeTarget: E8s.new(resp.icp_spike_target),
     };
 
     setTotals({ data: iTotals });
@@ -462,6 +492,8 @@ export function BurnerStore(props: IChildren) {
         migrateMsqAccount,
         canVerifyDecideId,
         verifyDecideId,
+
+        spikeAccountBalance,
       }}
     >
       {props.children}

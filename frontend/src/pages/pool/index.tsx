@@ -4,6 +4,7 @@ import { BalanceOf } from "@components/balance-of";
 import { Bento } from "@components/bento";
 import { Btn } from "@components/btn";
 import { Copyable } from "@components/copyable";
+import { HelpBtn } from "@components/help-btn";
 import { EIconKind, Icon } from "@components/icon";
 import { Modal } from "@components/modal";
 import { Page } from "@components/page";
@@ -13,7 +14,7 @@ import { Timer } from "@components/timer";
 import { Principal } from "@dfinity/principal";
 import { useAuth } from "@store/auth";
 import { useBurner } from "@store/burner";
-import { useDispensers } from "@store/dispensers";
+import { IDistribution, useDispensers } from "@store/dispensers";
 import { DEFAULT_TOKENS, useTokens } from "@store/tokens";
 import { useWallet } from "@store/wallet";
 import { COLORS } from "@utils/colors";
@@ -24,12 +25,30 @@ import { createEffect, createMemo, createSignal, For, Match, on, onMount, Show, 
 
 export const PoolPage = () => {
   const { isAuthorized } = useAuth();
-  const { icpSwapUsdExchangeRates } = useTokens();
-  const { totals, fetchTotals, canPledgePool, pledgePool } = useBurner();
+  const { icpSwapUsdExchangeRates, metadata } = useTokens();
+  const { totals, fetchTotals, canPledgePool, pledgePool, spikeAccountBalance } = useBurner();
   const { claimPoolBurnReward } = useWallet();
+  const { distributions } = useDispensers();
 
   const [isKamikazePool, setIsKamikazePool] = createSignal(false);
   const [pledgeModalOpen, setPledgeModalOpen] = createSignal(false);
+
+  const allInProgressDistributions = createMemo(() => {
+    const result: [string, IDistribution[]][] = [];
+
+    for (let tokenId in distributions) {
+      const r = [];
+
+      const ds = distributions[tokenId]!.InProgress!;
+      for (let distributionId in ds) {
+        r.push(ds[distributionId]!);
+      }
+
+      result.push([tokenId, r]);
+    }
+
+    return result;
+  });
 
   const myClassicPoolShare = () => {
     const t = totals.data;
@@ -47,107 +66,6 @@ export const PoolPage = () => {
     if (t.totalKamikazePoolSupply.isZero()) return E8s.zero();
 
     return t.yourKamikazeShareTcycles.div(t.totalKamikazePoolSupply).toDecimals(8).toE8s();
-  };
-
-  const myClassicPoolCut = () => {
-    const t = totals.data;
-
-    if (!t) return undefined;
-    if (t.totalSharesSupply.isZero()) return undefined;
-    if (t.yourShareTcycles.isZero()) return undefined;
-
-    const lotteryEnabled = t.isLotteryEnabled || t.isKamikazePoolEnabled;
-
-    const share = t.yourShareTcycles.div(t.totalSharesSupply).toDecimals(8).toE8s();
-    const burnPerHour = t.currentBurnTokenReward.mulNum(30n).divNum(2n);
-
-    let rewardPerHour = share.mul(burnPerHour);
-
-    if (lotteryEnabled) {
-      rewardPerHour = rewardPerHour.divNum(2n);
-    }
-
-    return rewardPerHour;
-  };
-
-  const myKamikazePoolCut = () => {
-    const t = totals.data;
-
-    if (!t) return undefined;
-    if (!t.isKamikazePoolEnabled) return undefined;
-    if (t.totalKamikazePoolSupply.isZero()) return undefined;
-    if (t.yourKamikazeShareTcycles.isZero()) return undefined;
-
-    const minShare = t.yourKamikazeShareTcycles.div(t.totalKamikazePoolSupply).divNum(2n).toDecimals(8).toE8s();
-    const maxShare = t.yourKamikazeShareTcycles.div(t.totalKamikazePoolSupply).mulNum(2n).toDecimals(8).toE8s();
-
-    const burnPerHour = t.currentBurnTokenReward.mulNum(30n).divNum(2n);
-
-    const min = minShare.mul(burnPerHour);
-    const max = maxShare.mul(burnPerHour);
-
-    return { min, max };
-  };
-
-  const poolCut = () => {
-    const classic = () => myClassicPoolCut();
-    const highRisk = () => myKamikazePoolCut();
-
-    const value = () => {
-      const c = classic();
-      const h = highRisk();
-
-      if (c && h) {
-        return { min: h.min.add(c), max: h.max.add(c) };
-      } else if (c) {
-        return { min: c, max: c };
-      } else if (h) {
-        return h;
-      } else {
-        return undefined;
-      }
-    };
-
-    return (
-      <Switch>
-        <Match when={!value()}>
-          <div class="flex items-center gap-1">
-            <p class="font-semibold text-2xl sm:text-5xl">Pledge To Mint</p>
-          </div>
-        </Match>
-        <Match when={value()!.min.eq(value()!.max)}>
-          <div class="flex flex-grow justify-between items-end">
-            <div class="flex items-center gap-1">
-              <span class="text-lg sm:text-2xl font-semibold">~</span>
-              <p class="font-semibold text-2xl sm:text-[4rem] sm:leading-[3.5rem]">
-                {value()!.min.toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })}
-              </p>
-            </div>
-            <p class="flex flex-row gap-1 text-lg">
-              <span class="text-orange font-semibold">$BURN</span> <span>/</span> <span>hour</span>
-            </p>
-          </div>
-        </Match>
-        <Match when={!value()!.min.eq(value()!.max)}>
-          <div class="flex flex-grow justify-between items-end">
-            <div class="flex items-center gap-1">
-              <span class="text-lg sm:text-2xl font-semibold">~</span>
-              <p class="font-semibold text-2xl sm:text-[4rem] sm:leading-[3.5rem]">
-                {value()!.min.toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })}
-              </p>
-              <span class="text-lg sm:text-2xl font-semibold">-</span>
-              <p class="font-semibold text-2xl sm:text-[4rem] sm:leading-[3.5rem]">
-                {value()!.max.toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })}
-              </p>
-            </div>
-
-            <p class="flex flex-row gap-1 text-lg">
-              <span class="text-orange font-semibold">$BURN</span> <span>/</span> <span>hour</span>
-            </p>
-          </div>
-        </Match>
-      </Switch>
-    );
   };
 
   const tcyclesExchangeRate = () => icpSwapUsdExchangeRates["aanaa-xaaaa-aaaah-aaeiq-cai"] ?? E8s.zero();
@@ -232,34 +150,143 @@ export const PoolPage = () => {
     setPledgeModalOpen(false);
   };
 
+  const poolHourlyRewards = createMemo(() => {
+    const result: [string, Principal, EDs][] = [];
+
+    if (totals.data) {
+      const mintedBurn = totals.data.currentBurnTokenReward.mul(E8s.new(15_0000_0000n)).toDynamic();
+      result.push(["🔥 Newly minted", DEFAULT_TOKENS.burn, mintedBurn]);
+    }
+
+    const ds = allInProgressDistributions();
+
+    for (let [tokenId, distributions] of ds) {
+      if (distributions.length === 0) continue;
+
+      for (let distribution of distributions) {
+        result.push([`🎁 ${distribution.name}`, Principal.fromText(tokenId), distribution.curTickReward.divNum(3n)]);
+      }
+    }
+
+    return result;
+  });
+
+  const myRewards = createMemo(() => {
+    const t = totals.data;
+    if (!t) return [];
+
+    const classicCut = t.yourShareTcycles.div(t.totalSharesSupply.isZero() ? EDs.one(12) : t.totalSharesSupply);
+    const highRiskCut = t.yourKamikazeShareTcycles.div(
+      t.totalKamikazePoolSupply.isZero() ? EDs.one(12) : t.totalKamikazePoolSupply
+    );
+
+    const hourlyRewards = poolHourlyRewards();
+
+    const result: Record<string, EDs> = {};
+
+    for (let [_, tokenId, value] of hourlyRewards) {
+      const t = tokenId.toText();
+      if (!result[t]) {
+        result[t] = EDs.zero(value.decimals);
+      }
+
+      const classic = value.mul(classicCut.toDecimals(value.decimals));
+      const highRisk = value.mul(highRiskCut.toDecimals(value.decimals));
+
+      result[t] = result[t].add(classic).add(highRisk);
+    }
+
+    return Object.entries(result).filter((it) => !it[1].isZero());
+  });
+
   return (
     <Page slim>
       <div class="grid grid-cols-4 gap-6">
-        <Show when={isAuthorized()}>
+        <Show when={isAuthorized()} fallback={<div class="col-span-3"></div>}>
           <Bento class="col-span-4 flex-row justify-between items-center gap-2" id={1}>
             <ProfileFull />
           </Bento>
         </Show>
 
+        <Bento class="col-span-3 flex-col gap-8 self-start" id={1}>
+          <p class="font-semibold text-xl">Hourly Pool Rewards</p>
+
+          <Show when={poolHourlyRewards()}>
+            <div class="flex flex-col gap-2">
+              <div class="flex flex-col">
+                <For each={poolHourlyRewards()}>
+                  {([title, tokenCanId, value], idx) => {
+                    const m = metadata[tokenCanId.toText()];
+
+                    return (
+                      <div
+                        class="flex flex-row justify-between gap-8 px-2 py-4 items-center"
+                        classList={{ "bg-gray-105": idx() % 2 == 0, "bg-gray-110": idx() % 2 == 1 }}
+                      >
+                        <p class="font-semibold text-md text-gray-140 text-ellipsis overflow-hidden text-nowrap">
+                          {title}
+                        </p>
+                        <div class="flex flex-row gap-1 items-center min-w-36">
+                          <img src={m!.logoSrc} class="w-5 h-5 rounded-full" />
+                          <div class="flex flex-row gap-1 items-baseline">
+                            <p class="font-semibold text-2xl">
+                              {value.mulNum(2n).toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })}
+                            </p>
+                            <Show when={m}>
+                              <span class="text-gray-140 text-xs">{m!.ticker}</span>
+                            </Show>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }}
+                </For>
+              </div>
+            </div>
+          </Show>
+        </Bento>
+
+        <Bento id={1} class="col-span-1 flex-col gap-4 justify-between self-start">
+          <Show when={totals.data && spikeAccountBalance()}>
+            <p class="font-semibold text-xl">Massive Burn Incoming</p>
+            <div class="flex flex-col">
+              <p class="font-semibold text-6xl text-orange animate-pulse">
+                {spikeAccountBalance()!.toShortString({ belowOne: 1, belowThousand: 1, afterThousand: 1 })}{" "}
+              </p>
+              <p class="font-semibold text-gray-140 text-lg self-end">
+                / {totals.data!.icpSpikeTarget.toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 1 })}{" "}
+                <span class="text-sm text-gray-140">ICP</span>
+              </p>
+            </div>
+          </Show>
+        </Bento>
+
         <Bento class="col-span-4 sm:col-span-2 flex-col" id={2}>
           <div class="flex flex-col gap-8">
-            <p class="font-semibold text-xl">Classic Pool</p>
-
-            <ol class="flex flex-col gap-1 list-decimal list-inside text-sm">
-              <li>
-                Positions <b>slowly expire</b> over time.
-              </li>
-              <li>
-                Pledging more increases <b>position share and lifespan</b>.
-              </li>
-              <li>
-                <b>All positions</b> receive a portion of the block reward.
-              </li>
-              <li>
-                More ICP pledged = <b>larger reward share</b>.
-              </li>
-              <li>Once a position expires, a new one can be created.</li>
-            </ol>
+            <div class="flex items-center justify-between">
+              <p class="font-semibold text-xl">Classic Pool</p>
+              <HelpBtn>
+                <ol class="flex flex-col gap-2 list-decimal list-inside text-sm">
+                  <li>
+                    Positions <b>slowly expire</b> over time.
+                  </li>
+                  <li>
+                    Pledging more increases <b>position share and lifespan</b>.
+                  </li>
+                  <li>
+                    <b>All positions</b> receive a portion of the block reward.
+                  </li>
+                  <li>
+                    More <span class="text-orange">$ICP</span> pledged = <b>larger reward share</b>.
+                  </li>
+                  <li>Once a position expires, a new one can be created.</li>
+                  <li>
+                    All Classic pool members <b>are eligible</b> for airdrops, which are distributed according to
+                    member's share.
+                  </li>
+                </ol>
+              </HelpBtn>
+            </div>
 
             <Show when={isAuthorized()} fallback={<p class="text-orange">Sign In To Pledge</p>}>
               <div class="flex flex-col gap-4">
@@ -300,23 +327,30 @@ export const PoolPage = () => {
 
         <Bento class="col-span-4 sm:col-span-2 flex-col" id={2}>
           <div class="flex flex-col gap-8">
-            <p class="font-semibold text-xl">High-Risk Pool</p>
-
-            <ol class="flex flex-col gap-1 list-decimal list-inside text-sm">
-              <li>
-                Positions <b>expire 24 hours after</b> creation.
-              </li>
-              <li>
-                Pledging more increases <b>only position share</b>.
-              </li>
-              <li>
-                <b>One random winner</b> receives half the block reward.
-              </li>
-              <li>
-                More ICP pledged = <b>higher chance of winning</b>.
-              </li>
-              <li>Once a position expires, a new one can be created.</li>
-            </ol>
+            <div class="flex items-center justify-between">
+              <p class="font-semibold text-xl">High-Risk Pool</p>
+              <HelpBtn>
+                <ol class="flex flex-col gap-2 list-decimal list-inside text-sm">
+                  <li>
+                    Positions <b>expire 24 hours after</b> creation.
+                  </li>
+                  <li>
+                    Pledging more increases <b>only position share</b>.
+                  </li>
+                  <li>
+                    <b>One random winner</b> receives half the block reward.
+                  </li>
+                  <li>
+                    More <span class="text-orange">$ICP</span> pledged = <b>higher chance of winning</b>.
+                  </li>
+                  <li>Once a position expires, a new one can be created.</li>
+                  <li>
+                    All High-Risk pool members <b>are eligible</b> for airdrops, which are distributed according to
+                    member's draw chance.
+                  </li>
+                </ol>
+              </HelpBtn>
+            </div>
 
             <Show when={isAuthorized()} fallback={<p class="text-orange">Sign In To Pledge</p>}>
               <div class="flex flex-col gap-4">
@@ -354,38 +388,59 @@ export const PoolPage = () => {
             </Show>
           </div>
         </Bento>
-      </div>
 
-      <Show when={totals.data && isAuthorized()}>
-        <div class="grid grid-cols-4 gap-6">
-          <Bento class="col-span-4 sm:col-span-3 flex-col justify-end" id={1}>
-            <div class="flex flex-col gap-4">
-              <div class="flex flex-col gap-4">
-                <p class="text-gray-165 font-semibold text-xl">Burn Minting</p>
-                {poolCut()}
+        <Show when={totals.data && isAuthorized()}>
+          <div class="grid col-span-4 grid-cols-4 gap-6">
+            <Bento class="col-span-4 sm:col-span-3 flex-col gap-4 justify-between" id={1}>
+              <p class="font-semibold text-2xl">My Approx. Hourly Rewards</p>
+              <div class="flex flex-row gap-8 flex-wrap">
+                <For
+                  each={myRewards()}
+                  fallback={<p class="font-semibold text-4xl text-gray-140">Pledge to receive rewards</p>}
+                >
+                  {([tokenId, reward]) => {
+                    const m = metadata[tokenId];
+
+                    return (
+                      <div class="flex flex-row gap-1 items-center min-w-36">
+                        <Show when={m}>
+                          <img src={m!.logoSrc} class="w-5 h-5 rounded-full" />
+                        </Show>
+                        <div class="flex flex-row gap-1 items-baseline">
+                          <p class="font-semibold text-2xl">
+                            {reward.toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })}
+                          </p>
+                          <Show when={m}>
+                            <span class="text-gray-140 text-md">{m!.ticker}</span>
+                          </Show>
+                        </div>
+                      </div>
+                    );
+                  }}
+                </For>
               </div>
-            </div>
-          </Bento>
+            </Bento>
 
-          <Bento class="col-span-4 sm:col-span-1 flex-col justify-center items-center gap-2" id={4}>
-            <BalanceOf
-              tokenId={DEFAULT_TOKENS.burn}
-              onRefreshOverride={fetchTotals}
-              balance={totals.data!.yourUnclaimedReward.toBigIntRaw()}
-            />
-            <Btn
-              text="Claim"
-              icon={EIconKind.ArrowUpRight}
-              bgColor={COLORS.orange}
-              class="w-full font-semibold"
-              iconClass="rotate-180"
-              iconColor={COLORS.white}
-              disabled={!canClaim()}
-              onClick={handleClaim}
-            />
-          </Bento>
-        </div>
-      </Show>
+            <Bento class="col-span-4 sm:col-span-1 flex-col justify-center items-center gap-2" id={4}>
+              <BalanceOf
+                tokenId={DEFAULT_TOKENS.burn}
+                onRefreshOverride={fetchTotals}
+                balance={totals.data!.yourUnclaimedReward.toBigIntRaw()}
+              />
+              <Btn
+                text="Claim"
+                icon={EIconKind.ArrowUpRight}
+                bgColor={COLORS.orange}
+                class="w-full font-semibold"
+                iconClass="rotate-180"
+                iconColor={COLORS.white}
+                disabled={!canClaim()}
+                onClick={handleClaim}
+              />
+            </Bento>
+          </div>
+        </Show>
+      </div>
 
       <KamikazePoolTable />
 

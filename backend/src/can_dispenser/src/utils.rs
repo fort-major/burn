@@ -38,7 +38,6 @@ use shared::{
         api::GetCurRoundPositionsRequest, client::FurnaceClient, types::FURNACE_DEV_FEE_SUBACCOUNT,
     },
     icrc1::ICRC1CanisterClient,
-    utils::duration_until_next_sunday_12_00,
     ENV_VARS, ICP_FEE, MEMO_TOP_UP_CANISTER, ONE_DAY_NS, ONE_MINUTE_NS,
 };
 

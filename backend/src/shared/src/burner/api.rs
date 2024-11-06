@@ -72,6 +72,8 @@ pub struct GetTotalsResponse {
     pub your_unclaimed_reward_e8s: E8s,
     pub your_decide_id_verification_status: bool,
     pub your_lottery_eligibility_status: bool,
+
+    pub icp_spike_target: E8s,
 }
 
 #[derive(CandidType, Deserialize)]

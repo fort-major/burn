@@ -4,6 +4,7 @@ import { BalanceOf } from "@components/balance-of";
 import { Bento, BentoBox } from "@components/bento";
 import { Btn } from "@components/btn";
 import { Copyable } from "@components/copyable";
+import { HelpBtn } from "@components/help-btn";
 import { EIconKind, Icon } from "@components/icon";
 import { Modal } from "@components/modal";
 import { Page } from "@components/page";
@@ -14,7 +15,7 @@ import { Timer } from "@components/timer";
 import { TokenVotingOption } from "@components/voting-option";
 import { Principal } from "@dfinity/principal";
 import { useAuth } from "@store/auth";
-import { useDispensers } from "@store/dispensers";
+import { IDistribution, useDispensers } from "@store/dispensers";
 import { useFurnace } from "@store/furnace";
 import { DEFAULT_TOKENS, useTokens } from "@store/tokens";
 import { useWallet } from "@store/wallet";
@@ -44,8 +45,9 @@ export function BonfirePage() {
     winners,
     fetchWinners,
     totalTokensPledged,
+    redistributionAccountBalance,
   } = useFurnace();
-  const { distributionTriggerByTokenId } = useDispensers();
+  const { distributionTriggerByTokenId, distributions } = useDispensers();
 
   const [pledgeModalOpen, setPledgeModalOpen] = createSignal(false);
   const [pledgingToken, setPledgingToken] = createSignal<Principal>();
@@ -253,6 +255,67 @@ export function BonfirePage() {
     return ns < ONE_DAY_NS * 6n + ONE_HOUR_NS * 21n;
   };
 
+  const allInProgressDistributions = createMemo(() => {
+    const result: [string, IDistribution[]][] = [];
+
+    for (let tokenId in distributions) {
+      const r = [];
+
+      const ds = distributions[tokenId]!.InProgress!;
+      for (let distributionId in ds) {
+        const d = ds[distributionId]!;
+
+        if (d.isDistributingToBonfire) {
+          r.push(d);
+        }
+      }
+
+      if (r.length > 0) {
+        result.push([tokenId, r]);
+      }
+    }
+
+    return result;
+  });
+
+  const poolHourlyRewards = createMemo(() => {
+    const result: [string, Principal, EDs][] = [];
+
+    const ds = allInProgressDistributions();
+
+    for (let [tokenId, distributions] of ds) {
+      if (distributions.length === 0) continue;
+
+      for (let distribution of distributions) {
+        result.push([`🎁 ${distribution.name}`, Principal.fromText(tokenId), distribution.curTickReward.divNum(3n)]);
+      }
+    }
+
+    return result;
+  });
+
+  const myRewards = createMemo(() => {
+    const c = drawChance();
+    if (!c) return [];
+
+    const hourlyRewards = poolHourlyRewards();
+
+    const result: Record<string, EDs> = {};
+
+    for (let [_, tokenId, value] of hourlyRewards) {
+      const t = tokenId.toText();
+      if (!result[t]) {
+        result[t] = EDs.zero(value.decimals);
+      }
+
+      const v = value.mul(c.toDynamic().toDecimals(value.decimals));
+
+      result[t] = result[t].add(v);
+    }
+
+    return Object.entries(result).filter((it) => !it[1].isZero());
+  });
+
   return (
     <Page slim>
       <div class="flex gap-5 flex-col justify-center items-center">
@@ -265,11 +328,79 @@ export function BonfirePage() {
         </div>
       </div>
 
+      <Show when={poolHourlyRewards().length > 0}>
+        <Bento class="col-span-1 flex-col gap-8" id={1}>
+          <p class="font-semibold text-xl">Additional Hourly Rewards</p>
+
+          <Show when={poolHourlyRewards()}>
+            <div class="flex flex-col gap-2">
+              <div class="flex flex-col">
+                <For each={poolHourlyRewards()}>
+                  {([title, tokenCanId, value], idx) => {
+                    const m = metadata[tokenCanId.toText()];
+
+                    return (
+                      <div
+                        class="flex flex-row justify-between gap-8 px-2 py-4 items-center"
+                        classList={{ "bg-gray-105": idx() % 2 == 0, "bg-gray-110": idx() % 2 == 1 }}
+                      >
+                        <p class="font-semibold text-md text-gray-140 text-ellipsis overflow-hidden text-nowrap">
+                          {title}
+                        </p>
+                        <div class="flex flex-row gap-1 items-center min-w-36">
+                          <img src={m!.logoSrc} class="w-5 h-5 rounded-full" />
+                          <div class="flex flex-row gap-1 items-baseline">
+                            <p class="font-semibold text-2xl">
+                              {value.toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })}
+                            </p>
+                            <Show when={m}>
+                              <span class="text-gray-140 text-xs">{m!.ticker}</span>
+                            </Show>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }}
+                </For>
+              </div>
+            </div>
+          </Show>
+        </Bento>
+      </Show>
+
       <div class="flex flex-col gap-6">
         <div class="grid grid-cols-2 gap-6">
           <Bento class="flex-col col-span-2 sm:col-span-1" id={4}>
             <div class="flex flex-col gap-8">
-              <p class="font-semibold text-xl">Bonfire Pool</p>
+              <div class="flex items-center justify-between">
+                <p class="font-semibold text-xl">Bonfire Pool</p>
+                <HelpBtn>
+                  <ol class="flex flex-col gap-2 list-decimal list-inside text-sm">
+                    <li>
+                      <b>Weekly</b> prize fund distribution, <b>one winner takes all</b>.
+                    </li>
+                    <li>
+                      More $ pledged = <b>higher chance of winning</b>.
+                    </li>
+                    <li>
+                      At the end of the week <b>all positions expire</b>.
+                    </li>
+                    <li>
+                      Pledge <span class="text-orange">$BURN</span> or <b>another token</b>.
+                    </li>
+                    <li>
+                      Only pledging <span class="text-orange">$BURN</span> <b>gives voting power</b>.
+                    </li>
+                    <li>
+                      Voting power is used to select next week's <b>another token</b>.
+                    </li>
+                    <li>
+                      All Bonfire participants <b>are eligible</b> for airdrops marked as "Pools +{" "}
+                      <span class="text-orange">Bonfire</span>", which are distributed according to their draw chance.
+                    </li>
+                  </ol>
+                </HelpBtn>
+              </div>
 
               <Show when={isAuthorized() && myShares()} fallback={<p class="text-orange">Sign In To Participate</p>}>
                 <div class="flex flex-col gap-4">
@@ -322,50 +453,44 @@ export function BonfirePage() {
             </div>
           </Bento>
 
-          <Bento class="flex-col col-span-2 sm:col-span-1" id={1}>
-            <div class="flex flex-col gap-6">
-              <p class="font-semibold text-xl">Rules</p>
-              <ol class="flex flex-col gap-1 list-decimal list-inside text-sm">
-                <li>
-                  <b>Weekly</b> prize fund distribution, <b>one winner takes all</b>.
-                </li>
-                <li>
-                  More $ pledged = <b>higher chance of winning</b>.
-                </li>
-                <li>
-                  At the end of the week <b>all positions expire</b>.
-                </li>
-                <li>
-                  Pledge <span class="text-orange">$BURN</span> or <b>another token</b>.
-                </li>
-                <li>
-                  Only pledging <span class="text-orange">$BURN</span> <b>gives voting power</b>.
-                </li>
-                <li>
-                  Voting power is used to select next week's <b>another token</b>.
-                </li>
-                <li>
-                  All current week's Bonfire participants <b>are eligible</b> for next week's airdrops.
-                </li>
-              </ol>
-            </div>
-          </Bento>
-        </div>
+          <div class="col-span-2 sm:col-span-1 self-start flex flex-col gap-6">
+            <Bento class="flex-col" id={1}>
+              <Timer {...getTimeUntilNextSunday15UTC()} class="text-2xl" descriptionClass="text-xl" />
+              <p class="text-gray-140">Before the winner is selected</p>
+            </Bento>
 
-        <div class="grid grid-cols-2 gap-6">
-          <Bento class="flex-col col-span-2 sm:col-span-1" id={1}>
-            <Timer {...getTimeUntilNextSunday15UTC()} class="text-2xl" descriptionClass="text-xl" />
-            <p class="text-gray-140">Before the winner is selected</p>
-          </Bento>
-          <Bento class="flex-col col-span-2 sm:col-span-1" id={1}>
-            <Show
-              when={showAirdropEligibility()}
-              fallback={<p class="text-orange">Not eligible for next week airdrops</p>}
-            >
-              <Timer {...getTimeUntilNextSunday15UTC(12)} class="text-2xl" descriptionClass="text-xl" />
-              <p class="text-orange">Until not eligible for next week airdrops</p>
+            <Show when={isAuthorized()}>
+              <Bento class="col-span-4 sm:col-span-3 flex-col gap-4 justify-between" id={1}>
+                <p class="font-semibold text-xl">My Hourly Rewards</p>
+                <div class="flex flex-row gap-8 flex-wrap">
+                  <For
+                    each={myRewards()}
+                    fallback={<p class="font-semibold text-2xl text-gray-140">Pledge to receive rewards</p>}
+                  >
+                    {([tokenId, reward]) => {
+                      const m = metadata[tokenId];
+
+                      return (
+                        <div class="flex flex-row gap-1 items-center min-w-36">
+                          <Show when={m}>
+                            <img src={m!.logoSrc} class="w-5 h-5 rounded-full" />
+                          </Show>
+                          <div class="flex flex-row gap-1 items-baseline">
+                            <p class="font-semibold text-2xl">
+                              {reward.toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })}
+                            </p>
+                            <Show when={m}>
+                              <span class="text-gray-140 text-md">{m!.ticker}</span>
+                            </Show>
+                          </div>
+                        </div>
+                      );
+                    }}
+                  </For>
+                </div>
+              </Bento>
             </Show>
-          </Bento>
+          </div>
         </div>
       </div>
 
@@ -388,6 +513,7 @@ export function BonfirePage() {
             </div>
           </Show>
         </div>
+
         <Show when={tokenX() && tokenX()!.compareTo(DEFAULT_TOKENS.burn) !== "eq"}>
           <div class="flex items-end gap-4">
             <div class="flex flex-col gap-2">
@@ -406,6 +532,36 @@ export function BonfirePage() {
                 </p>
               </div>
             </Show>
+          </div>
+        </Show>
+
+        <div class="flex flex-col gap-4">
+          <div class="flex flex-col gap-2">
+            <p class="font-semibold text-6xl">
+              {E8s.new(redistributionAccountBalance(DEFAULT_TOKENS.burn)).toShortString({
+                belowOne: 2,
+                belowThousand: 1,
+                afterThousand: 2,
+              })}{" "}
+              <span class="text-2xl text-gray-140">BURN</span>
+            </p>
+            <p class="text-2xl">Pledged This Week</p>
+          </div>
+        </div>
+
+        <Show when={tokenX() && tokenX()!.compareTo(DEFAULT_TOKENS.burn) !== "eq"}>
+          <div class="flex items-end gap-4">
+            <div class="flex flex-col gap-2">
+              <p class="font-semibold text-6xl">
+                {EDs.new(redistributionAccountBalance(tokenX()!), tokenXMeta()!.fee.decimals).toShortString({
+                  belowOne: 2,
+                  belowThousand: 1,
+                  afterThousand: 2,
+                })}{" "}
+                <span class="text-2xl text-gray-140">{tokenXMeta()?.ticker}</span>
+              </p>
+              <p class="text-2xl">Pledged This Week</p>
+            </div>
           </div>
         </Show>
       </div>
