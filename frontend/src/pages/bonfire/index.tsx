@@ -12,6 +12,7 @@ import { PledgeForm } from "@components/pledge-form";
 import { QtyInput } from "@components/qty-input";
 import { RaffleRoundEntry } from "@components/raffle-round-entry";
 import { Timer } from "@components/timer";
+import { TokenIcon } from "@components/token-icon";
 import { TokenVotingOption } from "@components/voting-option";
 import { Principal } from "@dfinity/principal";
 import { useAuth } from "@store/auth";
@@ -23,14 +24,12 @@ import { COLORS } from "@utils/colors";
 import { avatarSrcFromPrincipal } from "@utils/common";
 import { err, ErrorCode, logErr } from "@utils/error";
 import { E8s, EDs } from "@utils/math";
-import { eventHandler } from "@utils/security";
 import { getTimeUntilNextSunday15UTC } from "@utils/time";
-import { ONE_DAY_NS, ONE_HOUR_NS, ONE_MIN_NS, Result } from "@utils/types";
 import { batch, createEffect, createMemo, createSignal, For, on, onMount, Show } from "solid-js";
 
 export function BonfirePage() {
   const { identity, isReadyToFetch, isAuthorized, assertAuthorized } = useAuth();
-  const { fetchBalanceOf, balanceOf, metadata } = useTokens();
+  const { fetchBalanceOf, balanceOf, metadata, icpSwapUsdExchangeRates } = useTokens();
   const { pidBalance, pid } = useWallet();
   const {
     pledge,
@@ -243,18 +242,6 @@ export function BonfirePage() {
       .reduce((prev, cur) => prev.add(cur), E8s.zero())
       .div(E8s.fromBigIntBase(BigInt(curRoundPositions().length || 1)));
 
-  const showAirdropEligibility = () => {
-    const { days, hours, minutes } = getTimeUntilNextSunday15UTC(12);
-
-    if (days + hours + minutes == 0) {
-      return false;
-    }
-
-    const ns = BigInt(days) * ONE_DAY_NS + BigInt(hours) * ONE_HOUR_NS + BigInt(minutes) * ONE_MIN_NS;
-
-    return ns < ONE_DAY_NS * 6n + ONE_HOUR_NS * 21n;
-  };
-
   const allInProgressDistributions = createMemo(() => {
     const result: [string, IDistribution[]][] = [];
 
@@ -294,6 +281,20 @@ export function BonfirePage() {
     return result;
   });
 
+  const totalHourlyRewardsUsd = createMemo(() => {
+    const r = poolHourlyRewards();
+
+    let resultUsd = E8s.zero();
+
+    for (let [_, tokenId, value] of r) {
+      const exchangeRate = icpSwapUsdExchangeRates[tokenId.toText()] ?? E8s.zero();
+
+      resultUsd = resultUsd.add(value.toDecimals(8).toE8s().mul(exchangeRate));
+    }
+
+    return resultUsd;
+  });
+
   const myRewards = createMemo(() => {
     const c = drawChance();
     if (!c) return [];
@@ -316,10 +317,32 @@ export function BonfirePage() {
     return Object.entries(result).filter((it) => !it[1].isZero());
   });
 
+  const myTotalRewardUsd = createMemo(() => {
+    const r = myRewards();
+
+    let resultUsd = E8s.zero();
+
+    for (let [tokenId, value] of r) {
+      const exchangeRate = icpSwapUsdExchangeRates[tokenId] ?? E8s.zero();
+
+      resultUsd = resultUsd.add(value.toDecimals(8).toE8s().mul(exchangeRate));
+    }
+
+    return resultUsd;
+  });
+
   return (
     <Page slim>
       <div class="flex gap-5 flex-col justify-center items-center">
-        <p class="text-xl sm:text-4xl">This Week's Prize Fund</p>
+        <p class="flex flex-col gap-1 items-center text-xl sm:text-4xl">
+          <span>
+            Pledge <span class="font-semibold text-orange">$BURN</span>{" "}
+            <Show when={tokenXMeta() !== undefined && tokenXMeta()!.ticker !== "BURN"}>
+              and <span class="font-semibold text-orange">${tokenXMeta()!.ticker}</span>{" "}
+            </Show>
+          </span>
+          <span>To Win This Week's Prize Fund</span>
+        </p>
         <div class="flex gap-4 sm:gap-6 items-center">
           <Icon kind={EIconKind.ICP} color="white" size={window.innerWidth > 800 ? 120 : 60} />
           <h2 class="font-semibold leading-[70px] text-[70px] sm:leading-[200px] sm:text-[200px]">
@@ -328,47 +351,54 @@ export function BonfirePage() {
         </div>
       </div>
 
-      <Show when={poolHourlyRewards().length > 0}>
-        <Bento class="col-span-1 flex-col gap-8" id={1}>
-          <p class="font-semibold text-xl">Additional Hourly Rewards</p>
+      <div class="flex flex-col gap-6">
+        <Show when={poolHourlyRewards().length > 0}>
+          <Bento class="flex-col gap-8" id={1}>
+            <div class="flex flex-row items-center justify-between">
+              <p class="font-semibold text-xl">Additional Hourly Rewards</p>
+              <p class="text-xl text-gray-140">
+                ${totalHourlyRewardsUsd().toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}
+              </p>
+            </div>
 
-          <Show when={poolHourlyRewards()}>
-            <div class="flex flex-col gap-2">
-              <div class="flex flex-col">
-                <For each={poolHourlyRewards()}>
-                  {([title, tokenCanId, value], idx) => {
-                    const m = metadata[tokenCanId.toText()];
+            <Show when={poolHourlyRewards()}>
+              <div class="flex flex-col gap-2">
+                <div class="flex flex-col">
+                  <For each={poolHourlyRewards()}>
+                    {([title, tokenCanId, value], idx) => {
+                      const m = metadata[tokenCanId.toText()];
 
-                    return (
-                      <div
-                        class="flex flex-row justify-between gap-8 px-2 py-4 items-center"
-                        classList={{ "bg-gray-105": idx() % 2 == 0, "bg-gray-110": idx() % 2 == 1 }}
-                      >
-                        <p class="font-semibold text-md text-gray-140 text-ellipsis overflow-hidden text-nowrap">
-                          {title}
-                        </p>
-                        <div class="flex flex-row gap-1 items-center min-w-36">
-                          <img src={m!.logoSrc} class="w-5 h-5 rounded-full" />
-                          <div class="flex flex-row gap-1 items-baseline">
-                            <p class="font-semibold text-2xl">
-                              {value.toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })}
-                            </p>
+                      return (
+                        <div
+                          class="flex flex-row justify-between gap-8 px-2 py-4 items-center"
+                          classList={{ "bg-gray-105": idx() % 2 == 0, "bg-gray-110": idx() % 2 == 1 }}
+                        >
+                          <p class="font-semibold text-md text-gray-140 text-ellipsis overflow-hidden sm:text-nowrap">
+                            {title}
+                          </p>
+                          <div class="flex flex-row gap-1 items-center min-w-36">
                             <Show when={m}>
-                              <span class="text-gray-140 text-xs">{m!.ticker}</span>
+                              <TokenIcon tokenCanId={tokenCanId} class="w-5 h-5" />
                             </Show>
+                            <div class="flex flex-row gap-1 items-baseline">
+                              <p class="font-semibold text-2xl">
+                                {value.toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })}
+                              </p>
+                              <Show when={m}>
+                                <span class="text-gray-140 text-xs">{m!.ticker}</span>
+                              </Show>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  }}
-                </For>
+                      );
+                    }}
+                  </For>
+                </div>
               </div>
-            </div>
-          </Show>
-        </Bento>
-      </Show>
+            </Show>
+          </Bento>
+        </Show>
 
-      <div class="flex flex-col gap-6">
         <div class="grid grid-cols-2 gap-6">
           <Bento class="flex-col col-span-2 sm:col-span-1" id={4}>
             <div class="flex flex-col gap-8">
@@ -461,7 +491,12 @@ export function BonfirePage() {
 
             <Show when={isAuthorized()}>
               <Bento class="col-span-4 sm:col-span-3 flex-col gap-4 justify-between" id={1}>
-                <p class="font-semibold text-xl">My Hourly Rewards</p>
+                <div class="flex items-center justify-between">
+                  <p class="font-semibold text-xl">My Hourly Rewards</p>
+                  <p class="text-xl text-gray-140">
+                    ${myTotalRewardUsd().toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}
+                  </p>
+                </div>
                 <div class="flex flex-row gap-8 flex-wrap">
                   <For
                     each={myRewards()}
@@ -473,7 +508,7 @@ export function BonfirePage() {
                       return (
                         <div class="flex flex-row gap-1 items-center min-w-36">
                           <Show when={m}>
-                            <img src={m!.logoSrc} class="w-5 h-5 rounded-full" />
+                            <TokenIcon tokenCanId={Principal.fromText(tokenId)} class="w-5 h-5" />
                           </Show>
                           <div class="flex flex-row gap-1 items-baseline">
                             <p class="font-semibold text-2xl">
@@ -537,30 +572,30 @@ export function BonfirePage() {
 
         <div class="flex flex-col gap-4">
           <div class="flex flex-col gap-2">
-            <p class="font-semibold text-6xl">
+            <p class="font-semibold text-4xl">
               {E8s.new(redistributionAccountBalance(DEFAULT_TOKENS.burn)).toShortString({
                 belowOne: 2,
                 belowThousand: 1,
                 afterThousand: 2,
               })}{" "}
-              <span class="text-2xl text-gray-140">BURN</span>
+              <span class="text-xl text-gray-140">BURN</span>
             </p>
-            <p class="text-2xl">Pledged This Week</p>
+            <p class="text-xl">Pledged This Week</p>
           </div>
         </div>
 
-        <Show when={tokenX() && tokenX()!.compareTo(DEFAULT_TOKENS.burn) !== "eq"}>
+        <Show when={tokenX() && tokenXMeta() && tokenX()!.compareTo(DEFAULT_TOKENS.burn) !== "eq"}>
           <div class="flex items-end gap-4">
             <div class="flex flex-col gap-2">
-              <p class="font-semibold text-6xl">
+              <p class="font-semibold text-4xl">
                 {EDs.new(redistributionAccountBalance(tokenX()!), tokenXMeta()!.fee.decimals).toShortString({
                   belowOne: 2,
                   belowThousand: 1,
                   afterThousand: 2,
                 })}{" "}
-                <span class="text-2xl text-gray-140">{tokenXMeta()?.ticker}</span>
+                <span class="text-xl text-gray-140">{tokenXMeta()?.ticker}</span>
               </p>
-              <p class="text-2xl">Pledged This Week</p>
+              <p class="text-xl">Pledged This Week</p>
             </div>
           </div>
         </Show>

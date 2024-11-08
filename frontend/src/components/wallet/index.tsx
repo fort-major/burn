@@ -115,7 +115,14 @@ export function Wallet() {
                   <ProfileMini />
                 </div>
 
-                <div class="flex flex-col gap-4">
+                <div
+                  class="flex flex-col gap-4 max-h-60 overflow-auto"
+                  style={{
+                    "scrollbar-color": `${COLORS.gray[140]} transparent`,
+                    "scrollbar-width": "thin",
+                    "scrollbar-gutter": "stable",
+                  }}
+                >
                   <For each={savedTokens()}>
                     {(token) => <Token tokenCanId={token} onTrasnferClick={handleGoToTransfer} />}
                   </For>

@@ -3,14 +3,14 @@ import { ReturnCalculator } from "@components/return-calc";
 import { useAuth } from "@store/auth";
 import { useBurner } from "@store/burner";
 import { useFurnace } from "@store/furnace";
-import { DEFAULT_TOKENS, useTokens } from "@store/tokens";
-import { E8s } from "@utils/math";
+import { DEFAULT_TOKENS, ITokenMetadata, useTokens } from "@store/tokens";
+import { E8s, EDs } from "@utils/math";
 import { ONE_SEC_NS } from "@utils/types";
-import { createEffect, on, onMount, Show } from "solid-js";
+import { createEffect, createMemo, For, on, onMount, Show } from "solid-js";
 
 export const InfoPage = () => {
   const { isReadyToFetch } = useAuth();
-  const { icpSwapUsdExchangeRates, totalBurnSupply } = useTokens();
+  const { icpSwapUsdExchangeRates, totalBurnSupply, metadata } = useTokens();
   const { totals, poolMembers, fetchPoolMembers } = useBurner();
   const { totalTokensBurned } = useFurnace();
 
@@ -29,6 +29,17 @@ export const InfoPage = () => {
       fetchPoolMembers();
     })
   );
+
+  const totalBurnedList = createMemo(() => {
+    return Object.entries(totalTokensBurned)
+      .map(([id, val]) => {
+        const m = metadata[id];
+        if (!m) return undefined;
+
+        return [m, val];
+      })
+      .filter((it) => !!it) as [ITokenMetadata, EDs][];
+  });
 
   const circulatingSupply = () => {
     const sup = totalBurnSupply() ?? E8s.zero();

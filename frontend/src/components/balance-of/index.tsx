@@ -1,4 +1,5 @@
 import { EIconKind, Icon } from "@components/icon";
+import { TokenIcon } from "@components/token-icon";
 import { Principal } from "@dfinity/principal";
 import { useAuth } from "@store/auth";
 import { useTokens } from "@store/tokens";
@@ -77,7 +78,7 @@ export const BalanceOf = (props: IBalanceOfProps) => {
   return (
     <div class="flex gap-2 items-center min-w-40" classList={{ [props.class!]: !!props.class }}>
       <Show when={meta()} fallback={<div class="w-6 h-6 rounded-full bg-gray-140 animate-pulse" />}>
-        <img src={meta()!.logoSrc} alt={meta()?.ticker} class="w-6 h-6 rounded-full" />
+        <TokenIcon tokenCanId={props.tokenId} class="w-6 h-6" />
       </Show>
       <div class="flex gap-1 items-baseline">
         <p class="font-semibold text-white text-lg">

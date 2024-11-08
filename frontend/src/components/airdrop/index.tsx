@@ -3,6 +3,7 @@ import { Bento } from "@components/bento";
 import { Btn } from "@components/btn";
 import { Copyable } from "@components/copyable";
 import { Spoiler } from "@components/spoiler";
+import { TokenIcon } from "@components/token-icon";
 import { Principal } from "@dfinity/principal";
 import { useAuth } from "@store/auth";
 import { IDistribution, useDispensers } from "@store/dispensers";
@@ -111,7 +112,7 @@ export function Airdrop(props: IAirdropProps) {
       <div class="flex flex-col gap-3">
         <div class="flex items-center gap-3">
           <Show when={meta()} fallback={<Copyable text={props.tokenCanId.toText()} ellipsis ellipsisSymbols={20} />}>
-            <img src={meta()!.logoSrc} class="w-7 h-7 rounded-full" />
+            <TokenIcon tokenCanId={props.tokenCanId} class="w-7 h-7" />
             <p class="font-semibold text-xl">{meta()!.name}</p>
           </Show>
         </div>
@@ -188,7 +189,7 @@ export function Distribution(props: IDistributionProps) {
 
       return (
         <p class="text-gray-140 text-xs flex gap-1 items-center">
-          starts if <img src={m.logoSrc} class="w-4 h-4 rounded-full" /> {m.ticker} is selected
+          starts if <TokenIcon tokenCanId={t.TokenXVotingWinner} class="w-4 h-4" /> {m.ticker} is selected
         </p>
       );
     }
@@ -203,7 +204,7 @@ export function Distribution(props: IDistributionProps) {
         <p class="text-gray-140 text-xs flex gap-1 items-center">
           starts if{" "}
           <span class="font-semibold">{qty.toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}</span>{" "}
-          <img src={m.logoSrc} class="w-4 h-4 rounded-full" /> {m.ticker} is pledged
+          <TokenIcon tokenCanId={t.TokenTotalPledged.token_can_id} class="w-4 h-4" /> {m.ticker} is pledged
         </p>
       );
     }

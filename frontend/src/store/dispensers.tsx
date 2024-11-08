@@ -138,7 +138,7 @@ export function useDispensers(): IDispensersStoreContext {
 export function DispensersStore(props: IChildren) {
   const { assertReadyToFetch, isReadyToFetch, assertAuthorized, anonymousAgent, agent, enable, disable } = useAuth();
   const { pid, pidBalance, fetchPidBalance, moveToBonfireAccount, subaccount } = useWallet();
-  const { balanceOf, fetchBalanceOf } = useTokens();
+  const { balanceOf, fetchBalanceOf, metadata, fetchMetadata } = useTokens();
 
   const [dispenserIdByTokenId, setDispenserIdByTokenId] =
     createStore<IDispensersStoreContext["dispenserIdByTokenId"]>();
@@ -156,9 +156,14 @@ export function DispensersStore(props: IChildren) {
         fetchDistributionTriggers();
         await fetchDispenserIds();
 
-        for (let id of Object.keys(dispenserIdByTokenId)) {
-          fetchDistributions(Principal.from(id), "Scheduled");
-          fetchDistributions(Principal.from(id), "InProgress");
+        for (let id of Object.keys(dispenserIdByTokenId).map((it) => Principal.from(it))) {
+          fetchDistributions(id, "Scheduled");
+          fetchDistributions(id, "InProgress");
+
+          const m = metadata[id.toText()];
+          if (!m) {
+            fetchMetadata(id);
+          }
         }
       }
     })

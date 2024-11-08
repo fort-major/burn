@@ -160,15 +160,15 @@ export function FurnaceStore(props: IChildren) {
       for (let token of tokens) {
         if (!metadata[token.toText()]) {
           fetchMetadata(token);
-
-          fetchBalanceOf(
-            token,
-            Principal.fromText(import.meta.env.VITE_FURNACE_CANISTER_ID),
-            new Uint8Array([
-              0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-            ])
-          );
         }
+
+        fetchBalanceOf(
+          token,
+          Principal.fromText(import.meta.env.VITE_FURNACE_CANISTER_ID),
+          new Uint8Array([
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+          ])
+        );
       }
     })
   );

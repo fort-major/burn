@@ -2,6 +2,7 @@ import { Avatar } from "@components/avatar";
 import { Bento } from "@components/bento";
 import { Btn } from "@components/btn";
 import { Copyable } from "@components/copyable";
+import { TokenIcon } from "@components/token-icon";
 import { useFurnace } from "@store/furnace";
 import { DEFAULT_TOKENS, useTokens } from "@store/tokens";
 import { useWallet } from "@store/wallet";
@@ -82,7 +83,7 @@ export function RaffleRoundEntry(props: IRaffleRoundEntryProps) {
               when={meta()}
               fallback={<Copyable text={entry()!.tokenCanisterId.toText()} ellipsis ellipsisSymbols={20} />}
             >
-              <img src={meta()!.logoSrc} class="w-5 h-5 rounded-full" />
+              <TokenIcon tokenCanId={entry()!.tokenCanisterId} class="w-5 h-5" />
               <p class="font-semibold">{meta()!.name}</p>
               <p class="text-gray-140 relative top-[1px]">{meta()!.ticker}</p>
             </Show>

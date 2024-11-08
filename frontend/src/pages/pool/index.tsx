@@ -11,6 +11,7 @@ import { Page } from "@components/page";
 import { PledgeForm } from "@components/pledge-form";
 import { ProfileFull } from "@components/profile/profile";
 import { Timer } from "@components/timer";
+import { TokenIcon } from "@components/token-icon";
 import { Principal } from "@dfinity/principal";
 import { useAuth } from "@store/auth";
 import { useBurner } from "@store/burner";
@@ -171,6 +172,22 @@ export const PoolPage = () => {
     return result;
   });
 
+  const totalHourlyRewardsUsd = createMemo(() => {
+    const r = poolHourlyRewards();
+
+    let resultUsd = E8s.zero();
+
+    for (let [_, tokenId, value] of r) {
+      const exchangeRate = icpSwapUsdExchangeRates[tokenId.toText()] ?? E8s.zero();
+
+      resultUsd = resultUsd.add(value.toDecimals(8).toE8s().mul(exchangeRate));
+    }
+
+    return resultUsd.mulNum(2n);
+  });
+
+  const dailyPoolRewardUsd = () => totalHourlyRewardsUsd().mulNum(12n);
+
   const myRewards = createMemo(() => {
     const t = totals.data;
     if (!t) return [];
@@ -199,8 +216,32 @@ export const PoolPage = () => {
     return Object.entries(result).filter((it) => !it[1].isZero());
   });
 
+  const myTotalRewardUsd = createMemo(() => {
+    const r = myRewards();
+
+    let resultUsd = E8s.zero();
+
+    for (let [tokenId, value] of r) {
+      const exchangeRate = icpSwapUsdExchangeRates[tokenId] ?? E8s.zero();
+
+      resultUsd = resultUsd.add(value.toDecimals(8).toE8s().mul(exchangeRate));
+    }
+
+    return resultUsd;
+  });
+
   return (
     <Page slim>
+      <div class="flex gap-5 flex-col justify-center items-center">
+        <p class="flex flex-col gap-2 items-center text-xl sm:text-4xl">
+          <span>
+            Pledge <span class="font-semibold text-orange">$ICP</span> To Mint{" "}
+            <span class="font-semibold text-orange">$BURN</span>
+          </span>
+          <span>and other tokens</span>
+        </p>
+      </div>
+
       <div class="grid grid-cols-4 gap-6">
         <Show when={isAuthorized()}>
           <Bento class="col-span-4 flex-row justify-between items-center gap-2" id={1}>
@@ -208,8 +249,13 @@ export const PoolPage = () => {
           </Bento>
         </Show>
 
-        <Bento class="col-span-4 sm:col-span-3 flex-col gap-8 self-start" id={1}>
-          <p class="font-semibold text-xl">Hourly Pool Rewards</p>
+        <Bento class="col-span-4 sm:col-span-3 flex-col gap-8 justify-between" id={1}>
+          <div class="flex flex-row items-center justify-between">
+            <p class="font-semibold text-xl">Hourly Pool Rewards</p>
+            <p class="text-xl text-gray-140">
+              ${totalHourlyRewardsUsd().toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}
+            </p>
+          </div>
 
           <Show when={poolHourlyRewards()}>
             <div class="flex flex-col gap-2">
@@ -223,11 +269,13 @@ export const PoolPage = () => {
                         class="flex flex-row justify-between gap-8 px-2 py-4 items-center"
                         classList={{ "bg-gray-105": idx() % 2 == 0, "bg-gray-110": idx() % 2 == 1 }}
                       >
-                        <p class="font-semibold text-md text-gray-140 text-ellipsis overflow-hidden text-nowrap">
+                        <p class="font-semibold text-md text-gray-140 text-ellipsis overflow-hidden sm:text-nowrap">
                           {title}
                         </p>
                         <div class="flex flex-row gap-1 items-center min-w-36">
-                          <img src={m!.logoSrc} class="w-5 h-5 rounded-full" />
+                          <Show when={m}>
+                            <TokenIcon tokenCanId={tokenCanId} class="w-5 h-5" />
+                          </Show>
                           <div class="flex flex-row gap-1 items-baseline">
                             <p class="font-semibold text-2xl">
                               {value.mulNum(2n).toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })}
@@ -246,15 +294,24 @@ export const PoolPage = () => {
           </Show>
         </Bento>
 
-        <Bento id={1} class="col-span-4 sm:col-span-1 flex-col gap-4 justify-between self-start">
+        <Bento id={1} class="col-span-4 sm:col-span-1 flex-col gap-4 justify-between">
           <Show when={totals.data && spikeAccountBalance()}>
-            <p class="font-semibold text-xl">Massive Burn Incoming</p>
+            <div class="flex flex-row gap-4 justify-between">
+              <p class="font-semibold text-xl leading-5">ICP Burning Spike Event</p>
+              <HelpBtn>
+                <p class="text-sm">
+                  We accumulate <span class="text-orange">$ICP</span> to transform them into cycles and burn in one go,
+                  producing a big spike on the charts. 47.5% of all pledged <span class="text-orange">$ICP</span> go
+                  here.
+                </p>
+              </HelpBtn>
+            </div>
             <div class="flex flex-col">
               <p class="font-semibold text-6xl text-orange animate-pulse">
-                {spikeAccountBalance()!.toShortString({ belowOne: 1, belowThousand: 1, afterThousand: 1 })}{" "}
+                {spikeAccountBalance()!.toShortString({ belowOne: 2, belowThousand: 0, afterThousand: 1 })}{" "}
               </p>
               <p class="font-semibold text-gray-140 text-lg self-end">
-                / {totals.data!.icpSpikeTarget.toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 1 })}{" "}
+                / {totals.data!.icpSpikeTarget.toShortString({ belowOne: 2, belowThousand: 0, afterThousand: 1 })}{" "}
                 <span class="text-sm text-gray-140">ICP</span>
               </p>
             </div>
@@ -264,7 +321,12 @@ export const PoolPage = () => {
         <Bento class="col-span-4 sm:col-span-2 flex-col" id={2}>
           <div class="flex flex-col gap-8">
             <div class="flex items-center justify-between">
-              <p class="font-semibold text-xl">Classic Pool</p>
+              <p class="font-semibold text-xl">
+                Classic Pool{" "}
+                <span class="text-gray-140">
+                  ${dailyPoolRewardUsd().toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })} / day
+                </span>
+              </p>
               <HelpBtn>
                 <ol class="flex flex-col gap-2 list-decimal list-inside text-sm">
                   <li>
@@ -328,7 +390,12 @@ export const PoolPage = () => {
         <Bento class="col-span-4 sm:col-span-2 flex-col" id={2}>
           <div class="flex flex-col gap-8">
             <div class="flex items-center justify-between">
-              <p class="font-semibold text-xl">High-Risk Pool</p>
+              <p class="font-semibold text-xl">
+                High-Risk Pool{" "}
+                <span class="text-gray-140">
+                  ${dailyPoolRewardUsd().toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })} / day
+                </span>
+              </p>
               <HelpBtn>
                 <ol class="flex flex-col gap-2 list-decimal list-inside text-sm">
                   <li>
@@ -392,7 +459,12 @@ export const PoolPage = () => {
         <Show when={totals.data && isAuthorized()}>
           <div class="grid col-span-4 grid-cols-4 gap-6">
             <Bento class="col-span-4 sm:col-span-3 flex-col gap-4 justify-between" id={1}>
-              <p class="font-semibold text-2xl">My Approx. Hourly Rewards</p>
+              <div class="flex items-center justify-between">
+                <p class="font-semibold text-2xl">My Approx. Hourly Rewards</p>
+                <p class="text-xl text-gray-140">
+                  ${myTotalRewardUsd().toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}
+                </p>
+              </div>
               <div class="flex flex-row gap-8 flex-wrap">
                 <For
                   each={myRewards()}
@@ -404,7 +476,7 @@ export const PoolPage = () => {
                     return (
                       <div class="flex flex-row gap-1 items-center min-w-36">
                         <Show when={m}>
-                          <img src={m!.logoSrc} class="w-5 h-5 rounded-full" />
+                          <TokenIcon tokenCanId={Principal.fromText(tokenId)} class="w-5 h-5" />
                         </Show>
                         <div class="flex flex-row gap-1 items-baseline">
                           <p class="font-semibold text-2xl">

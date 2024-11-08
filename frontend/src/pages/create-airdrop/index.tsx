@@ -11,6 +11,7 @@ import { QtyInput } from "@components/qty-input";
 import { Select } from "@components/select";
 import { Slider } from "@components/slider";
 import { TextInput } from "@components/text-input";
+import { TokenIcon } from "@components/token-icon";
 import { Principal } from "@dfinity/principal";
 import { useNavigate } from "@solidjs/router";
 import { useAuth } from "@store/auth";
@@ -297,7 +298,7 @@ export function CreateAirdropPage() {
                           }}
                         >
                           <div class="flex items-center gap-2">
-                            <img src={m().logoSrc} class="h-5 w-5 rounded-full" />
+                            <TokenIcon tokenCanId={tokenCanId} class="w-5 h-5" />
                             <p class="font-semibold text-lg">{m().name}</p>
                             <Copyable text={tokenCanId.toText()} ellipsis ellipsisSymbols={4} />
                           </div>
@@ -409,6 +410,7 @@ export function CreateAirdropPage() {
                     </p>
                     <p class="text-gray-140 text-xs">
                       You will have to provide the whole amount at once. Remember, you can always airdrop more later.
+                      MSQ team collects 1% as a fee.
                     </p>
                     <Show
                       when={selectedToken() && meta(selectedToken()!) && pidBalance(selectedToken()!) !== undefined}
@@ -552,7 +554,7 @@ export function CreateAirdropPage() {
                                     >
                                       <Show when={m} fallback={token.toText()}>
                                         <div class="flex items-center gap-2">
-                                          <img src={m!.logoSrc} class="w-5 h-5 rounded-full" />
+                                          <TokenIcon tokenCanId={token} class="w-5 h-5" />
                                           <p class="font-semibold text-sm">{m!.name}</p>
                                         </div>
                                       </Show>
@@ -630,7 +632,7 @@ export function CreateAirdropPage() {
                                     >
                                       <Show when={m} fallback={token.toText()}>
                                         <div class="flex items-center gap-2">
-                                          <img src={m!.logoSrc} class="w-5 h-5 rounded-full" />
+                                          <TokenIcon tokenCanId={token} class="w-5 h-5" />
                                           <p class="font-semibold text-sm">{m!.name}</p>
                                         </div>
                                       </Show>

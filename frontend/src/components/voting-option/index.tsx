@@ -1,5 +1,8 @@
 import { Bento } from "@components/bento";
+import { Btn } from "@components/btn";
 import { EIconKind, Icon } from "@components/icon";
+import { Modal } from "@components/modal";
+import { TokenIcon } from "@components/token-icon";
 import { Principal } from "@dfinity/principal";
 import { useAuth } from "@store/auth";
 import { useDispensers } from "@store/dispensers";
@@ -22,6 +25,7 @@ export function TokenVotingOption(props: ITokenVotingOptionProps) {
 
   const [tickerImg, setTickerImg] = createSignal<string>();
   const [tickerImgIsPortrait, setTickerImgIsPortrait] = createSignal(false);
+  const [voteModalOpen, setVoteModalOpen] = createSignal(false);
 
   let canvasRef: HTMLCanvasElement | undefined = undefined;
 
@@ -61,6 +65,7 @@ export function TokenVotingOption(props: ITokenVotingOptionProps) {
 
   const vote = async () => {
     await voteTokenX([{ tokenCanisterId: props.tokenCanId, normalizedWeight: E8s.one() }]);
+    setVoteModalOpen(false);
   };
 
   const votedForThisToken = () => {
@@ -94,50 +99,66 @@ export function TokenVotingOption(props: ITokenVotingOptionProps) {
   });
 
   return (
-    <Bento class="relative flex-col gap-6 overflow-hidden col-span-2 sm:col-span-1" id={props.id % 5}>
-      <Show when={meta()}>
-        <canvas ref={canvasRef} class="hidden"></canvas>
+    <>
+      <Bento class="relative flex-col gap-6 overflow-hidden col-span-2 sm:col-span-1" id={props.id % 5}>
+        <Show when={meta()}>
+          <canvas ref={canvasRef} class="hidden"></canvas>
 
-        <div class="absolute top-0 left-0 right-0 h-full">
-          <img
-            class="relative opacity-[0.03]"
-            classList={{ "h-full": !tickerImgIsPortrait(), "w-full": tickerImgIsPortrait() }}
-            src={tickerImg()}
-          />
-        </div>
-
-        <div
-          class="absolute bottom-0 left-0 right-0 w-full bg-chartreuse opacity-5"
-          style={{ height: `${votesShare()?.toPercentNum() || 0}%` }}
-        ></div>
-
-        <div class="relative flex justify-between items-center">
-          <div class="flex items-center gap-4">
-            <img src={meta()!.logoSrc} class="w-10 h-10 rounded-full" />
-            <p class="font-semibold text-2xl">{meta()!.name}</p>
-          </div>
-          <Show when={hasTriggers()}>
-            <Icon kind={EIconKind.Gift} color={COLORS.orange} class="animate-pulse" />
-          </Show>
-        </div>
-
-        <div class="relative flex items-center justify-between">
-          <p class="font-bold text-4xl">
-            {votesShare()?.toPercent().toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 0 })}%
-          </p>
-          <Show when={canVote() && (!myVoteTokenX() || votedForThisToken())}>
-            <Icon
-              kind={EIconKind.ThumbUp}
-              color={votedForThisToken() ? COLORS.chartreuse : COLORS.gray[140]}
-              hoverColor={COLORS.chartreuse}
-              disabled={disabled()}
-              class={myVoteTokenX() ? undefined : "cursor-pointer"}
-              onClick={myVoteTokenX() ? undefined : vote}
+          <div class="absolute top-0 left-0 right-0 h-full">
+            <img
+              class="relative opacity-[0.03]"
+              classList={{ "h-full": !tickerImgIsPortrait(), "w-full": tickerImgIsPortrait() }}
+              src={tickerImg()}
             />
-          </Show>
-        </div>
+          </div>
+
+          <div
+            class="absolute bottom-0 left-0 right-0 w-full bg-chartreuse opacity-5"
+            style={{ height: `${votesShare()?.toPercentNum() || 0}%` }}
+          ></div>
+
+          <div class="relative flex justify-between items-center">
+            <div class="flex items-center gap-4">
+              <TokenIcon tokenCanId={props.tokenCanId} class="w-10 h-10" />
+              <p class="font-semibold text-2xl">{meta()!.name}</p>
+            </div>
+            <Show when={hasTriggers()}>
+              <Icon kind={EIconKind.Gift} color={COLORS.orange} class="animate-pulse" />
+            </Show>
+          </div>
+
+          <div class="relative flex items-center justify-between">
+            <p class="font-bold text-4xl">
+              {votesShare()?.toPercent().toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 0 })}%
+            </p>
+            <Show when={canVote() && (!myVoteTokenX() || votedForThisToken())}>
+              <Icon
+                kind={EIconKind.ThumbUp}
+                color={votedForThisToken() ? COLORS.chartreuse : COLORS.gray[140]}
+                hoverColor={COLORS.chartreuse}
+                disabled={disabled()}
+                class={myVoteTokenX() ? undefined : "cursor-pointer"}
+                onClick={myVoteTokenX() ? undefined : () => setVoteModalOpen(true)}
+              />
+            </Show>
+          </div>
+        </Show>
+      </Bento>
+
+      <Show when={voteModalOpen()}>
+        <Modal title="Confirm Vote" onClose={() => setVoteModalOpen(false)}>
+          <div class="flex flex-col gap-8">
+            <div class="flex flex-col gap-4">
+              <p>Are you sure you want {meta()!.name} to become the next week's burning token?</p>
+              <p class="text-gray-140 text-xs font-semibold">
+                Note: you won't be able to change your mind until this week ends!
+              </p>
+            </div>
+            <Btn onClick={vote} text="Confirm" bgColor={COLORS.orange} />
+          </div>
+        </Modal>
       </Show>
-    </Bento>
+    </>
   );
 }
 
