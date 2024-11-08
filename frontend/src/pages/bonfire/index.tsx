@@ -295,6 +295,8 @@ export function BonfirePage() {
     return resultUsd;
   });
 
+  const weeklyPoolRewardUsd = () => totalHourlyRewardsUsd().mulNum(24n * 7n);
+
   const myRewards = createMemo(() => {
     const c = drawChance();
     if (!c) return [];
@@ -403,7 +405,13 @@ export function BonfirePage() {
           <Bento class="flex-col col-span-2 sm:col-span-1" id={4}>
             <div class="flex flex-col gap-8">
               <div class="flex items-center justify-between">
-                <p class="font-semibold text-xl">Bonfire Pool</p>
+                <p class="font-semibold text-xl flex gap-4 items-baseline">
+                  <span>Bonfire Pool</span>
+                  <span class="text-gray-140 text-sm">
+                    earns ${weeklyPoolRewardUsd().toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })} a
+                    week
+                  </span>
+                </p>
                 <HelpBtn>
                   <ol class="flex flex-col gap-2 list-decimal list-inside text-sm">
                     <li>

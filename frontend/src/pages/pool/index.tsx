@@ -321,10 +321,10 @@ export const PoolPage = () => {
         <Bento class="col-span-4 sm:col-span-2 flex-col" id={2}>
           <div class="flex flex-col gap-8">
             <div class="flex items-center justify-between">
-              <p class="font-semibold text-xl">
-                Classic Pool{" "}
-                <span class="text-gray-140">
-                  ${dailyPoolRewardUsd().toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })} / day
+              <p class="font-semibold text-xl flex gap-4 items-baseline">
+                <span>Classic Pool</span>
+                <span class="text-gray-140 text-sm">
+                  earns ${dailyPoolRewardUsd().toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })} a day
                 </span>
               </p>
               <HelpBtn>
@@ -390,10 +390,10 @@ export const PoolPage = () => {
         <Bento class="col-span-4 sm:col-span-2 flex-col" id={2}>
           <div class="flex flex-col gap-8">
             <div class="flex items-center justify-between">
-              <p class="font-semibold text-xl">
-                High-Risk Pool{" "}
-                <span class="text-gray-140">
-                  ${dailyPoolRewardUsd().toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })} / day
+              <p class="font-semibold text-xl flex gap-4 items-baseline">
+                <span>High-Risk Pool</span>
+                <span class="text-gray-140 text-sm">
+                  earns ${dailyPoolRewardUsd().toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })} a day
                 </span>
               </p>
               <HelpBtn>
