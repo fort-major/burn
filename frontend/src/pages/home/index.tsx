@@ -137,7 +137,7 @@ export function HomePage() {
         />
         <Btn
           icon={EIconKind.Telegram}
-          linkTo="https://t.me/fortmajoricp/788"
+          linkTo="https://t.me/homeofmsq"
           linkTarget="_blank"
           color={COLORS.white}
           iconSize={35}
@@ -189,7 +189,7 @@ export function HomePage() {
                 />
                 <Btn
                   icon={EIconKind.Telegram}
-                  linkTo="https://t.me/fortmajoricp/788"
+                  linkTo="https://t.me/homeofmsq"
                   linkTarget="_blank"
                   color={COLORS.white}
                   iconSize={35}

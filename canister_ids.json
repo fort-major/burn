@@ -1,12 +1,15 @@
 {
+  "burn_index_canister": {
+    "ic": "nrant-tyaaa-aaaag-atsjq-cai"
+  },
+  "burn_token": {
+    "ic": "egjwt-lqaaa-aaaak-qi2aa-cai"
+  },
   "burner": {
     "ic": "r75zk-hyaaa-aaaak-ak6zq-cai"
   },
   "frontend": {
     "ic": "ry476-kaaaa-aaaak-ak6za-cai"
-  },
-  "burn_token": {
-    "ic": "egjwt-lqaaa-aaaak-qi2aa-cai"
   },
   "furnace": {
     "ic": "ewtyz-oiaaa-aaaah-aqzqa-cai"
