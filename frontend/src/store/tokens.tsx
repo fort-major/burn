@@ -139,6 +139,12 @@ export function TokensStore(props: IChildren) {
   const fetchMetadata: ITokensStoreContext["fetchMetadata"] = async (id) => {
     assertReadyToFetch();
 
+    const cached = getCachedMetadata(id);
+    if (cached) {
+      setMetadata(id.toText(), cached);
+      return;
+    }
+
     const ledger = IcrcLedgerCanister.create({ agent: anonymousAgent()!, canisterId: id });
     const metadata = await ledger.metadata({ certified: false });
 
@@ -177,6 +183,7 @@ export function TokensStore(props: IChildren) {
       logoSrc: logo!,
     };
 
+    cacheMetadata(meta);
     setMetadata(id.toText(), meta);
   };
 
@@ -204,4 +211,48 @@ export function TokensStore(props: IChildren) {
 
 function orDefaultSubaccount(subaccount?: TSubaccount): TSubaccount {
   return subaccount ? subaccount : new Uint8Array(32);
+}
+
+interface ICachedMetadata {
+  timestamp: number;
+  name: string;
+  ticker: string;
+  fee: string;
+  decimals: number;
+  id: string;
+  logoSrc: string;
+}
+
+function cacheMetadata(m: ITokenMetadata) {
+  const meta: ICachedMetadata = {
+    timestamp: Date.now(),
+    name: m.name,
+    ticker: m.ticker,
+    fee: m.fee.val.toString(),
+    decimals: m.fee.decimals,
+    id: m.id.toText(),
+    logoSrc: m.logoSrc,
+  };
+
+  localStorage.setItem(`msq-burn-token-metadata-${meta.id}`, JSON.stringify(meta));
+}
+
+const ONE_WEEK_MS = 1000 * 60 * 60 * 24 * 7;
+
+function getCachedMetadata(id: Principal): ITokenMetadata | undefined {
+  const metaOpt = localStorage.getItem(`msq-burn-token-metadata-${id.toText()}`);
+  if (!metaOpt) return undefined;
+
+  const meta: ICachedMetadata = JSON.parse(metaOpt);
+  const now = Date.now();
+
+  if (meta.timestamp + ONE_WEEK_MS < now) return undefined;
+
+  return {
+    name: meta.name,
+    ticker: meta.ticker,
+    fee: EDs.new(BigInt(meta.fee), meta.decimals),
+    id: Principal.fromText(meta.id),
+    logoSrc: meta.logoSrc,
+  };
 }

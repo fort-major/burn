@@ -1,5 +1,7 @@
 import { Page } from "@components/page";
 import { ReturnCalculator } from "@components/return-calc";
+import { TokenIcon } from "@components/token-icon";
+import { Principal } from "@dfinity/principal";
 import { useAuth } from "@store/auth";
 import { useBurner } from "@store/burner";
 import { useFurnace } from "@store/furnace";
@@ -36,9 +38,9 @@ export const InfoPage = () => {
         const m = metadata[id];
         if (!m) return undefined;
 
-        return [m, val];
+        return [Principal.fromText(id), m, val];
       })
-      .filter((it) => !!it) as [ITokenMetadata, EDs][];
+      .filter((it) => !!it) as [Principal, ITokenMetadata, EDs][];
   });
 
   const circulatingSupply = () => {
@@ -144,6 +146,26 @@ export const InfoPage = () => {
             </Show>
           </div>
         </Show>
+      </div>
+
+      <div class="flex flex-col gap-10">
+        <h3 class="font-primary font-semibold text-2xl">Total Burned</h3>
+
+        <div class="flex gap-8 flex-wrap">
+          <For each={totalBurnedList()}>
+            {([id, meta, value]) => (
+              <div class="flex flex-row items-center gap-1">
+                <TokenIcon tokenCanId={id} class="w-6 h-6" />
+                <div class="flex items-baseline gap-1">
+                  <p class="font-semibold text-2xl">
+                    {value.toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}
+                  </p>
+                  <p class="text-xs text-gray-140">{meta.ticker}</p>
+                </div>
+              </div>
+            )}
+          </For>
+        </div>
       </div>
     </Page>
   );

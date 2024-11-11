@@ -86,6 +86,7 @@ type WithdrawRequest = record {
 type WithdrawResponse = record { block_idx : nat };
 service : () -> {
   add_supported_token : (AddSupportedTokenRequest) -> (record {});
+  burn_token : (principal, opt blob, nat) -> ();
   claim_reward_icp : (ClaimRewardICPRequest) -> (ClaimRewardICPResponse);
   create_distribution_trigger : (CreateDistributionTriggerRequest) -> (
       record {},

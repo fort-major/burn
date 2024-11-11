@@ -266,10 +266,6 @@ async fn redistribute_pledged_token(token_x_info: TokenX) {
 
         let _ = token
             .icrc1_furnace_burn(
-                Account {
-                    owner: ENV_VARS.burner_canister_id,
-                    subaccount: None,
-                },
                 Some(FURNACE_REDISTRIBUTION_SUBACCOUNT),
                 Nat(burn_share.val.clone()),
             )

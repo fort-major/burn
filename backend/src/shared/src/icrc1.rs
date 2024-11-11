@@ -1,5 +1,8 @@
 use candid::{Nat, Principal};
-use ic_cdk::{api::call::CallResult, call};
+use ic_cdk::{
+    api::call::{CallResult, RejectionCode},
+    call,
+};
 
 use icrc_ledger_types::{
     icrc1::{
@@ -42,14 +45,18 @@ impl ICRC1CanisterClient {
 
     pub async fn icrc1_furnace_burn(
         &self,
-        minter_account: Account,
         from_subaccount: Option<[u8; 32]>,
         amount: NumTokens,
     ) -> CallResult<(Result<BlockIndex, TransferError>,)> {
+        let minting_account = self.icrc1_minting_account().await?.0.ok_or((
+            RejectionCode::Unknown,
+            String::from("Minting account not found"),
+        ))?;
+
         let arg = TransferArg {
             from_subaccount,
             amount,
-            to: minter_account,
+            to: minting_account,
             fee: Some(Nat::from(0u64)),
             created_at_time: None,
             memo: None,

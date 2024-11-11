@@ -612,6 +612,22 @@ fn resume() {
     IS_STOPPED.with_borrow_mut(|s| *s = false);
 }
 
+#[update]
+async fn burn_token(token_can_id: Principal, from_subaccount: Option<[u8; 32]>, qty: Nat) {
+    let is_dev = STATE.with_borrow(|s| s.get_furnace_info().is_dev(&caller()));
+    if !is_dev {
+        panic!("Access denied");
+    }
+
+    let token = ICRC1CanisterClient::new(token_can_id);
+    token
+        .icrc1_furnace_burn(from_subaccount, qty)
+        .await
+        .expect("Unable to make the burning call")
+        .0
+        .expect("Unable to burn");
+}
+
 #[init]
 fn init_hook() {
     set_init_canister_one_timer(caller());
@@ -647,6 +663,13 @@ fn init_hook() {
 fn post_upgrade_hook() {
     set_fetch_token_prices_timer();
     set_raffle_timer();
+
+    STATE.with_borrow_mut(|s| {
+        s.total_burned_tokens.insert(
+            Principal::from_text("rh2pm-ryaaa-aaaan-qeniq-cai").unwrap(),
+            EDs::new(Nat::from(2_440_0000_0000u64).0, 8),
+        );
+    });
 }
 
 export_candid!();

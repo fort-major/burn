@@ -151,7 +151,9 @@ export function TokenVotingOption(props: ITokenVotingOptionProps) {
             <div class="flex flex-col gap-4">
               <p>Are you sure you want {meta()!.name} to become the next week's burning token?</p>
               <p class="text-gray-140 text-xs font-semibold">
-                Note: you won't be able to change your mind until this week ends!
+                Note: you won't be able to change your mind until this week ends! Also, if you vote and then pledge
+                more, your voting power won't increase, due to technical reasons. Either vote after you've pledged the
+                whole amount, or pledge to another account and vote again.
               </p>
             </div>
             <Btn onClick={vote} text="Confirm" bgColor={COLORS.orange} />

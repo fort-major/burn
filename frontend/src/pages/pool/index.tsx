@@ -269,19 +269,19 @@ export const PoolPage = () => {
                         class="flex flex-row justify-between gap-8 px-2 py-4 items-center"
                         classList={{ "bg-gray-105": idx() % 2 == 0, "bg-gray-110": idx() % 2 == 1 }}
                       >
-                        <p class="font-semibold text-md text-gray-140 text-ellipsis overflow-hidden sm:text-nowrap">
+                        <p class="font-semibold text-xs sm:text-md text-gray-140 text-ellipsis overflow-hidden sm:text-nowrap max-w-44 sm:max-w-[auto]">
                           {title}
                         </p>
-                        <div class="flex flex-row gap-1 items-center min-w-36">
+                        <div class="flex flex-row gap-1 items-center sm:min-w-36">
                           <Show when={m}>
-                            <TokenIcon tokenCanId={tokenCanId} class="w-5 h-5" />
+                            <TokenIcon tokenCanId={tokenCanId} class="w-4 h-4 sm:w-5 sm:h-5" />
                           </Show>
                           <div class="flex flex-row gap-1 items-baseline">
-                            <p class="font-semibold text-2xl">
-                              {value.mulNum(2n).toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })}
+                            <p class="font-semibold text-xl sm:text-2xl">
+                              {value.mulNum(2n).toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}
                             </p>
                             <Show when={m}>
-                              <span class="text-gray-140 text-xs">{m!.ticker}</span>
+                              <span class="text-gray-140 text-xs hidden sm:block">{m!.ticker}</span>
                             </Show>
                           </div>
                         </div>
