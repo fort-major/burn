@@ -61,13 +61,26 @@ const Btn = (props: {
   );
 };
 
-const AboutCard = (props: { title: string; desc: string; class?: string; btn?: JSX.Element; whiteText?: boolean }) => (
+const AboutCard = (props: {
+  title: string;
+  desc: string;
+  linkName?: string;
+  link?: string;
+  class?: string;
+  btn?: JSX.Element;
+  whiteText?: boolean;
+}) => (
   <div class="flex flex-col gap-4 px-6 sm:px-10 py-10 rounded-[24px]" classList={{ [props.class!]: !!props.class }}>
     <h4 class="font-semibold text-[32px] leading-[32px] tracking-tight">{props.title}</h4>
     <p class="font-normal text-md leading-[150%] text-gray-175" classList={{ ["text-white"]: !!props.whiteText }}>
       {props.desc}
     </p>
     <Show when={props.btn}>{props.btn}</Show>
+    <Show when={props.link}>
+      <a class="cursor-pointer underline" target="_blank" href={props.link}>
+        {props.linkName ?? props.link}
+      </a>
+    </Show>
   </div>
 );
 
@@ -236,7 +249,9 @@ export function HomePage() {
           <AboutCard
             class="bg-gray-110"
             title="Want To Learn More?"
-            desc="Interested in learning more? Check out our in-depth article [TODO] to explore how MSQ.Burn is transforming tokenomics for a sustainable future."
+            desc="Interested in learning more? Check out our in-depth article to explore how MSQ.Burn is transforming tokenomics for a sustainable future."
+            link="https://mirror.xyz/0xbDD7D20F70A66aACaA6ea3a1db1BB72503f385c0/iu3BNoSbdrorSIM-kBeh1gjbYrzdCj7djkfSkdUR9p0"
+            linkName="Read the article"
           />
         </AboutCols>
       </div>
