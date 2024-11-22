@@ -15,6 +15,7 @@ mod env;
 pub mod furnace;
 pub mod icpswap;
 pub mod icrc1;
+pub mod trading;
 pub mod utils;
 
 pub const MEMO_TOP_UP_CANISTER: u64 = 1347768404_u64;

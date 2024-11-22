@@ -2358,6 +2358,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "trading"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "futures",
+ "garde",
+ "ic-cdk 0.13.5",
+ "ic-cdk-timers",
+ "ic-e8s",
+ "ic-ledger-types",
+ "ic-stable-structures",
+ "icrc-ledger-types",
+ "serde",
+ "shared",
+]
+
+[[package]]
 name = "typed-arena"
 version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
