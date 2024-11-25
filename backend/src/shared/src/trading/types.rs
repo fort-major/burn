@@ -11,19 +11,67 @@ pub const STEPS_PER_MINUTE: u64 = 1;
 pub const STEPS_PER_DAY: u64 = STEPS_PER_MINUTE * 60 * 24;
 pub const PRICE_UPDATE_DELAY_NS: u64 = ONE_MINUTE_NS / STEPS_PER_MINUTE;
 
-pub const BASE_APD_E8S: u64 = 55000;
-pub const APD_BONUS_E8S: u64 = 28000;
+pub const BASE_APD_E8S: u64 = 0_0005_5000;
+pub const APD_BONUS_E8S: u64 = 0_0002_8000;
 
-pub const MIN_PRICE_E8S: u64 = 2000_0000;
+pub const MIN_PRICE_E8S: u64 = 0_2000_0000;
 pub const MAX_PRICE_E8S: u64 = 100_0000_0000;
 
-pub const TREND_SIGN_CHANGE_PROBABILITY_E8S: u64 = 100_0000;
-pub const TREND_SIGN_CHANGE_PROBABILITY_FACTOR_E8S: u64 = 20_0000;
+pub const TREND_SIGN_CHANGE_PROBABILITY_E8S: u64 = 0_0100_0000;
+pub const TREND_SIGN_CHANGE_PROBABILITY_FACTOR_E8S: u64 = 0_0020_0000;
 pub const START_PRICE_E8S: u64 = 1_0000_0000;
-pub const TREND_MODIFIER_E8S: u64 = 100;
-pub const DEFAULT_TREND_E8S: u64 = 1_0000;
+pub const TREND_MODIFIER_E8S: u64 = 0_0000_0100;
+pub const DEFAULT_TREND_E8S: u64 = 0_0001_0000;
 
 pub const DEFAULT_TOTAL_SUPPLY: u64 = 10_000_000_0000_0000u64;
+
+// %0.3 fee, %0.15 for the inviter, %0.15 for the LPs
+pub const INVITERS_CUT_E8S: u64 = 0_0015_0000;
+pub const LPS_CUT_E8S: u64 = 0_0015_0000;
+
+pub const TRADING_LP_SUBACCOUNT: [u8; 32] = [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+];
+
+#[derive(CandidType, Deserialize, Debug)]
+pub struct PriceHistoryEntry {
+    pub long: E8s,
+    pub short: E8s,
+    pub target: E8s,
+}
+
+impl Storable for PriceHistoryEntry {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        std::borrow::Cow::Owned(encode_one(self).expect("Unable to encode"))
+    }
+
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        decode_one(&bytes).expect("Unable to decode")
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+#[derive(CandidType, Deserialize, Debug, Default, Clone)]
+pub struct BalancesInfo {
+    pub long: E8s,
+    pub short: E8s,
+    pub real: E8s,
+
+    pub inviter: Option<Principal>,
+}
+
+impl Storable for BalancesInfo {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        std::borrow::Cow::Owned(encode_one(self).expect("Unable to encode"))
+    }
+
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        decode_one(&bytes).expect("Unable to decode")
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
 
 #[derive(CandidType, Deserialize, Debug)]
 pub struct Order {
@@ -46,7 +94,7 @@ impl Storable for Order {
     const BOUND: Bound = Bound::Unbounded;
 }
 
-#[derive(CandidType, Deserialize, Debug, Default)]
+#[derive(CandidType, Deserialize, Debug, Default, Clone)]
 pub struct TraderStats {
     pub total_long_bought: E8s,
     pub total_short_bought: E8s,
@@ -57,6 +105,48 @@ pub struct TraderStats {
     pub buy_short_timestamps: Vec<TimestampNs>,
     pub sell_long_timestamps: Vec<TimestampNs>,
     pub sell_short_timestamps: Vec<TimestampNs>,
+}
+
+impl TraderStats {
+    pub fn add_buy_long(&mut self, qty: &E8s, now: TimestampNs) {
+        self.total_long_bought += qty;
+
+        if self.buy_long_timestamps.len() == 30 {
+            self.buy_long_timestamps.remove(0);
+        }
+
+        self.buy_long_timestamps.push(now);
+    }
+
+    pub fn add_buy_short(&mut self, qty: &E8s, now: TimestampNs) {
+        self.total_short_bought += qty;
+
+        if self.buy_short_timestamps.len() == 30 {
+            self.buy_short_timestamps.remove(0);
+        }
+
+        self.buy_short_timestamps.push(now);
+    }
+
+    pub fn add_sell_long(&mut self, qty: &E8s, now: TimestampNs) {
+        self.total_long_sold += qty;
+
+        if self.sell_long_timestamps.len() == 30 {
+            self.sell_long_timestamps.remove(0);
+        }
+
+        self.sell_long_timestamps.push(now);
+    }
+
+    pub fn add_sell_short(&mut self, qty: &E8s, now: TimestampNs) {
+        self.total_short_sold += qty;
+
+        if self.sell_short_timestamps.len() == 30 {
+            self.sell_short_timestamps.remove(0);
+        }
+
+        self.sell_short_timestamps.push(now);
+    }
 }
 
 impl Storable for TraderStats {
@@ -101,18 +191,18 @@ impl PriceInfo {
         }
     }
 
-    pub fn step(&mut self, seed: [u8; 32]) -> (E8s, E8s, E8s) {
+    pub fn step(&mut self, seed: [u8; 32]) -> PriceHistoryEntry {
         let (r1, r2, _, _) = Self::create_random_nums(seed);
 
         self.update_trend_sign(r1);
         self.update_trend(r2);
         self.update_price();
 
-        (
-            self.cur_long_price.clone(),
-            self.cur_short_price.clone(),
-            self.target_price.clone(),
-        )
+        PriceHistoryEntry {
+            long: self.cur_long_price.clone(),
+            short: self.cur_short_price.clone(),
+            target: self.target_price.clone(),
+        }
     }
 
     fn create_random_nums(seed: [u8; 32]) -> (E8s, E8s, E8s, E8s) {

@@ -52,6 +52,8 @@ pub struct EnvVarsState {
     pub burner_canister_id: Principal,
     pub burn_token_canister_id: Principal,
     pub furnace_canister_id: Principal,
+    pub trading_canister_id: Principal,
+    pub trading_invites_canister_id: Principal,
     pub ii_canister_id: Principal,
     pub ii_origin: String,
     pub ic_root_key_der: Vec<u8>,
