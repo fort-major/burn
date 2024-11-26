@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use candid::Principal;
+use candid::{Nat, Principal};
 use futures::join;
 use ic_cdk::{
     api::{
@@ -15,19 +15,17 @@ use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use shared::{
     burner::{client::BurnerClient, types::TCycles},
     icrc1::ICRC1CanisterClient,
-    trading::types::{BalancesInfo, PriceInfo, TraderStats, TRADING_LP_SUBACCOUNT},
+    trading::{
+        api::OrderRequest,
+        types::{
+            BalancesInfo, Order, PriceHistoryEntry, PriceInfo, TraderStats, TRADING_LP_SUBACCOUNT,
+        },
+    },
     ENV_VARS,
 };
-use utils::STATE;
+use utils::{set_produce_new_price_timer, STATE};
 
 mod utils;
-
-#[derive(CandidType, Deserialize)]
-pub struct OrderRequest {
-    pub sell: bool,
-    pub short: bool,
-    pub qty: E8s,
-}
 
 #[update]
 fn order(req: OrderRequest) {
@@ -48,8 +46,8 @@ async fn deposit(qty: E8s) {
     let burn_token_can = ICRC1CanisterClient::new(ENV_VARS.burn_token_canister_id);
 
     let user_arg = TransferArg {
-        from_subaccount: user_subaccount,
-        amount: user_qty,
+        from_subaccount: Some(user_subaccount.0),
+        amount: Nat(user_qty.val.clone()),
         to: Account {
             owner: ENV_VARS.burner_canister_id,
             subaccount: None,
@@ -61,19 +59,19 @@ async fn deposit(qty: E8s) {
     let user_transfer_future = burn_token_can.icrc1_transfer(user_arg);
 
     let lp_arg = TransferArg {
-        from_subaccount: user_subaccount,
-        amount: lp_qty,
+        from_subaccount: Some(user_subaccount.0),
+        amount: Nat(lp_qty.val),
         to: Account {
             owner: id(),
             subaccount: Some(TRADING_LP_SUBACCOUNT),
         },
-        fee: Some(Nat::from(10_000u64)),
+        fee: Some(Nat::from(1_0000u64)),
         created_at_time: None,
         memo: None,
     };
     let lp_transfer_future = burn_token_can.icrc1_transfer(lp_arg);
 
-    // ignoring the second result, LP fees are best effort
+    // LP fees are best effort, ignoring the second result
     let (user_transfer_call_result, _) = join!(user_transfer_future, lp_transfer_future);
 
     user_transfer_call_result
@@ -85,40 +83,47 @@ async fn deposit(qty: E8s) {
 }
 
 #[update]
-async fn withdraw() {
+async fn withdraw() -> Result<(), String> {
     let user_pid = caller();
     let user_qty = STATE.with_borrow_mut(|s| s.withdraw(user_pid));
 
-    if user_qty < E8s::from(10_0000u64) {
+    let fee = E8s::from(1_0000u64);
+
+    if user_qty < fee {
         panic!("Balance too low (need more than 0.0001 to withdraw)");
     }
 
     let burner_can = BurnerClient(ENV_VARS.burner_canister_id);
-    burner_can
-        .mint(user_pid, user_qty)
-        .await
-        .expect("Unable to mint $BURN");
+    let result = burner_can.mint(user_pid, user_qty.clone()).await;
+
+    if let Err((c, m)) = result {
+        STATE.with_borrow_mut(|s| s.revert_withdraw(user_pid, user_qty - fee));
+
+        return Err(format!("Withdraw failed - {:?}: {}", c, m));
+    }
+
+    Ok(())
 }
 
 #[update]
-async fn withdraw_from_user_subaccount(qty: E8s) {
+async fn withdraw_from_user_subaccount(token_can_id: Principal, qty: E8s) {
     let user_pid = caller();
     let user_subaccount = subaccount_of(user_pid);
-    let burn_can = ICRC1CanisterClient::new(ENV_VARS.burn_token_canister_id);
+    let token_can = ICRC1CanisterClient::new(token_can_id);
 
     let arg = TransferArg {
-        from_subaccount: user_subaccount,
+        from_subaccount: Some(user_subaccount.0),
         amount: Nat(qty.val),
         to: Account {
             owner: user_pid,
             subaccount: None,
         },
-        fee: Some(Nat::from(10_0000u64)),
+        fee: None,
         created_at_time: None,
         memo: None,
     };
 
-    burn_can
+    token_can
         .icrc1_transfer(arg)
         .await
         .expect("Unable to make a call to the $BURN token canister")
@@ -137,7 +142,7 @@ fn register(pid: Principal, inviter: Option<Principal>) {
 }
 
 #[query]
-fn get_user_balances() -> Option<BalancesInfo, TraderStats> {
+fn get_user_balances() -> Option<(BalancesInfo, TraderStats)> {
     STATE.with_borrow(|s| {
         s.get_balances_of(&caller())
             .map(|it| (it, s.get_stats_of(&caller())))
@@ -150,11 +155,19 @@ fn get_info() -> PriceInfo {
 }
 
 #[query]
-fn get_all_trader_stats(skip: u64, take: u64) -> Vec<TraderStats> {
+fn get_all_trader_stats(skip: u64, take: u64) -> Vec<(Principal, TraderStats)> {
     STATE.with_borrow(|s| s.get_all_stats(skip, take))
 }
 
-// TODO: add price history and trade history endpoints (from latest)
+#[query]
+fn get_price_history(skip: u64, take: u64) -> Vec<PriceHistoryEntry> {
+    STATE.with_borrow(|s| s.get_price_history(skip, take))
+}
+
+#[query]
+fn get_order_history() -> Vec<Order> {
+    STATE.with_borrow(|s| s.get_order_history())
+}
 
 #[query]
 fn subaccount_of(pid: Principal) -> Subaccount {
@@ -198,9 +211,13 @@ fn get_account_ids() -> BTreeMap<String, (AccountIdentifier, Account)> {
 }
 
 #[init]
-fn init_hook() {}
+fn init_hook() {
+    set_produce_new_price_timer();
+}
 
 #[post_upgrade]
-fn post_upgrade_hook() {}
+fn post_upgrade_hook() {
+    set_produce_new_price_timer();
+}
 
 export_candid!();

@@ -15,3 +15,5 @@ cargo fix --all --allow-dirty
 generate_did "burner"
 generate_did "dispenser"
 generate_did "furnace"
+generate_did "trading"
+generate_did "trading_invites"

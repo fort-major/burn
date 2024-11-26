@@ -1,11 +1,12 @@
 use candid::Principal;
 use ic_e8s::c::E8s;
-use ic_stable_structures::{Cell, StableBTreeMap};
+use ic_stable_structures::{Cell, StableBTreeMap, StableVec};
 
 use crate::burner::types::{Memory, TimestampNs};
 
 use super::types::{
-    BalancesInfo, Order, PriceHistoryEntry, PriceInfo, TraderStats, INVITERS_CUT_E8S, LPS_CUT_E8S,
+    BalancesInfo, Order, OrderHistory, PriceHistoryEntry, PriceInfo, TraderStats, INVITERS_CUT_E8S,
+    LPS_CUT_E8S,
 };
 
 pub struct TradingState {
@@ -13,11 +14,24 @@ pub struct TradingState {
     pub stats: StableBTreeMap<Principal, TraderStats, Memory>,
     pub balances: StableBTreeMap<Principal, BalancesInfo, Memory>,
 
-    pub price_history: StableBTreeMap<TimestampNs, PriceHistoryEntry, Memory>,
-    pub order_history: StableBTreeMap<TimestampNs, Order, Memory>,
+    pub price_history: StableVec<PriceHistoryEntry, Memory>,
+    pub order_history: Cell<OrderHistory, Memory>,
 }
 
 impl TradingState {
+    pub fn get_price_history(&self, skip: u64, take: u64) -> Vec<PriceHistoryEntry> {
+        self.price_history
+            .iter()
+            .rev()
+            .skip(skip as usize)
+            .take(take as usize)
+            .collect()
+    }
+
+    pub fn get_order_history(&self) -> Vec<Order> {
+        self.order_history.get().clone().0
+    }
+
     pub fn get_balances_of(&self, pid: &Principal) -> Option<BalancesInfo> {
         self.balances.get(pid).clone()
     }
@@ -176,9 +190,12 @@ impl TradingState {
         buf.copy_from_slice(&seed);
 
         let mut info = self.get_price_info();
-        let entry = info.step(buf);
+        let entry = info.step(buf, now);
 
-        self.price_history.insert(now, entry);
+        self.price_history
+            .push(&entry)
+            .expect("OOM: unable to store price history entry");
+
         self.set_price_info(info);
     }
 
@@ -187,18 +204,6 @@ impl TradingState {
     }
 
     fn add_order(&mut self, order: Order) {
-        // if the order history is overflowed, remove the first entry
-        if self.order_history.len() == 100 && !self.order_history.contains_key(&order.timestmap) {
-            let id = {
-                let mut iter = self.order_history.iter();
-                let (id, _) = iter.next().unwrap();
-
-                id
-            };
-
-            self.order_history.remove(&id);
-        }
-
         let mut stat = self.stats.get(&order.pid).unwrap_or_default();
         match (order.sell, order.short) {
             /* buy long */
@@ -212,7 +217,9 @@ impl TradingState {
         }
         self.stats.insert(order.pid, stat);
 
-        self.order_history.insert(order.timestmap, order);
+        let mut order_history = self.order_history.get().clone();
+        order_history.push(order);
+        self.order_history.set(order_history);
     }
 
     fn set_price_info(&mut self, info: PriceInfo) {

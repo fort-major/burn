@@ -1,4 +1,4 @@
-use std::u64;
+use std::{cmp::Ordering, u64};
 
 use candid::{decode_one, encode_one, CandidType, Principal};
 use ic_e8s::c::E8s;
@@ -33,23 +33,76 @@ pub const TRADING_LP_SUBACCOUNT: [u8; 32] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
 ];
 
+pub const E8S_BASE_F64: f64 = 1_0000_0000.0;
+
+#[derive(CandidType, Deserialize, Debug, Default, Clone)]
+pub struct OrderHistory(pub Vec<Order>);
+
+impl OrderHistory {
+    pub fn push(&mut self, order: Order) {
+        if self.0.len() == 100 {
+            self.0.remove(0);
+        }
+
+        self.0.push(order);
+    }
+}
+
+impl Storable for OrderHistory {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        std::borrow::Cow::Owned(encode_one(&self.0).expect("Unable to encode"))
+    }
+
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        OrderHistory(decode_one(&bytes).expect("Unable to decode"))
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
+
 #[derive(CandidType, Deserialize, Debug)]
 pub struct PriceHistoryEntry {
-    pub long: E8s,
-    pub short: E8s,
-    pub target: E8s,
+    pub timestamp: TimestampNs,
+    pub long: f64,
+    pub short: f64,
+    pub target: f64,
 }
 
 impl Storable for PriceHistoryEntry {
     fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
-        std::borrow::Cow::Owned(encode_one(self).expect("Unable to encode"))
+        let mut buf = vec![0u8; 32];
+
+        buf[0..8].copy_from_slice(&self.timestamp.to_le_bytes());
+        buf[8..16].copy_from_slice(&self.long.to_le_bytes());
+        buf[16..24].copy_from_slice(&self.short.to_le_bytes());
+        buf[24..32].copy_from_slice(&self.target.to_le_bytes());
+
+        std::borrow::Cow::Owned(buf)
     }
 
     fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
-        decode_one(&bytes).expect("Unable to decode")
+        let mut timestamp_buf = [0u8; 8];
+        let mut long_buf = [0u8; 8];
+        let mut short_buf = [0u8; 8];
+        let mut target_buf = [0u8; 8];
+
+        timestamp_buf.copy_from_slice(&bytes[0..8]);
+        long_buf.copy_from_slice(&bytes[8..16]);
+        short_buf.copy_from_slice(&bytes[16..24]);
+        target_buf.copy_from_slice(&bytes[24..32]);
+
+        Self {
+            timestamp: TimestampNs::from_le_bytes(timestamp_buf),
+            long: f64::from_le_bytes(long_buf),
+            short: f64::from_le_bytes(short_buf),
+            target: f64::from_le_bytes(target_buf),
+        }
     }
 
-    const BOUND: Bound = Bound::Unbounded;
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 32,
+        is_fixed_size: true,
+    };
 }
 
 #[derive(CandidType, Deserialize, Debug, Default, Clone)]
@@ -73,7 +126,7 @@ impl Storable for BalancesInfo {
     const BOUND: Bound = Bound::Unbounded;
 }
 
-#[derive(CandidType, Deserialize, Debug)]
+#[derive(CandidType, Deserialize, Debug, Clone)]
 pub struct Order {
     pub pid: Principal,
     pub short: bool,
@@ -191,17 +244,42 @@ impl PriceInfo {
         }
     }
 
-    pub fn step(&mut self, seed: [u8; 32]) -> PriceHistoryEntry {
+    pub fn step(&mut self, seed: [u8; 32], now: TimestampNs) -> PriceHistoryEntry {
         let (r1, r2, _, _) = Self::create_random_nums(seed);
 
         self.update_trend_sign(r1);
         self.update_trend(r2);
         self.update_price();
 
+        let long_u64: u64 = self
+            .cur_long_price
+            .val
+            .clone()
+            .try_into()
+            .expect("Unable to convert long price");
+        let long_f64 = (long_u64 as f64) / E8S_BASE_F64;
+
+        let short_u64: u64 = self
+            .cur_short_price
+            .val
+            .clone()
+            .try_into()
+            .expect("Unable to convert short price");
+        let short_f64 = (short_u64 as f64) / E8S_BASE_F64;
+
+        let target_u64: u64 = self
+            .target_price
+            .val
+            .clone()
+            .try_into()
+            .expect("Unable to convert target price");
+        let target_f64 = (target_u64 as f64) / E8S_BASE_F64;
+
         PriceHistoryEntry {
-            long: self.cur_long_price.clone(),
-            short: self.cur_short_price.clone(),
-            target: self.target_price.clone(),
+            timestamp: now,
+            long: long_f64,
+            short: short_f64,
+            target: target_f64,
         }
     }
 
