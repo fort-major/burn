@@ -23,7 +23,7 @@ use shared::{
     },
     ENV_VARS,
 };
-use utils::{set_produce_new_price_timer, STATE};
+use utils::{set_fetch_total_supply_timer, set_produce_new_price_timer, STATE};
 
 mod utils;
 
@@ -213,11 +213,13 @@ fn get_account_ids() -> BTreeMap<String, (AccountIdentifier, Account)> {
 #[init]
 fn init_hook() {
     set_produce_new_price_timer();
+    set_fetch_total_supply_timer();
 }
 
 #[post_upgrade]
 fn post_upgrade_hook() {
     set_produce_new_price_timer();
+    set_fetch_total_supply_timer();
 }
 
 export_candid!();

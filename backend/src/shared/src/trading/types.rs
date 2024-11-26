@@ -11,17 +11,20 @@ pub const STEPS_PER_MINUTE: u64 = 1;
 pub const STEPS_PER_DAY: u64 = STEPS_PER_MINUTE * 60 * 24;
 pub const PRICE_UPDATE_DELAY_NS: u64 = ONE_MINUTE_NS / STEPS_PER_MINUTE;
 
-pub const BASE_APD_E8S: u64 = 0_0005_5000;
-pub const APD_BONUS_E8S: u64 = 0_0002_8000;
+pub const BASE_APD: f64 = 0.00055;
+pub const APD_BONUS: f64 = 0.00028;
 
-pub const MIN_PRICE_E8S: u64 = 0_2000_0000;
-pub const MAX_PRICE_E8S: u64 = 100_0000_0000;
+pub const MIN_PRICE: f64 = 0.01;
+pub const MAX_PRICE: f64 = 100.0;
 
-pub const TREND_SIGN_CHANGE_PROBABILITY_E8S: u64 = 0_0100_0000;
-pub const TREND_SIGN_CHANGE_PROBABILITY_FACTOR_E8S: u64 = 0_0020_0000;
-pub const START_PRICE_E8S: u64 = 1_0000_0000;
-pub const TREND_MODIFIER_E8S: u64 = 0_0000_0100;
-pub const DEFAULT_TREND_E8S: u64 = 0_0001_0000;
+pub const TREND_SIGN_CHANGE_PROBABILITY: f64 = 0.008;
+pub const TREND_SIGN_CHANGE_PROBABILITY_FACTOR: f64 = 0.002;
+pub const START_PRICE: f64 = 1.0;
+pub const TREND_MODIFIER: f64 = 0.0000011;
+pub const DEFAULT_TREND: f64 = 0.0001;
+
+pub const VOLATILITY_MAX_SPIKE: f64 = 0.003;
+pub const VOLATILITY_SPIKE_CHACE: f64 = 0.1;
 
 pub const DEFAULT_TOTAL_SUPPLY: u64 = 10_000_000_0000_0000u64;
 
@@ -216,13 +219,13 @@ impl Storable for TraderStats {
 
 #[derive(CandidType, Deserialize, Debug, Clone)]
 pub struct PriceInfo {
-    pub cur_trend: E8s,
+    pub cur_trend: f64,
     pub cur_trend_sign: bool,
 
-    pub cur_long_price: E8s,
-    pub cur_short_price: E8s,
+    pub cur_long_price: f64,
+    pub cur_short_price: f64,
+    pub target_price: f64,
 
-    pub target_price: E8s,
     pub cur_step: u64,
 
     pub total_supply: E8s,
@@ -231,13 +234,13 @@ pub struct PriceInfo {
 impl PriceInfo {
     pub fn new() -> Self {
         Self {
-            cur_trend: E8s::from(DEFAULT_TREND_E8S),
+            cur_trend: DEFAULT_TREND,
             cur_trend_sign: true,
 
-            cur_long_price: E8s::from(START_PRICE_E8S),
-            cur_short_price: E8s::from(START_PRICE_E8S),
+            cur_long_price: START_PRICE,
+            cur_short_price: START_PRICE,
+            target_price: START_PRICE,
 
-            target_price: E8s::from(START_PRICE_E8S),
             cur_step: 0,
 
             total_supply: E8s::from(DEFAULT_TOTAL_SUPPLY),
@@ -245,80 +248,51 @@ impl PriceInfo {
     }
 
     pub fn step(&mut self, seed: [u8; 32], now: TimestampNs) -> PriceHistoryEntry {
-        let (r1, r2, _, _) = Self::create_random_nums(seed);
+        let (r1, r2, r3, r4) = Self::create_random_nums(seed);
 
         self.update_trend_sign(r1);
         self.update_trend(r2);
-        self.update_price();
+        self.update_price(r3, r4);
 
-        let long_u64: u64 = self
-            .cur_long_price
-            .val
-            .clone()
-            .try_into()
-            .expect("Unable to convert long price");
-        let long_f64 = (long_u64 as f64) / E8S_BASE_F64;
-
-        let short_u64: u64 = self
-            .cur_short_price
-            .val
-            .clone()
-            .try_into()
-            .expect("Unable to convert short price");
-        let short_f64 = (short_u64 as f64) / E8S_BASE_F64;
-
-        let target_u64: u64 = self
-            .target_price
-            .val
-            .clone()
-            .try_into()
-            .expect("Unable to convert target price");
-        let target_f64 = (target_u64 as f64) / E8S_BASE_F64;
+        self.cur_step += 1;
 
         PriceHistoryEntry {
             timestamp: now,
-            long: long_f64,
-            short: short_f64,
-            target: target_f64,
+            long: self.cur_long_price,
+            short: self.cur_short_price,
+            target: self.target_price,
         }
     }
 
-    fn create_random_nums(seed: [u8; 32]) -> (E8s, E8s, E8s, E8s) {
-        let mut buf_1 = [0u8; 8];
-        let mut buf_2 = [0u8; 8];
-        let mut buf_3 = [0u8; 8];
-        let mut buf_4 = [0u8; 8];
+    fn bytes_to_f64(s: &[u8]) -> f64 {
+        let mut buf = [0u8; 8];
+        buf.copy_from_slice(&s);
 
-        buf_1.copy_from_slice(&seed[0..8]);
-        buf_2.copy_from_slice(&seed[8..16]);
-        buf_3.copy_from_slice(&seed[16..24]);
-        buf_4.copy_from_slice(&seed[24..32]);
+        let as_u64 = u64::from_le_bytes(buf);
+        as_u64 as f64 / u64::MAX as f64
+    }
 
-        let r_1 = E8s::from(u64::from_le_bytes(buf_1));
-        let r_2 = E8s::from(u64::from_le_bytes(buf_2));
-        let r_3 = E8s::from(u64::from_le_bytes(buf_3));
-        let r_4 = E8s::from(u64::from_le_bytes(buf_4));
+    fn create_random_nums(seed: [u8; 32]) -> (f64, f64, f64, f64) {
+        let r_1 = Self::bytes_to_f64(&seed[0..8]);
+        let r_2 = Self::bytes_to_f64(&seed[8..16]);
+        let r_3 = Self::bytes_to_f64(&seed[16..24]);
+        let r_4 = Self::bytes_to_f64(&seed[24..32]);
 
-        let max = E8s::from(u64::MAX);
-
-        (r_1 / &max, r_2 / &max, r_3 / &max, r_4 / max)
+        (r_1, r_2, r_3, r_4)
     }
 
     /// the actual price converges back to the target price
-    fn update_trend_sign(&mut self, random: E8s) {
+    fn update_trend_sign(&mut self, random: f64) {
         let (d, underpriced, overpriced) = if self.target_price > self.cur_long_price {
             (&self.cur_long_price / &self.target_price, false, true)
         } else if self.target_price < self.cur_long_price {
             (&self.target_price / &self.cur_long_price, true, false)
         } else {
-            (E8s::zero(), false, false)
+            (0.0, false, false)
         };
 
-        let m: u64 = (d * E8s::from(TREND_SIGN_CHANGE_PROBABILITY_FACTOR_E8S))
-            .val
-            .try_into()
-            .expect("Unable to downcast the modifier to u64");
-        let mut p = TREND_SIGN_CHANGE_PROBABILITY_E8S;
+        let m = d * TREND_SIGN_CHANGE_PROBABILITY_FACTOR;
+        let mut p = TREND_SIGN_CHANGE_PROBABILITY;
 
         let (uptrend, downtrend) = if self.cur_trend_sign {
             (true, false)
@@ -331,28 +305,38 @@ impl PriceInfo {
         }
 
         if uptrend && underpriced || downtrend && overpriced {
-            p = p.checked_sub(m).unwrap_or_default();
+            p -= m;
         }
 
-        let p_e8s = E8s::from(p);
-
-        if random < p_e8s {
+        if random < p {
             self.cur_trend_sign = !self.cur_trend_sign;
-            self.cur_trend = E8s::zero();
+            self.cur_trend = 0.0;
         }
     }
 
-    fn update_trend(&mut self, random: E8s) {
-        self.cur_trend += E8s::from(TREND_MODIFIER_E8S) * random;
+    fn update_trend(&mut self, random: f64) {
+        self.cur_trend += TREND_MODIFIER * random;
     }
 
-    fn update_price(&mut self) {
+    fn update_price(&mut self, r1: f64, r2: f64) {
         if self.cur_trend_sign {
             self.cur_long_price += &self.cur_trend;
             self.cur_short_price -= &self.cur_trend;
         } else {
             self.cur_long_price -= &self.cur_trend;
             self.cur_short_price += &self.cur_trend;
+        }
+
+        if r1 < VOLATILITY_SPIKE_CHACE {
+            let spike = VOLATILITY_MAX_SPIKE * r2;
+
+            if self.cur_trend_sign {
+                self.cur_long_price -= spike;
+                self.cur_short_price += spike;
+            } else {
+                self.cur_long_price += spike;
+                self.cur_short_price -= spike;
+            }
         }
 
         if self.cur_step % STEPS_PER_DAY == 0 {
@@ -363,32 +347,32 @@ impl PriceInfo {
             self.target_price += apd;
         }
 
-        let min_price = E8s::from(MIN_PRICE_E8S);
-        if self.cur_long_price < min_price {
-            self.cur_long_price = min_price.clone();
+        if self.cur_long_price < MIN_PRICE {
+            self.cur_long_price = MIN_PRICE;
         }
-        if self.cur_short_price < min_price {
-            self.cur_short_price = min_price;
+        if self.cur_short_price < MIN_PRICE {
+            self.cur_short_price = MIN_PRICE;
         }
 
-        let max_price = E8s::from(MAX_PRICE_E8S);
-        if self.cur_long_price > max_price {
-            self.cur_long_price = max_price.clone();
+        if self.cur_long_price > MAX_PRICE {
+            self.cur_long_price = MAX_PRICE;
         }
-        if self.cur_short_price > max_price {
-            self.cur_short_price = max_price;
+        if self.cur_short_price > MAX_PRICE {
+            self.cur_short_price = MAX_PRICE;
         }
     }
 
-    fn apd(&self) -> E8s {
-        let mut base = E8s::from(BASE_APD_E8S);
+    fn apd(&self) -> f64 {
+        let mut apd = BASE_APD;
         let t = E8s::from(DEFAULT_TOTAL_SUPPLY);
 
         if self.total_supply < t {
-            base += (E8s::one() - &self.total_supply / t) * E8s::from(APD_BONUS_E8S);
+            let bonus_factor_e8s = E8s::one() - &self.total_supply / t;
+
+            apd += e8s_to_f64(bonus_factor_e8s) * APD_BONUS;
         }
 
-        base
+        apd
     }
 }
 
@@ -402,4 +386,88 @@ impl Storable for PriceInfo {
     }
 
     const BOUND: Bound = Bound::Unbounded;
+}
+
+pub fn e8s_to_f64(e8s: E8s) -> f64 {
+    let val_u64: u64 = e8s.val.try_into().expect("Unable to convert long price");
+
+    (val_u64 as f64) / E8S_BASE_F64
+}
+
+pub fn f64_to_e8s(f: f64) -> E8s {
+    let val_u64 = (f * E8S_BASE_F64) as u64;
+
+    E8s::from(val_u64)
+}
+
+#[cfg(test)]
+mod tests {
+    use plotlib::{page::Page, repr::Plot, style::LineStyle, view::ContinuousView};
+    use rand::{thread_rng, Rng};
+    use std::{fs, u64};
+
+    use super::{PriceInfo, STEPS_PER_DAY};
+
+    const TOTAL_POINTS: u64 = STEPS_PER_DAY * 365;
+
+    #[test]
+    fn generate_example_price_chart() {
+        let mut rng = thread_rng();
+
+        let mut info = PriceInfo::new();
+
+        let mut long_price = Vec::new();
+        let mut short_price = Vec::new();
+        let mut target_price = Vec::new();
+
+        let mut seed = [0u8; 32];
+        let mut max_price = 1.0;
+
+        for i in 0..TOTAL_POINTS {
+            rng.fill(&mut seed);
+
+            let entry = info.step(seed, i);
+
+            if entry.long > max_price {
+                max_price = entry.long;
+            }
+            if entry.short > max_price {
+                max_price = entry.short;
+            }
+
+            long_price.push((i as f64, entry.long));
+            short_price.push((i as f64, entry.short));
+            target_price.push((i as f64, entry.target));
+        }
+
+        let long_chart: Plot = Plot::new(long_price)
+            .line_style(LineStyle::new().colour("green").width(1.0))
+            .legend(String::from("Long Price"));
+
+        let short_chart: Plot = Plot::new(short_price)
+            .line_style(LineStyle::new().colour("red").width(1.0))
+            .legend(String::from("Short Price"));
+
+        let target_chart: Plot = Plot::new(target_price)
+            .line_style(LineStyle::new().colour("gray").width(1.0))
+            .legend(String::from("Expected Price"));
+
+        let view = ContinuousView::new()
+            .add(long_chart)
+            //.add(short_chart)
+            .add(target_chart)
+            .x_label("Minutes")
+            .y_label("Prices");
+
+        let svg_content = Page::single(&view).to_svg().unwrap().to_string();
+
+        let mut id_buf = [0u8; 8];
+        rng.fill(&mut id_buf);
+        let id = u64::from_le_bytes(id_buf);
+        let file_name = format!("test_plot_{}.svg", id);
+
+        fs::write(file_name.clone(), svg_content).unwrap();
+
+        opener::open(file_name).expect("Unable to open");
+    }
 }

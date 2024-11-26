@@ -5,8 +5,8 @@ use ic_stable_structures::{Cell, StableBTreeMap, StableVec};
 use crate::burner::types::{Memory, TimestampNs};
 
 use super::types::{
-    BalancesInfo, Order, OrderHistory, PriceHistoryEntry, PriceInfo, TraderStats, INVITERS_CUT_E8S,
-    LPS_CUT_E8S,
+    f64_to_e8s, BalancesInfo, Order, OrderHistory, PriceHistoryEntry, PriceInfo, TraderStats,
+    INVITERS_CUT_E8S, LPS_CUT_E8S,
 };
 
 pub struct TradingState {
@@ -74,9 +74,9 @@ impl TradingState {
             balances.real -= &qty;
 
             if long {
-                balances.long += &qty * info.cur_long_price;
+                balances.long += &qty * f64_to_e8s(info.cur_long_price);
             } else {
-                balances.long += &qty * info.cur_short_price;
+                balances.long += &qty * f64_to_e8s(info.cur_short_price);
             }
 
             qty
@@ -86,13 +86,13 @@ impl TradingState {
                     panic!("Unable to sell long, insufficient funds");
                 }
                 balances.long -= &qty;
-                qty / info.cur_long_price
+                qty / f64_to_e8s(info.cur_long_price)
             } else {
                 if balances.short < qty {
                     panic!("Unable to sell short, insufficient funds");
                 }
                 balances.short -= &qty;
-                qty / info.cur_short_price
+                qty / f64_to_e8s(info.cur_short_price)
             };
 
             balances.real += &base_qty;

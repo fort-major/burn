@@ -28,3 +28,8 @@ chrono = { workspace = true }
 
 [build-dependencies]
 dotenv = "0.15"
+
+[dev-dependencies]
+plotlib = "0.5"
+rand = "0.8"
+opener = "0.7"

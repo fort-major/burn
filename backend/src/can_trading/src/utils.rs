@@ -5,16 +5,18 @@ use ic_cdk::{
     spawn,
 };
 use ic_cdk_timers::set_timer_interval;
+use ic_e8s::c::E8s;
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager},
     Cell, DefaultMemoryImpl, StableBTreeMap, StableVec,
 };
 use shared::{
+    icrc1::ICRC1CanisterClient,
     trading::{
         state::TradingState,
         types::{OrderHistory, PriceInfo},
     },
-    ONE_MINUTE_NS,
+    ENV_VARS, ONE_DAY_NS, ONE_MINUTE_NS,
 };
 
 thread_local! {
@@ -45,4 +47,23 @@ async fn produce_new_price() {
         .expect("Unable to produce a new random number");
 
     STATE.with_borrow_mut(|s| s.increment_prices(rand, time()));
+}
+
+pub fn set_fetch_total_supply_timer() {
+    set_timer_interval(Duration::from_nanos(ONE_DAY_NS), || {
+        spawn(fetch_burn_total_supply());
+    });
+}
+
+async fn fetch_burn_total_supply() {
+    let burn_token = ICRC1CanisterClient::new(ENV_VARS.burn_token_canister_id);
+    let (total_supply,) = burn_token
+        .icrc1_total_supply()
+        .await
+        .expect("Unable to fetch $BURN total supply");
+
+    STATE.with_borrow_mut(|s| {
+        let mut info = s.get_price_info();
+        info.total_supply = E8s(total_supply.0);
+    });
 }
