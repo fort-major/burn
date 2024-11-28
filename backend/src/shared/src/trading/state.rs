@@ -4,9 +4,12 @@ use ic_stable_structures::{Cell, StableBTreeMap, StableVec};
 
 use crate::burner::types::{Memory, TimestampNs};
 
-use super::types::{
-    f64_to_e8s, BalancesInfo, Order, OrderHistory, PriceHistoryEntry, PriceInfo, TraderStats,
-    INVITERS_CUT_E8S, LPS_CUT_E8S,
+use super::{
+    api::{CandleKind, GetPriceHistoryRequest},
+    types::{
+        assert_slippage_fit, f64_to_e8s, BalancesInfo, Candle, Order, OrderHistory, PriceInfo,
+        TraderStats, INVITERS_CUT_E8S, LPS_CUT_E8S,
+    },
 };
 
 pub struct TradingState {
@@ -14,17 +17,37 @@ pub struct TradingState {
     pub stats: StableBTreeMap<Principal, TraderStats, Memory>,
     pub balances: StableBTreeMap<Principal, BalancesInfo, Memory>,
 
-    pub price_history: StableVec<PriceHistoryEntry, Memory>,
+    pub long_price_history_4h: StableVec<Candle, Memory>,
+    pub short_price_history_4h: StableVec<Candle, Memory>,
+
+    pub long_price_history_1d: StableVec<Candle, Memory>,
+    pub short_price_history_1d: StableVec<Candle, Memory>,
+
     pub order_history: Cell<OrderHistory, Memory>,
 }
 
 impl TradingState {
-    pub fn get_price_history(&self, skip: u64, take: u64) -> Vec<PriceHistoryEntry> {
-        self.price_history
-            .iter()
-            .rev()
-            .skip(skip as usize)
-            .take(take as usize)
+    pub fn get_price_history(&self, req: GetPriceHistoryRequest) -> Vec<Candle> {
+        let iter = match req.kind {
+            CandleKind::FourHours => {
+                if req.short {
+                    self.short_price_history_4h.iter()
+                } else {
+                    self.long_price_history_4h.iter()
+                }
+            }
+            CandleKind::OneDay => {
+                if req.short {
+                    self.short_price_history_1d.iter()
+                } else {
+                    self.long_price_history_1d.iter()
+                }
+            }
+        };
+
+        iter.rev()
+            .skip(req.skip as usize)
+            .take(req.take as usize)
             .collect()
     }
 
@@ -62,10 +85,18 @@ impl TradingState {
         result
     }
 
-    pub fn order(&mut self, pid: Principal, sell: bool, short: bool, qty: E8s, now: TimestampNs) {
+    pub fn order(
+        &mut self,
+        pid: Principal,
+        sell: bool,
+        short: bool,
+        qty: E8s,
+        expected_price: f64,
+        now: TimestampNs,
+    ) {
         let (buy, long) = (!sell, !short);
         let mut balances = self.balances.get(&pid).expect("The user is not registered");
-        let info = self.get_price_info();
+        let mut info = self.get_price_info();
 
         let base_qty = if buy {
             if balances.real < qty {
@@ -74,20 +105,28 @@ impl TradingState {
             balances.real -= &qty;
 
             if long {
+                assert_slippage_fit(expected_price, info.cur_long_price);
+
                 balances.long += &qty * f64_to_e8s(info.cur_long_price);
             } else {
+                assert_slippage_fit(expected_price, info.cur_short_price);
+
                 balances.long += &qty * f64_to_e8s(info.cur_short_price);
             }
 
             qty
         } else {
             let base_qty = if long {
+                assert_slippage_fit(expected_price, info.cur_long_price);
+
                 if balances.long < qty {
                     panic!("Unable to sell long, insufficient funds");
                 }
                 balances.long -= &qty;
                 qty / f64_to_e8s(info.cur_long_price)
             } else {
+                assert_slippage_fit(expected_price, info.cur_short_price);
+
                 if balances.short < qty {
                     panic!("Unable to sell short, insufficient funds");
                 }
@@ -99,6 +138,9 @@ impl TradingState {
 
             base_qty
         };
+
+        info.account_volume(short, base_qty.clone());
+        self.set_price_info(info);
 
         self.balances.insert(pid, balances);
         self.add_order(Order {
@@ -190,11 +232,29 @@ impl TradingState {
         buf.copy_from_slice(&seed);
 
         let mut info = self.get_price_info();
-        let entry = info.step(buf, now);
+        info.step(buf, now);
 
-        self.price_history
-            .push(&entry)
-            .expect("OOM: unable to store price history entry");
+        let (c_4h_opt, c_1d_opt) = info.try_reset_candles();
+
+        if let Some((long_4h, short_4h)) = c_4h_opt {
+            self.long_price_history_4h
+                .push(&long_4h)
+                .expect("Unable to push long 4h entry");
+
+            self.short_price_history_4h
+                .push(&short_4h)
+                .expect("Unable to push short 4h entry");
+        }
+
+        if let Some((long_1d, short_1d)) = c_1d_opt {
+            self.long_price_history_1d
+                .push(&long_1d)
+                .expect("Unable to push long 1d entry");
+
+            self.short_price_history_1d
+                .push(&short_1d)
+                .expect("Unable to push short 1d entry");
+        }
 
         self.set_price_info(info);
     }
@@ -219,10 +279,12 @@ impl TradingState {
 
         let mut order_history = self.order_history.get().clone();
         order_history.push(order);
-        self.order_history.set(order_history);
+        self.order_history
+            .set(order_history)
+            .expect("Unable to store order history");
     }
 
-    fn set_price_info(&mut self, info: PriceInfo) {
+    pub fn set_price_info(&mut self, info: PriceInfo) {
         self.price_info
             .set(info)
             .expect("Unable to store price info");

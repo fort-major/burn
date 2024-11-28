@@ -1,6 +1,6 @@
 use candid::Principal;
 use ic_cdk::{api::call::CallResult, call};
-use ic_e8s::c::E8s;
+
 
 pub struct TradingClient(pub Principal);
 

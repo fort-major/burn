@@ -25,12 +25,17 @@ thread_local! {
 
     pub static STATE: RefCell<TradingState> = RefCell::new(
         TradingState {
-            price_info: Cell::init(MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(0))), PriceInfo::new()).expect("Unable to create price info cell"),
-            balances: StableBTreeMap::init(MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(1))),),
+            price_info: Cell::init(MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(0))), PriceInfo::new(0)).expect("Unable to create price info cell"),
 
+            balances: StableBTreeMap::init(MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(1))),),
             stats: StableBTreeMap::init(MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(2))),),
-            price_history: StableVec::init(MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(3))),).expect("Unable to create price history vec"),
-            order_history: Cell::init(MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(4))), OrderHistory::default()).expect("Unable to create order history cell"),
+
+            long_price_history_4h: StableVec::init(MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(3))),).expect("Unable to create price history vec 1"),
+            long_price_history_1d: StableVec::init(MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(4))),).expect("Unable to create price history vec 2"),
+            short_price_history_4h: StableVec::init(MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(5))),).expect("Unable to create price history vec 3"),
+            short_price_history_1d: StableVec::init(MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(6))),).expect("Unable to create price history vec 4"),
+
+            order_history: Cell::init(MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(7))), OrderHistory::default()).expect("Unable to create order history cell"),
         }
     );
 }
@@ -64,6 +69,6 @@ async fn fetch_burn_total_supply() {
 
     STATE.with_borrow_mut(|s| {
         let mut info = s.get_price_info();
-        info.total_supply = E8s(total_supply.0);
+        info.total_supply = E8s::new(total_supply.0);
     });
 }

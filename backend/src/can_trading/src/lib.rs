@@ -16,10 +16,8 @@ use shared::{
     burner::{client::BurnerClient, types::TCycles},
     icrc1::ICRC1CanisterClient,
     trading::{
-        api::OrderRequest,
-        types::{
-            BalancesInfo, Order, PriceHistoryEntry, PriceInfo, TraderStats, TRADING_LP_SUBACCOUNT,
-        },
+        api::{GetPriceHistoryRequest, OrderRequest},
+        types::{BalancesInfo, Candle, Order, PriceInfo, TraderStats, TRADING_LP_SUBACCOUNT},
     },
     ENV_VARS,
 };
@@ -32,7 +30,16 @@ fn order(req: OrderRequest) {
     let user_pid = caller();
     let now = time();
 
-    STATE.with_borrow_mut(|s| s.order(user_pid, req.sell, req.short, req.qty, now))
+    STATE.with_borrow_mut(|s| {
+        s.order(
+            user_pid,
+            req.sell,
+            req.short,
+            req.qty,
+            req.expected_price,
+            now,
+        )
+    })
 }
 
 #[update]
@@ -160,8 +167,8 @@ fn get_all_trader_stats(skip: u64, take: u64) -> Vec<(Principal, TraderStats)> {
 }
 
 #[query]
-fn get_price_history(skip: u64, take: u64) -> Vec<PriceHistoryEntry> {
-    STATE.with_borrow(|s| s.get_price_history(skip, take))
+fn get_price_history(req: GetPriceHistoryRequest) -> Vec<Candle> {
+    STATE.with_borrow(|s| s.get_price_history(req))
 }
 
 #[query]
@@ -214,6 +221,25 @@ fn get_account_ids() -> BTreeMap<String, (AccountIdentifier, Account)> {
 fn init_hook() {
     set_produce_new_price_timer();
     set_fetch_total_supply_timer();
+
+    STATE.with_borrow_mut(|s| {
+        let now = time();
+        let mut info = s.get_price_info();
+
+        info.cur_1d_long_candle.open_ts = now;
+        info.cur_1d_long_candle.close_ts = now;
+
+        info.cur_1d_short_candle.open_ts = now;
+        info.cur_1d_short_candle.close_ts = now;
+
+        info.cur_4h_long_candle.open_ts = now;
+        info.cur_4h_long_candle.close_ts = now;
+
+        info.cur_4h_short_candle.open_ts = now;
+        info.cur_4h_short_candle.close_ts = now;
+
+        s.set_price_info(info);
+    });
 }
 
 #[post_upgrade]

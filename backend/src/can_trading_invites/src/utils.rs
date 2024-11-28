@@ -1,11 +1,9 @@
 use std::cell::RefCell;
 
 use ic_stable_structures::{
-    memory_manager::{MemoryId, MemoryManager},
-    Cell, DefaultMemoryImpl, StableBTreeMap,
+    memory_manager::{MemoryId, MemoryManager}, DefaultMemoryImpl, StableBTreeMap,
 };
 use shared::{
-    trading::{state::TradingState, types::PriceInfo},
     trading_invites::state::TradingInvitesState,
 };
 

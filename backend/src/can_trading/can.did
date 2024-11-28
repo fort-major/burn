@@ -1,127 +1,78 @@
 type Account = record { owner : principal; subaccount : opt blob };
-type AddSupportedTokenRequest = record { tokens : vec TokenX };
-type ClaimRewardICPRequest = record {
-  to : Account;
-  winning_entry_timestamp_ns : nat64;
-  winner_idx : nat32;
+type BalancesInfo = record {
+  inviter : opt principal;
+  long : nat;
+  real : nat;
+  short : nat;
 };
-type ClaimRewardICPResponse = record { result : Result };
-type CreateDistributionTriggerRequest = record {
-  trigger : DistributionTrigger;
+type Candle = record {
+  low : float64;
+  volume_e8s : nat64;
+  open_ts : nat64;
+  high : float64;
+  close : float64;
+  open : float64;
+  close_ts : nat64;
 };
-type DeployDispenserRequest = record { token_can_id : principal };
-type DistributionTrigger = record {
-  kind : DistributionTriggerKind;
-  distribution_id : nat64;
-  dispenser_token_can_id : principal;
-};
-type DistributionTriggerKind = variant {
-  TokenTotalPledged : record { threshold : nat; token_can_id : principal };
-  TokenXVotingWinner : principal;
-};
-type EDs = record { val : nat; decimals : nat8 };
-type FurnaceInfoPub = record {
-  cur_round_pledged_usd : nat;
-  cur_round_pledged_burn_usd : nat;
-  is_looking_for_winners : bool;
-  icp_won_total : nat;
-  current_round : nat64;
-  prev_round_timestamp : nat64;
-  total_pledged_usd : nat;
-  round_delay : nat64;
-  dev_pid : opt principal;
-  is_on_maintenance : bool;
-  cur_token_x : TokenX;
-  winner_icp_threshold : nat;
-};
-type FurnaceWinner = record {
-  pid : principal;
-  share_normalized : nat;
-  claimed : bool;
-  prize_icp : nat;
-};
-type FurnaceWinnerHistoryEntry = record {
-  pledged_usd : nat;
-  prize_fund_icp : nat;
-  timestamp : nat64;
-  round : nat64;
-  winners : vec FurnaceWinner;
-  token_can_id : principal;
-};
-type GetCurRoundPositionsRequest = record {
-  skip : opt principal;
+type CandleKind = variant { OneDay; FourHours };
+type GetPriceHistoryRequest = record {
+  kind : CandleKind;
+  skip : nat64;
   take : nat64;
+  short : bool;
 };
-type GetCurRoundPositionsResponse = record { positions : vec Position };
-type GetDistributionTriggersRequest = record {
-  take : nat64;
-  start : opt nat64;
-};
-type GetDistributionTriggersResponse = record {
-  triggers : vec DistributionTrigger;
-};
-type GetWinnersRequest = record { skip : nat64; take : nat64 };
-type GetWinnersResponse = record { winners : vec FurnaceWinnerHistoryEntry };
-type ICPSwapTokenInfo = record { exchange_rate_usd : nat; can_id : principal };
-type PledgeRequest = record {
+type Order = record {
   pid : principal;
+  base_qty : nat;
+  sell : bool;
+  short : bool;
+  timestmap : nat64;
+};
+type OrderRequest = record {
   qty : nat;
-  downvote : bool;
-  token_can_id : principal;
+  sell : bool;
+  short : bool;
+  expected_price : float64;
 };
-type PledgeResponse = record { pledge_value_usd : nat };
-type Position = record { vp : nat; pid : principal; usd : nat };
-type RemoveSupportedTokenRequest = record { token_can_ids : vec principal };
-type Result = variant { Ok : nat; Err : text };
-type TokenX = record { fee : nat; decimals : nat8; can_id : principal };
-type TokenXVote = record {
-  can_ids_and_normalized_weights : vec record { principal; nat };
+type PriceInfo = record {
+  cur_4h_short_candle : Candle;
+  target_price : float64;
+  cur_trend : float64;
+  cur_1d_short_candle : Candle;
+  cur_1d_long_candle : Candle;
+  cur_short_price : float64;
+  cur_step : nat64;
+  cur_trend_sign : bool;
+  cur_4h_long_candle : Candle;
+  cur_long_price : float64;
+  total_supply : nat;
 };
-type VoteTokenXRequest = record { vote : TokenXVote };
-type WithdrawRequest = record {
-  to : Account;
-  qty : nat;
-  token_can_id : principal;
+type Result = variant { Ok; Err : text };
+type TraderStats = record {
+  total_long_sold : nat;
+  total_long_bought : nat;
+  buy_long_timestamps : vec nat64;
+  buy_short_timestamps : vec nat64;
+  sell_short_timestamps : vec nat64;
+  total_short_bought : nat;
+  total_short_sold : nat;
+  sell_long_timestamps : vec nat64;
 };
-type WithdrawResponse = record { block_idx : nat };
 service : () -> {
-  add_supported_token : (AddSupportedTokenRequest) -> (record {});
-  burn_token : (principal, opt blob, nat) -> ();
-  claim_reward_icp : (ClaimRewardICPRequest) -> (ClaimRewardICPResponse);
-  create_distribution_trigger : (CreateDistributionTriggerRequest) -> (
-      record {},
-    );
-  deploy_dispenser : (DeployDispenserRequest) -> (record {});
+  deposit : (nat) -> ();
   get_account_ids : () -> (vec record { text; record { blob; Account } }) query;
-  get_cur_round_positions : (GetCurRoundPositionsRequest) -> (
-      GetCurRoundPositionsResponse,
+  get_all_trader_stats : (nat64, nat64) -> (
+      vec record { principal; TraderStats },
     ) query;
   get_cycles_balance : () -> (nat) query;
-  get_distribution_triggers : (GetDistributionTriggersRequest) -> (
-      GetDistributionTriggersResponse,
-    ) query;
-  get_furnace_info : () -> (FurnaceInfoPub) query;
-  get_my_cur_round_positions : () -> (nat, nat) query;
-  get_my_vote_token_x : () -> (opt TokenXVote) query;
-  get_total_burned_tokens : () -> (vec record { principal; EDs }) query;
-  get_total_pledged_tokens : () -> (vec record { principal; EDs }) query;
-  get_winners : (GetWinnersRequest) -> (GetWinnersResponse) query;
-  list_dispensers : () -> (vec record { principal; opt principal }) query;
-  list_exchange_rates : () -> (
-      vec record { principal; ICPSwapTokenInfo },
-    ) query;
-  list_supported_tokens : () -> (vec TokenX) query;
-  list_token_x_alternatives : () -> (vec record { principal; nat }) query;
-  next_raffle_timestamp : () -> (nat64) query;
-  pledge : (PledgeRequest) -> (PledgeResponse);
+  get_info : () -> (PriceInfo) query;
+  get_order_history : () -> (vec Order) query;
+  get_price_history : (GetPriceHistoryRequest) -> (vec Candle) query;
+  get_user_balances : () -> (opt record { BalancesInfo; TraderStats }) query;
+  order : (OrderRequest) -> ();
   receive_cycles : () -> ();
-  remove_supported_token : (RemoveSupportedTokenRequest) -> (record {});
-  resume : () -> ();
-  start_raffle : () -> ();
-  stop : () -> ();
+  register : (principal, opt principal) -> ();
   subaccount_of : (principal) -> (blob) query;
-  update_dispenser_wasm : (blob) -> ();
-  upgrade_dispensers : () -> ();
-  vote_token_x : (VoteTokenXRequest) -> (record {});
-  withdraw : (WithdrawRequest) -> (WithdrawResponse);
+  withdraw : () -> (Result);
+  withdraw_from_user_subaccount : (principal, nat) -> ();
 }

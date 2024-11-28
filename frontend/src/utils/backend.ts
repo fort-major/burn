@@ -5,7 +5,26 @@ import {
   _SERVICE as DispenserActor,
   idlFactory as DispenserActorIdlFactory,
 } from "../declarations/dispenser/dispenser.did";
+import { _SERVICE as TradingActor, idlFactory as TradingActorIdlFactory } from "../declarations/trading/trading.did";
+import {
+  _SERVICE as TradingInvitesActor,
+  idlFactory as TradingInvitesActorIdlFactory,
+} from "../declarations/trading_invites/trading_invites.did";
 import { Principal } from "@dfinity/principal";
+
+export function newTradingActor(agent: Agent): TradingActor {
+  return Actor.createActor(TradingActorIdlFactory, {
+    canisterId: import.meta.env.VITE_TRADING_CANISTER_ID,
+    agent,
+  });
+}
+
+export function newTradingInvitesActor(agent: Agent): TradingInvitesActor {
+  return Actor.createActor(TradingInvitesActorIdlFactory, {
+    canisterId: import.meta.env.VITE_TRADING_INVITES_CANISTER_ID,
+    agent,
+  });
+}
 
 export function newBurnerActor(agent: Agent): BurnerActor {
   return Actor.createActor(BurnerActorIdlFactory, {

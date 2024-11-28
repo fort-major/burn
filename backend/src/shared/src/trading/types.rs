@@ -1,11 +1,11 @@
-use std::{cmp::Ordering, u64};
+use std::u64;
 
 use candid::{decode_one, encode_one, CandidType, Principal};
 use ic_e8s::c::E8s;
 use ic_stable_structures::{storable::Bound, Storable};
 use serde::Deserialize;
 
-use crate::{burner::types::TimestampNs, ONE_MINUTE_NS};
+use crate::{burner::types::TimestampNs, ONE_DAY_NS, ONE_HOUR_NS, ONE_MINUTE_NS};
 
 pub const STEPS_PER_MINUTE: u64 = 1;
 pub const STEPS_PER_DAY: u64 = STEPS_PER_MINUTE * 60 * 24;
@@ -32,11 +32,117 @@ pub const DEFAULT_TOTAL_SUPPLY: u64 = 10_000_000_0000_0000u64;
 pub const INVITERS_CUT_E8S: u64 = 0_0015_0000;
 pub const LPS_CUT_E8S: u64 = 0_0015_0000;
 
+pub const MAX_SLIPPAGE: f64 = 0.001;
+
+pub fn assert_slippage_fit(expected_price: f64, actual_price: f64) {
+    let slippage = (expected_price - actual_price).abs() / actual_price;
+
+    if slippage > MAX_SLIPPAGE {
+        panic!("The price has changed significantly! Please, try again")
+    }
+}
+
 pub const TRADING_LP_SUBACCOUNT: [u8; 32] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
 ];
 
 pub const E8S_BASE_F64: f64 = 1_0000_0000.0;
+
+#[derive(CandidType, Deserialize, Debug, Default, Clone, Copy)]
+pub struct Candle {
+    pub open_ts: TimestampNs,
+    pub close_ts: TimestampNs,
+    pub open: f64,
+    pub close: f64,
+    pub low: f64,
+    pub high: f64,
+    pub volume_e8s: u64,
+}
+
+impl Candle {
+    pub fn open(cur_price: f64, now: TimestampNs) -> Self {
+        Self {
+            open_ts: now,
+            close_ts: now,
+            open: cur_price,
+            close: cur_price,
+            low: cur_price,
+            high: cur_price,
+            volume_e8s: 0,
+        }
+    }
+
+    pub fn account_volume(&mut self, qty: E8s) {
+        let qty_e8s: u64 = qty.val.try_into().expect("Unable to convert E8s to u64");
+        self.volume_e8s += qty_e8s;
+    }
+
+    pub fn update_price(&mut self, cur_price: f64, now: TimestampNs) {
+        self.close_ts = now;
+        self.close = cur_price;
+
+        if cur_price < self.low {
+            self.low = cur_price;
+        }
+
+        if cur_price > self.high {
+            self.high = cur_price;
+        }
+    }
+
+    pub fn duration_ns(&self) -> u64 {
+        self.close_ts - self.open_ts
+    }
+}
+
+impl Storable for Candle {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        let mut buf = vec![0u8; 56];
+
+        buf[0..8].copy_from_slice(&self.open_ts.to_le_bytes());
+        buf[8..16].copy_from_slice(&self.close_ts.to_le_bytes());
+        buf[16..24].copy_from_slice(&self.open.to_le_bytes());
+        buf[24..32].copy_from_slice(&self.close.to_le_bytes());
+        buf[32..40].copy_from_slice(&self.low.to_le_bytes());
+        buf[40..48].copy_from_slice(&self.high.to_le_bytes());
+        buf[48..56].copy_from_slice(&self.volume_e8s.to_le_bytes());
+
+        std::borrow::Cow::Owned(buf)
+    }
+
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        let mut open_ts_buf = [0u8; 8];
+        let mut close_ts_buf = [0u8; 8];
+        let mut open_buf = [0u8; 8];
+        let mut close_buf = [0u8; 8];
+        let mut low_buf = [0u8; 8];
+        let mut high_buf = [0u8; 8];
+        let mut volume_buf = [0u8; 8];
+
+        open_ts_buf.copy_from_slice(&bytes[0..8]);
+        close_ts_buf.copy_from_slice(&bytes[8..16]);
+        open_buf.copy_from_slice(&bytes[16..24]);
+        close_buf.copy_from_slice(&bytes[24..32]);
+        low_buf.copy_from_slice(&bytes[32..40]);
+        high_buf.copy_from_slice(&bytes[40..48]);
+        volume_buf.copy_from_slice(&bytes[48..56]);
+
+        Self {
+            open_ts: TimestampNs::from_le_bytes(open_ts_buf),
+            close_ts: TimestampNs::from_le_bytes(close_ts_buf),
+            open: f64::from_le_bytes(open_buf),
+            close: f64::from_le_bytes(close_buf),
+            low: f64::from_le_bytes(low_buf),
+            high: f64::from_le_bytes(high_buf),
+            volume_e8s: u64::from_le_bytes(volume_buf),
+        }
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 56,
+        is_fixed_size: true,
+    };
+}
 
 #[derive(CandidType, Deserialize, Debug, Default, Clone)]
 pub struct OrderHistory(pub Vec<Order>);
@@ -69,43 +175,6 @@ pub struct PriceHistoryEntry {
     pub long: f64,
     pub short: f64,
     pub target: f64,
-}
-
-impl Storable for PriceHistoryEntry {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
-        let mut buf = vec![0u8; 32];
-
-        buf[0..8].copy_from_slice(&self.timestamp.to_le_bytes());
-        buf[8..16].copy_from_slice(&self.long.to_le_bytes());
-        buf[16..24].copy_from_slice(&self.short.to_le_bytes());
-        buf[24..32].copy_from_slice(&self.target.to_le_bytes());
-
-        std::borrow::Cow::Owned(buf)
-    }
-
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
-        let mut timestamp_buf = [0u8; 8];
-        let mut long_buf = [0u8; 8];
-        let mut short_buf = [0u8; 8];
-        let mut target_buf = [0u8; 8];
-
-        timestamp_buf.copy_from_slice(&bytes[0..8]);
-        long_buf.copy_from_slice(&bytes[8..16]);
-        short_buf.copy_from_slice(&bytes[16..24]);
-        target_buf.copy_from_slice(&bytes[24..32]);
-
-        Self {
-            timestamp: TimestampNs::from_le_bytes(timestamp_buf),
-            long: f64::from_le_bytes(long_buf),
-            short: f64::from_le_bytes(short_buf),
-            target: f64::from_le_bytes(target_buf),
-        }
-    }
-
-    const BOUND: Bound = Bound::Bounded {
-        max_size: 32,
-        is_fixed_size: true,
-    };
 }
 
 #[derive(CandidType, Deserialize, Debug, Default, Clone)]
@@ -229,10 +298,15 @@ pub struct PriceInfo {
     pub cur_step: u64,
 
     pub total_supply: E8s,
+
+    pub cur_4h_long_candle: Candle,
+    pub cur_4h_short_candle: Candle,
+    pub cur_1d_long_candle: Candle,
+    pub cur_1d_short_candle: Candle,
 }
 
 impl PriceInfo {
-    pub fn new() -> Self {
+    pub fn new(now: TimestampNs) -> Self {
         Self {
             cur_trend: DEFAULT_TREND,
             cur_trend_sign: true,
@@ -244,6 +318,11 @@ impl PriceInfo {
             cur_step: 0,
 
             total_supply: E8s::from(DEFAULT_TOTAL_SUPPLY),
+
+            cur_4h_long_candle: Candle::open(START_PRICE, now),
+            cur_4h_short_candle: Candle::open(START_PRICE, now),
+            cur_1d_long_candle: Candle::open(START_PRICE, now),
+            cur_1d_short_candle: Candle::open(START_PRICE, now),
         }
     }
 
@@ -256,12 +335,60 @@ impl PriceInfo {
 
         self.cur_step += 1;
 
+        self.cur_4h_long_candle
+            .update_price(self.cur_long_price, now);
+        self.cur_4h_short_candle
+            .update_price(self.cur_short_price, now);
+
+        self.cur_1d_long_candle
+            .update_price(self.cur_long_price, now);
+        self.cur_1d_short_candle
+            .update_price(self.cur_short_price, now);
+
         PriceHistoryEntry {
             timestamp: now,
             long: self.cur_long_price,
             short: self.cur_short_price,
             target: self.target_price,
         }
+    }
+
+    pub fn account_volume(&mut self, short: bool, qty: E8s) {
+        if short {
+            self.cur_4h_short_candle.account_volume(qty.clone());
+            self.cur_1d_short_candle.account_volume(qty);
+        } else {
+            self.cur_4h_long_candle.account_volume(qty.clone());
+            self.cur_1d_long_candle.account_volume(qty);
+        }
+    }
+
+    pub fn try_reset_candles(&mut self) -> (Option<(Candle, Candle)>, Option<(Candle, Candle)>) {
+        let c_4h = if self.cur_4h_long_candle.duration_ns() >= ONE_HOUR_NS * 4 {
+            let long = self.cur_4h_long_candle;
+            let short = self.cur_4h_short_candle;
+
+            self.cur_4h_long_candle = Candle::open(long.close, long.close_ts);
+            self.cur_4h_short_candle = Candle::open(short.close, short.close_ts);
+
+            Some((long, short))
+        } else {
+            None
+        };
+
+        let c_1d = if self.cur_1d_long_candle.duration_ns() >= ONE_DAY_NS {
+            let long = self.cur_1d_long_candle;
+            let short = self.cur_1d_short_candle;
+
+            self.cur_1d_long_candle = Candle::open(long.close, long.close_ts);
+            self.cur_1d_short_candle = Candle::open(short.close, short.close_ts);
+
+            Some((long, short))
+        } else {
+            None
+        };
+
+        (c_4h, c_1d)
     }
 
     fn bytes_to_f64(s: &[u8]) -> f64 {
@@ -414,7 +541,7 @@ mod tests {
     fn generate_example_price_chart() {
         let mut rng = thread_rng();
 
-        let mut info = PriceInfo::new();
+        let mut info = PriceInfo::new(0);
 
         let mut long_price = Vec::new();
         let mut short_price = Vec::new();
@@ -426,7 +553,7 @@ mod tests {
         for i in 0..TOTAL_POINTS {
             rng.fill(&mut seed);
 
-            let entry = info.step(seed, i);
+            let entry = info.step(seed, i + 1);
 
             if entry.long > max_price {
                 max_price = entry.long;
@@ -454,7 +581,7 @@ mod tests {
 
         let view = ContinuousView::new()
             .add(long_chart)
-            //.add(short_chart)
+            .add(short_chart)
             .add(target_chart)
             .x_label("Minutes")
             .y_label("Prices");
