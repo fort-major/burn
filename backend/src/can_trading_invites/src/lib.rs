@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::BTreeMap};
+use std::cell::RefCell;
 
 use candid::{Nat, Principal};
 use ic_cdk::{
@@ -10,12 +10,12 @@ use ic_cdk::{
     caller, export_candid, id, init, post_upgrade, query, update,
 };
 use ic_e8s::c::E8s;
-use ic_ledger_types::{AccountIdentifier, Subaccount};
+use ic_ledger_types::Subaccount;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use shared::{
     burner::types::TCycles,
     icrc1::ICRC1CanisterClient,
-    trading::{client::TradingClient, types::TRADING_LP_SUBACCOUNT},
+    trading::client::TradingClient,
     trading_invites::types::{Invite, MemberInfo},
     ENV_VARS,
 };
@@ -93,18 +93,19 @@ async fn register_with_bribe() {
     let user_subaccount = subaccount_of(user_pid);
 
     let is_member = STATE.with_borrow(|s| s.members.get(&user_pid)).is_some();
-
     if is_member {
         panic!("Already registered");
     }
+
+    let dev_subaccount = subaccount_of(DEV.with_borrow(|d| *d));
 
     let burn_token_can = ICRC1CanisterClient::new(ENV_VARS.burn_token_canister_id);
     let arg = TransferArg {
         from_subaccount: Some(user_subaccount.0),
         amount: Nat::from(9999_0000u64),
         to: Account {
-            owner: ENV_VARS.trading_canister_id,
-            subaccount: Some(TRADING_LP_SUBACCOUNT),
+            owner: id(),
+            subaccount: Some(dev_subaccount.0),
         },
         fee: Some(Nat::from(1_0000u64)),
         created_at_time: None,
@@ -170,24 +171,6 @@ fn get_cycles_balance() -> TCycles {
         .to_decimals(1)
         .to_decimals(12)
         .to_const()
-}
-
-#[query]
-fn get_account_ids() -> BTreeMap<String, (AccountIdentifier, Account)> {
-    let mut map = BTreeMap::new();
-
-    map.insert(
-        String::from("LPs"),
-        (
-            AccountIdentifier::new(&id(), &Subaccount(TRADING_LP_SUBACCOUNT)),
-            Account {
-                owner: id(),
-                subaccount: Some(TRADING_LP_SUBACCOUNT),
-            },
-        ),
-    );
-
-    map
 }
 
 thread_local! {

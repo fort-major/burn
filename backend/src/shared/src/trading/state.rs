@@ -198,9 +198,12 @@ impl TradingState {
         &mut self,
         user_pid: Principal,
         user_qty: E8s,
+        lp_qty: E8s,
+        dev_pid: Principal,
         inviter: Option<(Principal, E8s)>,
     ) {
         self.add_real_to_balance(user_pid, user_qty);
+        self.add_real_to_balance(dev_pid, lp_qty);
 
         if let Some((inviter_pid, inviter_qty)) = inviter {
             self.add_real_to_balance(inviter_pid, inviter_qty);

@@ -13,5 +13,11 @@
   },
   "furnace": {
     "ic": "ewtyz-oiaaa-aaaah-aqzqa-cai"
+  },
+  "trading": {
+    "ic": "dtnfi-dyaaa-aaaag-attjq-cai"
+  },
+  "trading_invites": {
+    "ic": "dgkuf-cqaaa-aaaag-attka-cai"
   }
 }

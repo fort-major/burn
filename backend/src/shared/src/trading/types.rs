@@ -42,10 +42,6 @@ pub fn assert_slippage_fit(expected_price: f64, actual_price: f64) {
     }
 }
 
-pub const TRADING_LP_SUBACCOUNT: [u8; 32] = [
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-];
-
 pub const E8S_BASE_F64: f64 = 1_0000_0000.0;
 
 #[derive(CandidType, Deserialize, Debug, Default, Clone, Copy)]
@@ -494,7 +490,7 @@ impl PriceInfo {
         let t = E8s::from(DEFAULT_TOTAL_SUPPLY);
 
         if self.total_supply < t {
-            let bonus_factor_e8s = E8s::one() - &self.total_supply / t;
+            let bonus_factor_e8s = (&t - &self.total_supply) / t;
 
             apd += e8s_to_f64(bonus_factor_e8s) * APD_BONUS;
         }

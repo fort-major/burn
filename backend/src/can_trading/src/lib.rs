@@ -1,23 +1,22 @@
-use std::collections::BTreeMap;
+use std::cell::RefCell;
 
 use candid::{Nat, Principal};
-use futures::join;
 use ic_cdk::{
     api::{
         call::{msg_cycles_accept128, msg_cycles_available128},
         canister_balance128, time,
     },
-    caller, export_candid, id, init, post_upgrade, query, update,
+    caller, export_candid, init, post_upgrade, query, update,
 };
 use ic_e8s::c::E8s;
-use ic_ledger_types::{AccountIdentifier, Subaccount};
+use ic_ledger_types::Subaccount;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use shared::{
     burner::{client::BurnerClient, types::TCycles},
     icrc1::ICRC1CanisterClient,
     trading::{
         api::{GetPriceHistoryRequest, OrderRequest},
-        types::{BalancesInfo, Candle, Order, PriceInfo, TraderStats, TRADING_LP_SUBACCOUNT},
+        types::{BalancesInfo, Candle, Order, PriceInfo, TraderStats},
     },
     ENV_VARS,
 };
@@ -45,16 +44,12 @@ fn order(req: OrderRequest) {
 #[update]
 async fn deposit(qty: E8s) {
     let user_pid = caller();
-    let (user_qty, lp_qty, inviter_pack) =
-        STATE.with_borrow(|s| s.calc_deposit_layout(user_pid, &qty));
-
     let user_subaccount = subaccount_of(user_pid);
-
     let burn_token_can = ICRC1CanisterClient::new(ENV_VARS.burn_token_canister_id);
 
     let user_arg = TransferArg {
         from_subaccount: Some(user_subaccount.0),
-        amount: Nat(user_qty.val.clone()),
+        amount: Nat(qty.val.clone()),
         to: Account {
             owner: ENV_VARS.burner_canister_id,
             subaccount: None,
@@ -63,30 +58,18 @@ async fn deposit(qty: E8s) {
         created_at_time: None,
         memo: None,
     };
-    let user_transfer_future = burn_token_can.icrc1_transfer(user_arg);
-
-    let lp_arg = TransferArg {
-        from_subaccount: Some(user_subaccount.0),
-        amount: Nat(lp_qty.val),
-        to: Account {
-            owner: id(),
-            subaccount: Some(TRADING_LP_SUBACCOUNT),
-        },
-        fee: Some(Nat::from(1_0000u64)),
-        created_at_time: None,
-        memo: None,
-    };
-    let lp_transfer_future = burn_token_can.icrc1_transfer(lp_arg);
-
-    // LP fees are best effort, ignoring the second result
-    let (user_transfer_call_result, _) = join!(user_transfer_future, lp_transfer_future);
-
-    user_transfer_call_result
+    burn_token_can
+        .icrc1_transfer(user_arg)
+        .await
         .expect("Unable to call the $BURN token canister")
         .0
-        .expect("Unable to transfer tokens");
+        .expect("Unable to burn tokens");
 
-    STATE.with_borrow_mut(|s| s.deposit(user_pid, user_qty, inviter_pack));
+    let (user_qty, lp_qty, inviter_pack) =
+        STATE.with_borrow(|s| s.calc_deposit_layout(user_pid, &qty));
+    let dev_pid = DEV.with_borrow(|d| *d);
+
+    STATE.with_borrow_mut(|s| s.deposit(user_pid, user_qty, lp_qty, dev_pid, inviter_pack));
 }
 
 #[update]
@@ -199,32 +182,22 @@ fn get_cycles_balance() -> TCycles {
         .to_const()
 }
 
-#[query]
-fn get_account_ids() -> BTreeMap<String, (AccountIdentifier, Account)> {
-    let mut map = BTreeMap::new();
-
-    map.insert(
-        String::from("LPs"),
-        (
-            AccountIdentifier::new(&id(), &Subaccount(TRADING_LP_SUBACCOUNT)),
-            Account {
-                owner: id(),
-                subaccount: Some(TRADING_LP_SUBACCOUNT),
-            },
-        ),
-    );
-
-    map
+thread_local! {
+    static DEV: RefCell<Principal> = RefCell::new(Principal::management_canister());
 }
 
 #[init]
 fn init_hook() {
+    DEV.with_borrow_mut(|d| *d = caller());
+
     set_produce_new_price_timer();
     set_fetch_total_supply_timer();
 
     STATE.with_borrow_mut(|s| {
         let now = time();
         let mut info = s.get_price_info();
+
+        s.register(caller(), None);
 
         info.cur_1d_long_candle.open_ts = now;
         info.cur_1d_long_candle.close_ts = now;
@@ -244,6 +217,8 @@ fn init_hook() {
 
 #[post_upgrade]
 fn post_upgrade_hook() {
+    DEV.with_borrow_mut(|d| *d = caller());
+
     set_produce_new_price_timer();
     set_fetch_total_supply_timer();
 }

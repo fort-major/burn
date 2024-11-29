@@ -3,7 +3,17 @@ import { Principal } from "@dfinity/principal";
 import { err, ErrorCode, logInfo } from "@utils/error";
 import { E8s } from "@utils/math";
 import { Fetcher, IChildren } from "@utils/types";
-import { Accessor, batch, createContext, createEffect, createSignal, on, onMount, useContext } from "solid-js";
+import {
+  Accessor,
+  batch,
+  createContext,
+  createEffect,
+  createSignal,
+  on,
+  onCleanup,
+  onMount,
+  useContext,
+} from "solid-js";
 import { createStore, Store } from "solid-js/store";
 import { useAuth } from "./auth";
 import { newTradingActor } from "@utils/backend";
@@ -35,6 +45,8 @@ export interface ITradingStoreContext {
   fetchMyInfo: Fetcher;
 
   priceInfo: Accessor<PriceInfo | undefined>;
+  priceInfoCounter4h: Accessor<number>;
+  priceInfoCounter1d: Accessor<number>;
   fetchPriceInfo: Fetcher;
 
   longPriceHistory4h: Store<Candle[]>;
@@ -73,10 +85,13 @@ export function TradingStore(props: IChildren) {
     useAuth();
   const { pidBalance, subaccount, transfer, fetchPidBalance } = useWallet();
 
+  const [isRunning, setRunning] = createSignal(true);
   const [myBalances, setMyBalances] = createSignal<ITradingBalances>();
   const [myTraderStats, setMyTraderStats] = createSignal<ITraderStats>();
   const [isInvited, setInvited] = createSignal<boolean>();
   const [priceInfo, setPriceInfo] = createSignal<PriceInfo>();
+  const [priceInfoCounter4h, setPriceInfoCounter4h] = createSignal(0);
+  const [priceInfoCounter1d, setPriceInfoCounter1d] = createSignal(0);
   const [longPriceHistory4h, setLongPriceHistory4h] = createStore<ITradingStoreContext["longPriceHistory4h"]>([]);
   const [longPriceHistory1d, setLongPriceHistory1d] = createStore<ITradingStoreContext["longPriceHistory1d"]>([]);
   const [shortPriceHistory4h, setShortPriceHistory4h] = createStore<ITradingStoreContext["shortPriceHistory4h"]>([]);
@@ -88,6 +103,10 @@ export function TradingStore(props: IChildren) {
       fetchMyInfo();
       fetchPriceInfo();
     }
+  });
+
+  onCleanup(() => {
+    setRunning(false);
   });
 
   createEffect(
@@ -249,9 +268,22 @@ export function TradingStore(props: IChildren) {
     const trading = newTradingActor(anonymousAgent()!);
     const info = await trading.get_info();
 
+    const oldInfo = priceInfo();
+
+    if (oldInfo) {
+      if (oldInfo.cur_1d_long_candle.open_ts != info.cur_1d_long_candle.open_ts) {
+        setPriceInfoCounter1d((i) => i + 1);
+      }
+      if (oldInfo.cur_4h_long_candle.open_ts != info.cur_4h_long_candle.open_ts) {
+        setPriceInfoCounter4h((i) => i + 1);
+      }
+    }
+
     setPriceInfo(info);
 
-    setTimeout(fetchPriceInfo, 1000 * 60);
+    if (isRunning()) {
+      setTimeout(fetchPriceInfo, 1000 * 60);
+    }
   };
 
   const fetchMyInfo = async () => {
@@ -300,6 +332,8 @@ export function TradingStore(props: IChildren) {
         fetchMyInfo,
 
         priceInfo,
+        priceInfoCounter4h,
+        priceInfoCounter1d,
         fetchPriceInfo,
 
         longPriceHistory1d,
