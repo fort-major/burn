@@ -20,6 +20,7 @@ import { newTradingActor } from "@utils/backend";
 import { useWallet } from "./wallet";
 import { DEFAULT_TOKENS } from "./tokens";
 import { IcrcLedgerCanister } from "@dfinity/ledger-icrc";
+import { stat } from "fs";
 
 export interface ITradingBalances {
   real: E8s;
@@ -58,6 +59,9 @@ export interface ITradingStoreContext {
   orderHistory: Store<Record<string, Order>>;
   fetchOrderHistory: () => Promise<void>;
 
+  traders: Store<Record<string, ITraderStats>>;
+  fetchTraders: () => Promise<void>;
+
   canDeposit: (qty: E8s) => boolean;
   deposit: (qty: E8s) => Promise<void>;
 
@@ -81,9 +85,8 @@ export function useTrading(): ITradingStoreContext {
 }
 
 export function TradingStore(props: IChildren) {
-  const { isAuthorized, assertAuthorized, isReadyToFetch, assertReadyToFetch, agent, anonymousAgent, enable, disable } =
-    useAuth();
-  const { pidBalance, subaccount, transfer, fetchPidBalance } = useWallet();
+  const { isAuthorized, assertAuthorized, assertReadyToFetch, agent, anonymousAgent, enable, disable } = useAuth();
+  const { pidBalance, subaccount, transferNoDisable, fetchPidBalance } = useWallet();
 
   const [isRunning, setRunning] = createSignal(true);
   const [myBalances, setMyBalances] = createSignal<ITradingBalances>();
@@ -97,6 +100,7 @@ export function TradingStore(props: IChildren) {
   const [shortPriceHistory4h, setShortPriceHistory4h] = createStore<ITradingStoreContext["shortPriceHistory4h"]>([]);
   const [shortPriceHistory1d, setShortPriceHistory1d] = createStore<ITradingStoreContext["shortPriceHistory1d"]>([]);
   const [orderHistory, setOrderHistory] = createStore<ITradingStoreContext["orderHistory"]>();
+  const [traders, setTraders] = createStore<ITradingStoreContext["traders"]>();
 
   onMount(() => {
     if (isAuthorized()) {
@@ -118,6 +122,41 @@ export function TradingStore(props: IChildren) {
     })
   );
 
+  const fetchTraders: ITradingStoreContext["fetchTraders"] = async () => {
+    assertReadyToFetch();
+
+    const trading = newTradingActor(anonymousAgent()!);
+
+    let skip = 0n,
+      take = 1000n;
+
+    while (true) {
+      const res = await trading.get_all_trader_stats(skip, take);
+
+      for (let [pid, stats] of res) {
+        const iStats: ITraderStats = {
+          buy_long_timestamps: stats.buy_long_timestamps as bigint[],
+          buy_short_timestamps: stats.buy_short_timestamps as bigint[],
+          sell_long_timestamps: stats.sell_long_timestamps as bigint[],
+          sell_short_timestamps: stats.sell_short_timestamps as bigint[],
+
+          total_long_bought: E8s.new(stats.total_long_bought),
+          total_long_sold: E8s.new(stats.total_long_sold),
+          total_short_bought: E8s.new(stats.total_short_bought),
+          total_short_sold: E8s.new(stats.total_short_sold),
+        };
+
+        setTraders(pid.toText(), iStats);
+      }
+
+      if (res.length < Number(take)) {
+        break;
+      }
+
+      skip += take;
+    }
+  };
+
   const canDeposit: ITradingStoreContext["canDeposit"] = (qty) => {
     if (!isAuthorized() || !subaccount()) return false;
     if ((pidBalance(DEFAULT_TOKENS.burn) || 0n) < qty.inner().val) return false;
@@ -131,7 +170,7 @@ export function TradingStore(props: IChildren) {
     try {
       disable();
 
-      await transfer(
+      await transferNoDisable(
         DEFAULT_TOKENS.burn,
         { owner: Principal.fromText(import.meta.env.VITE_TRADING_CANISTER_ID), subaccount: [subaccount()!] },
         qty.inner().val
@@ -146,8 +185,9 @@ export function TradingStore(props: IChildren) {
         fetchMyInfo();
 
         logInfo(`Deposited ${E8s.new(newQty).toString()} $BURN`);
-      } catch {
+      } catch (e) {
         logInfo(`Deposit failed, withdrawing back...`);
+        console.error(e);
 
         await trading.withdraw_from_user_subaccount(DEFAULT_TOKENS.burn, qty.inner().val - 10_000n);
         fetchPidBalance(DEFAULT_TOKENS.burn);
@@ -163,7 +203,7 @@ export function TradingStore(props: IChildren) {
     const b = myBalances();
     if (!b || b.real.le(E8s.new(10_000n))) return false;
 
-    return false;
+    return true;
   };
 
   const withdraw: ITradingStoreContext["withdraw"] = async () => {
@@ -198,7 +238,7 @@ export function TradingStore(props: IChildren) {
       return false;
     }
 
-    if (!short && self && b.long.lt(qty)) {
+    if (!short && sell && b.long.lt(qty)) {
       return false;
     }
 
@@ -316,6 +356,8 @@ export function TradingStore(props: IChildren) {
       sell_short_timestamps: s.sell_short_timestamps as bigint[],
     };
 
+    localStorage.setItem("msq-burn-ash-market-is-invited", "true");
+
     batch(() => {
       setInvited(true);
       setMyBalances(balances);
@@ -323,12 +365,21 @@ export function TradingStore(props: IChildren) {
     });
   };
 
+  const cachedIsInvited = () => {
+    if (!isAuthorized()) {
+      const cached = localStorage.getItem("msq-burn-ash-market-is-invited");
+      if (cached === "true") return true;
+    }
+
+    return isInvited();
+  };
+
   return (
     <TradingContext.Provider
       value={{
         myBalances,
         myTraderStats,
-        isInvited,
+        isInvited: cachedIsInvited,
         fetchMyInfo,
 
         priceInfo,
@@ -344,6 +395,9 @@ export function TradingStore(props: IChildren) {
 
         orderHistory,
         fetchOrderHistory,
+
+        traders,
+        fetchTraders,
 
         canDeposit,
         deposit,

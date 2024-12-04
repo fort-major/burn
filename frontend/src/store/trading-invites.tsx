@@ -8,6 +8,7 @@ import { Principal } from "@dfinity/principal";
 import { bytesToHex, hexToBytes } from "@utils/encoding";
 import { useWallet } from "./wallet";
 import { DEFAULT_TOKENS, useTokens } from "./tokens";
+import { delay } from "@fort-major/msq-shared";
 
 const BRIBE_QTY_E8S = 1000_0000_0000n;
 
@@ -44,7 +45,7 @@ export function useTradingInvites(): ITradingInvitesStoreContext {
 
 export function TradingInvitesStore(props: IChildren) {
   const { isAuthorized, assertAuthorized, assertReadyToFetch, agent, anonymousAgent, enable, disable } = useAuth();
-  const { pidBalance, subaccount, transfer } = useWallet();
+  const { pidBalance, subaccount, transferNoDisable } = useWallet();
 
   const [hasInvite, setHasInvite] = createSignal<boolean>();
   const [isRegistered, setRegistered] = createSignal<boolean>();
@@ -67,7 +68,7 @@ export function TradingInvitesStore(props: IChildren) {
 
   const canRegisterWithInvite: ITradingInvitesStoreContext["canRegisterWithInvite"] = (invite: string) => {
     if (!isAuthorized()) return false;
-    if (isRegistered()) return false;
+    if (cachedIsRegistered()) return false;
 
     const owner = inviteOwners[invite];
     if (!owner) return false;
@@ -85,7 +86,7 @@ export function TradingInvitesStore(props: IChildren) {
       const tradingInvites = newTradingInvitesActor(agent()!);
       await tradingInvites.register_with_invite(inv);
 
-      fetchMyInvite();
+      await fetchMyInvite();
 
       return true;
     } catch {
@@ -97,7 +98,7 @@ export function TradingInvitesStore(props: IChildren) {
 
   const canRegisterWithBribe: ITradingInvitesStoreContext["canRegisterWithBribe"] = () => {
     if (!isAuthorized()) return false;
-    if (isRegistered()) return false;
+    if (cachedIsRegistered()) return false;
     if (!subaccount()) return false;
 
     const balance = pidBalance(DEFAULT_TOKENS.burn);
@@ -112,7 +113,7 @@ export function TradingInvitesStore(props: IChildren) {
     try {
       disable();
 
-      await transfer(
+      await transferNoDisable(
         DEFAULT_TOKENS.burn,
         { owner: Principal.fromText(import.meta.env.VITE_TRADING_INVITES_CANISTER_ID), subaccount: opt(subaccount()) },
         BRIBE_QTY_E8S
@@ -123,7 +124,7 @@ export function TradingInvitesStore(props: IChildren) {
       try {
         await tradingInvites.register_with_bribe();
 
-        fetchMyInvite();
+        await fetchMyInvite();
 
         return true;
       } catch {
@@ -169,20 +170,24 @@ export function TradingInvitesStore(props: IChildren) {
     }
 
     const info = resp[0];
-    const invite = optUnwrap(info.cur_invite);
+    let invite = optUnwrap(info.cur_invite);
+
+    localStorage.setItem("msq-burn-ash-market-is-registered", "true");
+
+    if (!invite && !myInvite()) {
+      invite = await tradingInvites.update_my_invite();
+    }
 
     batch(() => {
       setRegistered(true);
-      setHasInvite(!!invite);
-      if (invite) {
-        setMyInvite(invite as Uint8Array);
-      }
+      setHasInvite(true);
+      setMyInvite(invite as Uint8Array);
     });
   };
 
   const canUpdateMyInvite: ITradingInvitesStoreContext["canUpdateMyInvite"] = () => {
     if (!isAuthorized()) return false;
-    if (!isRegistered()) return false;
+    if (!cachedIsRegistered()) return false;
 
     return true;
   };
@@ -203,11 +208,20 @@ export function TradingInvitesStore(props: IChildren) {
     }
   };
 
+  const cachedIsRegistered = () => {
+    if (!isAuthorized()) {
+      const cached = localStorage.getItem("msq-burn-ash-market-is-registered");
+      if (cached === "true") return true;
+    }
+
+    return isRegistered();
+  };
+
   return (
     <TradingInvitesContext.Provider
       value={{
         hasInvite,
-        isRegistered,
+        isRegistered: cachedIsRegistered,
         myInvite,
         fetchMyInvite,
 

@@ -106,19 +106,19 @@ export function CandlestickChart(props: ICandlestickChart) {
       });
     }
 
-    if (data.length < 20 && data.length > 0) {
+    const prefix: { x: Date; y: [number, number, number, number] }[] = [];
+
+    /* if (data.length < 20 && data.length > 0) {
       const firstTs = data[0].x.getTime();
       const difMs = Number(timing() === "1d" ? ONE_DAY_NS / 1000_000n : ONE_HOUR_NS / 250_000n);
-      const prefix = [];
       for (let i = 0; i < 20 - data.length; i++) {
         prefix.push({
           x: new Date(firstTs - difMs * (i + 1)),
           y: [1.0, 1.0, 1.0, 1.0],
         });
       }
-
-      data = [...prefix.reverse(), ...data];
-    }
+ */
+    data = [...prefix.reverse(), ...data];
 
     return [{ data, name: "candles" }];
   });

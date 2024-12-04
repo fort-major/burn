@@ -119,6 +119,13 @@ async fn register_with_bribe() {
         .0
         .expect("Unable to transfer");
 
+    let trading_can = TradingClient(ENV_VARS.trading_canister_id);
+    let register_result = trading_can.register(user_pid, None).await;
+
+    if let Err((c, m)) = register_result {
+        panic!("Unable to register - {:?}: {}", c, m);
+    }
+
     STATE.with_borrow_mut(|s| {
         s.members.insert(user_pid, MemberInfo { cur_invite: None });
     });

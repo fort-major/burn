@@ -111,7 +111,7 @@ impl TradingState {
             } else {
                 assert_slippage_fit(expected_price, info.cur_short_price);
 
-                balances.long += &qty * f64_to_e8s(info.cur_short_price);
+                balances.short += &qty * f64_to_e8s(info.cur_short_price);
             }
 
             qty

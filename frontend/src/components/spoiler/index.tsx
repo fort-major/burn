@@ -1,13 +1,12 @@
 import { EIconKind, Icon } from "@components/icon";
 import { COLORS } from "@utils/colors";
 import { eventHandler } from "@utils/security";
-import { IChildren } from "@utils/types";
+import { IChildren, IClass } from "@utils/types";
 import { createSignal, Show } from "solid-js";
 
-export interface ISpoilerProps extends IChildren {
+export interface ISpoilerProps extends IChildren, IClass {
   header: string;
   defaultExpanded?: boolean;
-  class?: string;
 }
 
 export function Spoiler(props: ISpoilerProps) {
@@ -18,7 +17,7 @@ export function Spoiler(props: ISpoilerProps) {
   });
 
   return (
-    <div class="flex flex-col self-stretch gap-5">
+    <div class="flex flex-col self-stretch gap-5" classList={{ [props.class!]: !!props.class }}>
       <div onClick={handleHeaderClick} class="flex justify-between self-stretch items-center cursor-pointer gap-5">
         <h4 class="flex-grow font-primary font-semibold text-white text-md">{props.header}</h4>
         <Icon class="min-w-6" color={COLORS.white} kind={expanded() ? EIconKind.ChevronUp : EIconKind.ChevronDown} />

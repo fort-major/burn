@@ -29,6 +29,7 @@ export interface IWalletStoreContext {
   removeSavedToken: (tokenCanId: Principal) => void;
 
   transfer: (tokenCanId: Principal, to: Account, qty: bigint) => Promise<bigint>;
+  transferNoDisable: (tokenCanId: Principal, to: Account, qty: bigint) => Promise<bigint>;
 
   claimPoolBurnReward: () => Promise<bigint>;
   claimBonfireIcpReward: (winningEntryTimestamp: TTimestamp, winnerIdx: number) => Promise<bigint>;
@@ -193,6 +194,28 @@ export function WalletStore(props: IChildren) {
     if (!a) return Promise.resolve();
 
     return fetchBalanceOf(tokenCanId, a.owner, optUnwrap(a.subaccount) as Uint8Array);
+  };
+
+  const transferNoDisable: IWalletStoreContext["transfer"] = async (tokenCanId, to, qty) => {
+    assertAuthorized();
+
+    try {
+      const token = IcrcLedgerCanister.create({ agent: agent()!, canisterId: tokenCanId });
+      const blockIdx = await token.transfer({
+        from_subaccount: undefined,
+        to,
+        amount: qty,
+        fee: undefined,
+        created_at_time: undefined,
+      });
+
+      return blockIdx;
+    } finally {
+      await Promise.all([
+        fetchBalanceOf(tokenCanId, to.owner, optUnwrap(to.subaccount) as Uint8Array | undefined),
+        fetchPidBalance(tokenCanId),
+      ]);
+    }
   };
 
   const transfer: IWalletStoreContext["transfer"] = async (tokenCanId, to, qty) => {
@@ -364,6 +387,7 @@ export function WalletStore(props: IChildren) {
         removeSavedToken,
 
         transfer,
+        transferNoDisable,
 
         claimPoolBurnReward,
         claimBonfireIcpReward,

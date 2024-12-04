@@ -531,7 +531,7 @@ mod tests {
 
     use super::{PriceInfo, STEPS_PER_DAY};
 
-    const TOTAL_POINTS: u64 = STEPS_PER_DAY * 365;
+    const TOTAL_POINTS: u64 = STEPS_PER_DAY * 7;
 
     #[test]
     fn generate_example_price_chart() {
