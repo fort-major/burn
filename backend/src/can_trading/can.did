@@ -1,4 +1,3 @@
-type Account = record { owner : principal; subaccount : opt blob };
 type BalancesInfo = record {
   inviter : opt principal;
   long : nat;
@@ -60,7 +59,6 @@ type TraderStats = record {
 };
 service : () -> {
   deposit : (nat) -> ();
-  get_account_ids : () -> (vec record { text; record { blob; Account } }) query;
   get_all_trader_stats : (nat64, nat64) -> (
       vec record { principal; TraderStats },
     ) query;

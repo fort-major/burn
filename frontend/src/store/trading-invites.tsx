@@ -82,6 +82,8 @@ export function TradingInvitesStore(props: IChildren) {
     try {
       disable();
 
+      logInfo("Registering... please, wait");
+
       const inv = hexToBytes(invite);
       const tradingInvites = newTradingInvitesActor(agent()!);
       await tradingInvites.register_with_invite(inv);
@@ -113,6 +115,8 @@ export function TradingInvitesStore(props: IChildren) {
     try {
       disable();
 
+      logInfo("Registering... please, wait");
+
       await transferNoDisable(
         DEFAULT_TOKENS.burn,
         { owner: Principal.fromText(import.meta.env.VITE_TRADING_INVITES_CANISTER_ID), subaccount: opt(subaccount()) },
@@ -128,7 +132,7 @@ export function TradingInvitesStore(props: IChildren) {
 
         return true;
       } catch {
-        await tradingInvites.withdraw_from_user_subaccount(DEFAULT_TOKENS.burn, BRIBE_QTY_E8S - 10_000n);
+        await tradingInvites.withdraw_from_user_subaccount(DEFAULT_TOKENS.burn);
 
         return false;
       }

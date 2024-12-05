@@ -85,7 +85,8 @@ export function useTrading(): ITradingStoreContext {
 }
 
 export function TradingStore(props: IChildren) {
-  const { isAuthorized, assertAuthorized, assertReadyToFetch, agent, anonymousAgent, enable, disable } = useAuth();
+  const { isAuthorized, assertAuthorized, assertReadyToFetch, isReadyToFetch, agent, anonymousAgent, enable, disable } =
+    useAuth();
   const { pidBalance, subaccount, transferNoDisable, fetchPidBalance } = useWallet();
 
   const [isRunning, setRunning] = createSignal(true);
@@ -117,6 +118,20 @@ export function TradingStore(props: IChildren) {
     on(isAuthorized, (ready) => {
       if (ready) {
         fetchMyInfo();
+        fetchPriceInfo();
+      }
+    })
+  );
+
+  onMount(() => {
+    if (isReadyToFetch()) {
+      fetchPriceInfo();
+    }
+  });
+
+  createEffect(
+    on(isReadyToFetch, (ready) => {
+      if (ready) {
         fetchPriceInfo();
       }
     })

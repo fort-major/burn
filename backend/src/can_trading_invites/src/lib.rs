@@ -9,7 +9,7 @@ use ic_cdk::{
     },
     caller, export_candid, id, init, post_upgrade, query, update,
 };
-use ic_e8s::c::E8s;
+
 use ic_ledger_types::Subaccount;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use shared::{
@@ -132,19 +132,28 @@ async fn register_with_bribe() {
 }
 
 #[update]
-async fn withdraw_from_user_subaccount(token_can_id: Principal, qty: E8s) {
+async fn withdraw_from_user_subaccount(token_can_id: Principal) {
     let user_pid = caller();
     let user_subaccount = subaccount_of(user_pid);
     let token_can = ICRC1CanisterClient::new(token_can_id);
 
+    let balance = token_can
+        .icrc1_balance_of(Account {
+            owner: id(),
+            subaccount: Some(user_subaccount.0),
+        })
+        .await
+        .expect("Unable to get balance")
+        .0;
+
     let arg = TransferArg {
         from_subaccount: Some(user_subaccount.0),
-        amount: Nat(qty.val),
+        amount: balance,
         to: Account {
             owner: user_pid,
             subaccount: None,
         },
-        fee: None,
+        fee: Some(Nat::from(1_0000u64)),
         created_at_time: None,
         memo: None,
     };

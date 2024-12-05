@@ -286,12 +286,12 @@ export function CandlestickChart(props: ICandlestickChart) {
   return (
     <div class="flex flex-col gap-6" classList={{ [props.class!]: !!props.class }}>
       <div class="flex items-end justify-between relative">
-        <div class="flex items-baseline relative left-4">
-          <div class="flex gap-2 items-baseline w-[300px]">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-baseline relative left-4">
+          <div class="flex gap-2 items-baseline sm:w-[300px]">
             <p class="font-semibold text-6xl">{curPrice()}</p>
             {curPriceChangePercent()}
           </div>
-          <div class="flex gap-2 items-center">
+          <div class="flex gap-2 items-center flex-wrap">
             {uptrend()}
             {gravity()}
             {trend()}

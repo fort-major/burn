@@ -221,6 +221,12 @@ fn post_upgrade_hook() {
 
     set_produce_new_price_timer();
     set_fetch_total_supply_timer();
+
+    STATE.with_borrow_mut(|s| {
+        if !s.balances.contains_key(&caller()) {
+            s.register(caller(), None);
+        }
+    });
 }
 
 export_candid!();

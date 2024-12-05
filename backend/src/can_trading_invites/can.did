@@ -1,7 +1,5 @@
-type Account = record { owner : principal; subaccount : opt blob };
 type MemberInfo = record { cur_invite : opt blob };
 service : () -> {
-  get_account_ids : () -> (vec record { text; record { blob; Account } }) query;
   get_cycles_balance : () -> (nat) query;
   get_invite_owner : (blob) -> (opt principal) query;
   get_my_info : () -> (opt MemberInfo) query;
@@ -10,5 +8,5 @@ service : () -> {
   register_with_invite : (blob) -> ();
   subaccount_of : (principal) -> (blob) query;
   update_my_invite : () -> (blob);
-  withdraw_from_user_subaccount : (principal, nat) -> ();
+  withdraw_from_user_subaccount : (principal) -> ();
 }

@@ -13,6 +13,7 @@ import { Page } from "@components/page";
 import { QtyInput } from "@components/qty-input";
 import { Spoiler } from "@components/spoiler";
 import { delay, Principal } from "@fort-major/msq-shared";
+import { areWeOnMobile } from "@pages/home";
 import { useLocation, useNavigate, useSearchParams } from "@solidjs/router";
 import { useAuth } from "@store/auth";
 import { DEFAULT_TOKENS } from "@store/tokens";
@@ -361,7 +362,9 @@ export function TradingPage() {
       >
         <Avatar url={avatarSrcFromPrincipal(o.pid)} size="sm" borderColor={COLORS.gray[140]} />
 
-        <Copyable text={o.pid.toText()} ellipsis ellipsisSymbols={12} />
+        <Show when={!areWeOnMobile()}>
+          <Copyable text={o.pid.toText()} ellipsis ellipsisSymbols={12} />
+        </Show>
 
         <p>
           {o.sell ? "SELL" : "BUY"} ({o.short ? "SHORT" : "LONG"})
@@ -387,7 +390,9 @@ export function TradingPage() {
 
   createEffect(() => {
     if (isRegistered() === false && isInvited() === false && invite && canRegisterWithInvite(invite)) {
-      registerWithInvite(invite).then(() => fetchMyInfo());
+      registerWithInvite(invite)
+        .then(() => fetchMyInfo())
+        .then(() => navigate(ROOT.$.market.path));
     }
   });
 
@@ -441,7 +446,7 @@ export function TradingPage() {
             </Match>
             <Match when={mode() === "loading"}>
               <div class="flex flex-grow items-center justify-center h-32 max-w-72 text-center self-center">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+                <svg xmlns="http://www.w3.org/2000/svg" width={50} height={50} viewBox="0 0 200 200">
                   <path
                     fill={COLORS.orange}
                     stroke={COLORS.orange}
@@ -472,20 +477,22 @@ export function TradingPage() {
   return (
     <Page slim>
       <div class="flex flex-col gap-10">
-        <p class="font-semibold text-xl text-gray-140">Imaginary price, real profits</p>
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <p class="font-semibold text-xl text-gray-140">Imaginary price, real profits</p>
+          <div class="flex flex-col">
+            <Show
+              when={currentShownOrder()}
+              fallback={<p class="text-sm text-center text-gray-140">Loading trade history...</p>}
+            >
+              {curOrder()}
+            </Show>
+          </div>
+        </div>
 
         <CandlestickChart kind={mode()} class="h-[500px]" />
 
-        <div class="grid grid-cols-2 gap-6">
-          <div class="flex flex-col gap-6">
-            <div class="flex flex-col">
-              <Show
-                when={currentShownOrder()}
-                fallback={<p class="text-sm text-center text-gray-140">Loading trade history...</p>}
-              >
-                {curOrder()}
-              </Show>
-            </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div class="flex flex-col gap-6 order-last sm:order-first">
             <Bento id={0} class="flex flex-col gap-4">
               <div class="flex justify-between items-center">
                 <p class="text-gray-140 text-sm">
@@ -535,7 +542,7 @@ export function TradingPage() {
                 <span class="font-semibold text-orange">0.15%</span> of all BURN deposits your invitees make.
               </p>
 
-              <div class="flex flex-col gap-2">
+              <div class="flex flex-col gap-4">
                 <p class="text-xs font-semibold">Copy your unique invite link and pass it to the invitee</p>
                 <Show when={myInvite()}>
                   <Copyable text={makeMyInviteLink(myInvite()!).toString()} ellipsis ellipsisSymbols={40} />
