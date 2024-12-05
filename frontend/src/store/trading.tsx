@@ -371,7 +371,7 @@ export function TradingStore(props: IChildren) {
       sell_short_timestamps: s.sell_short_timestamps as bigint[],
     };
 
-    localStorage.setItem("msq-burn-ash-market-is-invited", "true");
+    localStorage.setItem(ASH_MARKET_IS_INVITED_KEY, "true");
 
     batch(() => {
       setInvited(true);
@@ -382,7 +382,7 @@ export function TradingStore(props: IChildren) {
 
   const cachedIsInvited = () => {
     if (!isAuthorized()) {
-      const cached = localStorage.getItem("msq-burn-ash-market-is-invited");
+      const cached = localStorage.getItem(ASH_MARKET_IS_INVITED_KEY);
       if (cached === "true") return true;
     }
 
@@ -428,3 +428,5 @@ export function TradingStore(props: IChildren) {
     </TradingContext.Provider>
   );
 }
+
+export const ASH_MARKET_IS_INVITED_KEY = "msq-burn-ash-market-is-invited";

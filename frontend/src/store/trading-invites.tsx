@@ -176,7 +176,7 @@ export function TradingInvitesStore(props: IChildren) {
     const info = resp[0];
     let invite = optUnwrap(info.cur_invite);
 
-    localStorage.setItem("msq-burn-ash-market-is-registered", "true");
+    localStorage.setItem(ASH_MARKET_IS_REGISTERED_KEY, "true");
 
     if (!invite && !myInvite()) {
       invite = await tradingInvites.update_my_invite();
@@ -214,7 +214,7 @@ export function TradingInvitesStore(props: IChildren) {
 
   const cachedIsRegistered = () => {
     if (!isAuthorized()) {
-      const cached = localStorage.getItem("msq-burn-ash-market-is-registered");
+      const cached = localStorage.getItem(ASH_MARKET_IS_REGISTERED_KEY);
       if (cached === "true") return true;
     }
 
@@ -246,3 +246,5 @@ export function TradingInvitesStore(props: IChildren) {
     </TradingInvitesContext.Provider>
   );
 }
+
+export const ASH_MARKET_IS_REGISTERED_KEY = "msq-burn-ash-market-is-registered";
