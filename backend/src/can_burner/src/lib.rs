@@ -27,6 +27,35 @@ use utils::{
 mod utils;
 
 #[update]
+async fn mint(pid: Principal, qty: E8s) {
+    assert_running();
+    let c = caller();
+
+    if c != ENV_VARS.trading_canister_id {
+        panic!("Access denied");
+    }
+
+    let burn_token_can = ICRC1CanisterClient::new(ENV_VARS.burn_token_canister_id);
+
+    burn_token_can
+        .icrc1_transfer(TransferArg {
+            to: Account {
+                owner: pid,
+                subaccount: None,
+            },
+            amount: Nat(qty.val),
+            from_subaccount: None,
+            fee: None,
+            created_at_time: None,
+            memo: None,
+        })
+        .await
+        .expect("Unable to make the minting call")
+        .0
+        .expect("Unable to mint");
+}
+
+#[update]
 async fn withdraw(req: WithdrawRequest) -> WithdrawResponse {
     assert_running();
 

@@ -25,6 +25,16 @@
       "package": "furnace",
       "type": "rust"
     },
+    "trading": {
+      "candid": "backend/src/can_trading/can.did",
+      "package": "trading",
+      "type": "rust"
+    },
+    "trading_invites": {
+      "candid": "backend/src/can_trading_invites/can.did",
+      "package": "trading_invites",
+      "type": "rust"
+    },
     "frontend": {
       "build": [
         ""

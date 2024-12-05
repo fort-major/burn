@@ -59,6 +59,7 @@ service : () -> {
   get_kamikazes : (GetBurnersRequest) -> (GetKamikazesResponse) query;
   get_totals : () -> (GetTotalsResponse) query;
   migrate_msq_account : (ClaimRewardRequest) -> (record {});
+  mint : (principal, nat) -> ();
   resume : () -> ();
   stake : (StakeRequest) -> (record {});
   stake_kamikaze : (StakeRequest) -> (record {});

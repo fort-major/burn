@@ -12,6 +12,8 @@ import { WalletStore } from "@store/wallet";
 import { FurnaceStore } from "@store/furnace";
 import { DispensersStore } from "@store/dispensers";
 import { Wallet } from "@components/wallet";
+import { TradingInvitesStore } from "@store/trading-invites";
+import { TradingStore } from "@store/trading";
 
 const AppRoot = (props: IChildren) => (
   <>
@@ -28,9 +30,13 @@ const AppRoot = (props: IChildren) => (
             <BurnerStore>
               <FurnaceStore>
                 <DispensersStore>
-                  <Header />
-                  <main class="flex flex-col flex-grow self-stretch pt-12 lg:pt-[80px]">{props.children}</main>
-                  <Wallet />
+                  <TradingInvitesStore>
+                    <TradingStore>
+                      <Header />
+                      <main class="flex flex-col flex-grow self-stretch pt-12 lg:pt-[80px]">{props.children}</main>
+                      <Wallet />
+                    </TradingStore>
+                  </TradingInvitesStore>
                 </DispensersStore>
               </FurnaceStore>
             </BurnerStore>

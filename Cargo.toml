@@ -3,6 +3,8 @@ members = [
     "backend/src/can_burner",
     "backend/src/can_furnace",
     "backend/src/can_dispenser",
+    "backend/src/can_trading",
+    "backend/src/can_trading_invites",
     "backend/src/shared",
 ]
 resolver = "2"

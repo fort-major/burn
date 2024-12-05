@@ -106,3 +106,6 @@ export function createLocalStorageSignal<T extends unknown>(key: string): [Acces
 }
 
 export const nowNs = () => BigInt(Date.now()) * 1000_0000n;
+
+export const makeMyInviteLink = (invite: Uint8Array) =>
+  new URL(`/market?invite=${bytesToHex(invite)}`, window.location.origin);

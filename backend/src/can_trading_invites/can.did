@@ -1,0 +1,12 @@
+type MemberInfo = record { cur_invite : opt blob };
+service : () -> {
+  get_cycles_balance : () -> (nat) query;
+  get_invite_owner : (blob) -> (opt principal) query;
+  get_my_info : () -> (opt MemberInfo) query;
+  receive_cycles : () -> ();
+  register_with_bribe : () -> ();
+  register_with_invite : (blob) -> ();
+  subaccount_of : (principal) -> (blob) query;
+  update_my_invite : () -> (blob);
+  withdraw_from_user_subaccount : (principal) -> ();
+}

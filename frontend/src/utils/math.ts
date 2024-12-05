@@ -13,6 +13,10 @@ export class E8s {
     this.val = EDs.new(val, 8);
   }
 
+  public inner(): EDs {
+    return this.val.toDecimals(8);
+  }
+
   public static base() {
     return 1_0000_0000n;
   }

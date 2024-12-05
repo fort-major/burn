@@ -16,6 +16,8 @@ import { MsqClient, MsqIdentity } from "@fort-major/msq-client";
 import { makeAgent, makeAnonymousAgent } from "../utils/backend";
 import { AuthClient } from "@dfinity/auth-client";
 import { debugStringify } from "@utils/encoding";
+import { ASH_MARKET_IS_INVITED_KEY } from "./trading";
+import { ASH_MARKET_IS_REGISTERED_KEY } from "./trading-invites";
 
 export type TAuthProvider = "MSQ" | "II";
 
@@ -105,6 +107,9 @@ export function AuthStore(props: IChildren) {
     await iiClient()?.logout();
 
     storeRememberedAuthProvider(null);
+
+    localStorage.removeItem(ASH_MARKET_IS_INVITED_KEY);
+    localStorage.removeItem(ASH_MARKET_IS_REGISTERED_KEY);
 
     batch(() => {
       setAgent(undefined);

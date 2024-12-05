@@ -1,0 +1,76 @@
+type BalancesInfo = record {
+  inviter : opt principal;
+  long : nat;
+  real : nat;
+  short : nat;
+};
+type Candle = record {
+  low : float64;
+  volume_e8s : nat64;
+  open_ts : nat64;
+  high : float64;
+  close : float64;
+  open : float64;
+  close_ts : nat64;
+};
+type CandleKind = variant { OneDay; FourHours };
+type GetPriceHistoryRequest = record {
+  kind : CandleKind;
+  skip : nat64;
+  take : nat64;
+  short : bool;
+};
+type Order = record {
+  pid : principal;
+  base_qty : nat;
+  sell : bool;
+  short : bool;
+  timestmap : nat64;
+};
+type OrderRequest = record {
+  qty : nat;
+  sell : bool;
+  short : bool;
+  expected_price : float64;
+};
+type PriceInfo = record {
+  cur_4h_short_candle : Candle;
+  target_price : float64;
+  cur_trend : float64;
+  cur_1d_short_candle : Candle;
+  cur_1d_long_candle : Candle;
+  cur_short_price : float64;
+  cur_step : nat64;
+  cur_trend_sign : bool;
+  cur_4h_long_candle : Candle;
+  cur_long_price : float64;
+  total_supply : nat;
+};
+type Result = variant { Ok; Err : text };
+type TraderStats = record {
+  total_long_sold : nat;
+  total_long_bought : nat;
+  buy_long_timestamps : vec nat64;
+  buy_short_timestamps : vec nat64;
+  sell_short_timestamps : vec nat64;
+  total_short_bought : nat;
+  total_short_sold : nat;
+  sell_long_timestamps : vec nat64;
+};
+service : () -> {
+  deposit : (nat) -> ();
+  get_all_trader_stats : (nat64, nat64) -> (
+      vec record { principal; TraderStats },
+    ) query;
+  get_cycles_balance : () -> (nat) query;
+  get_info : () -> (PriceInfo) query;
+  get_order_history : () -> (vec Order) query;
+  get_price_history : (GetPriceHistoryRequest) -> (vec Candle) query;
+  get_user_balances : () -> (opt record { BalancesInfo; TraderStats }) query;
+  order : (OrderRequest) -> ();
+  receive_cycles : () -> ();
+  register : (principal, opt principal) -> ();
+  subaccount_of : (principal) -> (blob) query;
+  withdraw : () -> (Result);
+  withdraw_from_user_subaccount : (principal, nat) -> ();
+}

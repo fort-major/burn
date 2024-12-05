@@ -72,4 +72,8 @@ impl ICRC1CanisterClient {
     pub async fn icrc1_fee(&self) -> CallResult<(Nat,)> {
         call(self.canister_id, "icrc1_fee", ()).await
     }
+
+    pub async fn icrc1_total_supply(&self) -> CallResult<(Nat,)> {
+        call(self.canister_id, "icrc1_total_supply", ()).await
+    }
 }

@@ -6,6 +6,7 @@ import { InfoPage } from "@pages/info";
 import { BonfirePage } from "@pages/bonfire";
 import { CreateAirdropPage } from "@pages/create-airdrop";
 import { AirdropsPage } from "@pages/airdrops";
+import { TradingPage } from "@pages/trading";
 
 export interface IRoute {
   parent?: IRoute;
@@ -25,6 +26,9 @@ export const ROOT = route({
   $: {
     "/": route({
       component: HomePage,
+    }),
+    market: route({
+      component: TradingPage,
     }),
     pool: route({
       component: PoolPage,
