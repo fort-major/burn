@@ -16,7 +16,7 @@ use shared::{
         state::TradingState,
         types::{OrderHistory, PriceInfo, PRICE_UPDATE_DELAY_NS},
     },
-    ENV_VARS, ONE_DAY_NS, ONE_MINUTE_NS,
+    ENV_VARS, ONE_DAY_NS,
 };
 
 thread_local! {
