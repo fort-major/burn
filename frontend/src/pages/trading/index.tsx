@@ -23,6 +23,7 @@ import { useWallet } from "@store/wallet";
 import { COLORS } from "@utils/colors";
 import { avatarSrcFromPrincipal, makeMyInviteLink } from "@utils/common";
 import { bytesToHex, hexToBytes } from "@utils/encoding";
+import { logInfo } from "@utils/error";
 import { E8s, EDs } from "@utils/math";
 import { eventHandler } from "@utils/security";
 import { Result } from "@utils/types";
@@ -147,10 +148,10 @@ export function TradingPage() {
     if (!info) return;
 
     const longPriceE8s = E8s.fromFloat(info.cur_long_price).toDynamic();
-    const long = real.mul(longPriceE8s);
+    const long = real.div(longPriceE8s);
 
     const shortPriceE8s = E8s.fromFloat(info.cur_short_price).toDynamic();
-    const short = real.mul(shortPriceE8s);
+    const short = real.div(shortPriceE8s);
 
     batch(() => {
       setLongToGet(long);
@@ -171,7 +172,7 @@ export function TradingPage() {
     if (!info) return;
 
     const longPriceE8s = E8s.fromFloat(info.cur_long_price).toDynamic();
-    const real = long.div(longPriceE8s);
+    const real = long.mul(longPriceE8s);
 
     setRealToGet(real);
   };
@@ -181,7 +182,7 @@ export function TradingPage() {
     if (!info) return;
 
     const shortPriceE8s = E8s.fromFloat(info.cur_short_price).toDynamic();
-    const real = short.div(shortPriceE8s);
+    const real = short.mul(shortPriceE8s);
 
     setRealToGet(real);
   };
@@ -307,28 +308,30 @@ export function TradingPage() {
   };
 
   const topTraders = createMemo(() => {
-    const allTraders = Object.entries(traders).map(([pidStr, stats]) => {
-      const totalInvested = stats.total_long_bought.inner().val + stats.total_short_bought.inner().val;
-      const totalReturned = stats.total_long_sold.inner().val + stats.total_short_sold.inner().val;
+    const allTraders = Object.entries(traders)
+      .map(([pidStr, stats]) => {
+        const totalInvested = stats.total_long_bought.inner().val + stats.total_short_bought.inner().val;
+        const totalReturned = stats.total_long_sold.inner().val + stats.total_short_sold.inner().val;
 
-      const profit = totalReturned - totalInvested;
+        const profit = totalReturned - totalInvested;
 
-      const totalInvestedE8s = E8s.new(totalInvested);
-      const profitPositive = profit > 0n;
-      const profitE8s = E8s.new(profitPositive ? profit : profit * -1n);
-      const roi = profitE8s.div(totalInvestedE8s);
+        const totalInvestedE8s = E8s.new(totalInvested);
+        const profitPositive = profit > 0n;
+        const profitE8s = E8s.new(profitPositive ? profit : profit * -1n);
+        const roi = totalInvestedE8s.isZero() ? E8s.zero() : profitE8s.div(totalInvestedE8s);
 
-      return {
-        pid: Principal.fromText(pidStr),
-        totalInvestedE8s,
-        profitPositive,
-        profitE8s,
-        roi,
-      };
-    });
+        return {
+          pid: Principal.fromText(pidStr),
+          totalInvestedE8s,
+          profitPositive,
+          profitE8s,
+          roi,
+        };
+      })
+      .filter((it) => it.profitPositive);
 
     // sorting in reverse
-    allTraders.toSorted((a, b) => {
+    allTraders.sort((a, b) => {
       if (!a.profitPositive && b.profitPositive) return 1;
       if (a.profitPositive && !b.profitPositive) return -1;
 
@@ -392,7 +395,10 @@ export function TradingPage() {
     if (isRegistered() === false && isInvited() === false && invite && canRegisterWithInvite(invite)) {
       registerWithInvite(invite)
         .then(() => fetchMyInfo())
-        .then(() => navigate(ROOT.$.market.path));
+        .then(() => {
+          navigate(ROOT.$.market.path);
+          logInfo("Registered!");
+        });
     }
   });
 
@@ -413,7 +419,9 @@ export function TradingPage() {
 
     const registerBribe = eventHandler(() => {
       if (canRegisterWithBribe() && !disabled()) {
-        registerWithBribe().then(() => fetchMyInfo());
+        registerWithBribe()
+          .then(() => fetchMyInfo())
+          .then(() => logInfo("Registered!"));
       }
     });
 

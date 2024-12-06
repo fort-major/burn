@@ -14,7 +14,7 @@ use shared::{
     icrc1::ICRC1CanisterClient,
     trading::{
         state::TradingState,
-        types::{OrderHistory, PriceInfo},
+        types::{OrderHistory, PriceInfo, PRICE_UPDATE_DELAY_NS},
     },
     ENV_VARS, ONE_DAY_NS, ONE_MINUTE_NS,
 };
@@ -41,7 +41,7 @@ thread_local! {
 }
 
 pub fn set_produce_new_price_timer() {
-    set_timer_interval(Duration::from_nanos(ONE_MINUTE_NS), || {
+    set_timer_interval(Duration::from_nanos(PRICE_UPDATE_DELAY_NS), || {
         spawn(produce_new_price())
     });
 }

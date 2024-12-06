@@ -7,7 +7,7 @@ use serde::Deserialize;
 
 use crate::{burner::types::TimestampNs, ONE_DAY_NS, ONE_HOUR_NS, ONE_MINUTE_NS};
 
-pub const STEPS_PER_MINUTE: u64 = 1;
+pub const STEPS_PER_MINUTE: u64 = 4;
 pub const STEPS_PER_DAY: u64 = STEPS_PER_MINUTE * 60 * 24;
 pub const PRICE_UPDATE_DELAY_NS: u64 = ONE_MINUTE_NS / STEPS_PER_MINUTE;
 

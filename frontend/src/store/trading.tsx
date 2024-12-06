@@ -337,7 +337,7 @@ export function TradingStore(props: IChildren) {
     setPriceInfo(info);
 
     if (isRunning()) {
-      setTimeout(fetchPriceInfo, 1000 * 60);
+      setTimeout(fetchPriceInfo, 1000 * 10);
     }
   };
 
