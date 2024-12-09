@@ -5,6 +5,7 @@ members = [
     "backend/src/can_dispenser",
     "backend/src/can_trading",
     "backend/src/can_trading_invites",
+    "backend/src/can_swap_mining",
     "backend/src/shared",
 ]
 resolver = "2"
@@ -36,3 +37,4 @@ garde = { version = "0.18", features = ["derive", "url", "unicode"] }
 html-escape = "0.2"
 url = "2.5"
 ic-utils = "0.39"
+serde_bytes = "0.11"

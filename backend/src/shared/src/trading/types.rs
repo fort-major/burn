@@ -395,7 +395,7 @@ impl PriceInfo {
         as_u64 as f64 / u64::MAX as f64
     }
 
-    fn create_random_nums(seed: [u8; 32]) -> (f64, f64, f64, f64) {
+    pub fn create_random_nums(seed: [u8; 32]) -> (f64, f64, f64, f64) {
         let r_1 = Self::bytes_to_f64(&seed[0..8]);
         let r_2 = Self::bytes_to_f64(&seed[8..16]);
         let r_3 = Self::bytes_to_f64(&seed[16..24]);

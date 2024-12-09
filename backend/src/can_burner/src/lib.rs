@@ -31,7 +31,7 @@ async fn mint(pid: Principal, qty: E8s) {
     assert_running();
     let c = caller();
 
-    if c != ENV_VARS.trading_canister_id {
+    if c != ENV_VARS.trading_canister_id && c != ENV_VARS.swap_mining_canister_id {
         panic!("Access denied");
     }
 

@@ -19,6 +19,7 @@ dfx deploy --network=$network burner --argument "()"
 dfx deploy --network=$network furnace --argument "()"
 dfx deploy --network=$network trading --argument "()"
 dfx deploy --network=$network trading_invites --argument "()"
+dfx deploy --network=$network swap_mining --argument "()"
 
 if [ $mode = dev ]; then
     dfx deploy --network=$network internet_identity 
