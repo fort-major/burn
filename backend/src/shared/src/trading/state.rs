@@ -28,27 +28,45 @@ pub struct TradingState {
 
 impl TradingState {
     pub fn get_price_history(&self, req: GetPriceHistoryRequest) -> Vec<Candle> {
-        let iter = match req.kind {
+        let v = match req.kind {
             CandleKind::FourHours => {
                 if req.short {
-                    self.short_price_history_4h.iter()
+                    &self.short_price_history_4h
                 } else {
-                    self.long_price_history_4h.iter()
+                    &self.long_price_history_4h
                 }
             }
             CandleKind::OneDay => {
                 if req.short {
-                    self.short_price_history_1d.iter()
+                    &self.short_price_history_1d
                 } else {
-                    self.long_price_history_1d.iter()
+                    &self.long_price_history_1d
                 }
             }
         };
 
-        iter.rev()
-            .skip(req.skip as usize)
-            .take(req.take as usize)
-            .collect()
+        let mut result = Vec::new();
+        if v.is_empty() {
+            return result;
+        }
+
+        let mut from = v.len() as i64;
+        from -= req.skip as i64;
+        if from < 0 {
+            from = 0;
+        }
+
+        let mut to = from;
+        to -= req.take as i64;
+        if to < 0 {
+            to = 0;
+        }
+
+        for i in to..from {
+            result.push(v.get(i as u64).unwrap());
+        }
+
+        return result;
     }
 
     pub fn get_order_history(&self) -> Vec<Order> {
@@ -64,25 +82,11 @@ impl TradingState {
     }
 
     pub fn get_all_stats(&self, skip: u64, take: u64) -> Vec<(Principal, TraderStats)> {
-        let mut iter = self.stats.iter().skip(skip as usize);
-        let mut result = Vec::new();
-
-        let mut i = 0;
-        loop {
-            let e = iter.next();
-            if let Some(entry) = e {
-                result.push(entry);
-
-                i += 1;
-                if i == take {
-                    break;
-                }
-            }
-
-            break;
-        }
-
-        result
+        self.stats
+            .iter()
+            .skip(skip as usize)
+            .take(take as usize)
+            .collect()
     }
 
     pub fn order(
@@ -107,11 +111,11 @@ impl TradingState {
             if long {
                 assert_slippage_fit(expected_price, info.cur_long_price);
 
-                balances.long += &qty * f64_to_e8s(info.cur_long_price);
+                balances.long += &qty / f64_to_e8s(info.cur_long_price);
             } else {
                 assert_slippage_fit(expected_price, info.cur_short_price);
 
-                balances.short += &qty * f64_to_e8s(info.cur_short_price);
+                balances.short += &qty / f64_to_e8s(info.cur_short_price);
             }
 
             qty
@@ -123,7 +127,7 @@ impl TradingState {
                     panic!("Unable to sell long, insufficient funds");
                 }
                 balances.long -= &qty;
-                qty / f64_to_e8s(info.cur_long_price)
+                qty * f64_to_e8s(info.cur_long_price)
             } else {
                 assert_slippage_fit(expected_price, info.cur_short_price);
 
@@ -131,7 +135,7 @@ impl TradingState {
                     panic!("Unable to sell short, insufficient funds");
                 }
                 balances.short -= &qty;
-                qty / f64_to_e8s(info.cur_short_price)
+                qty * f64_to_e8s(info.cur_short_price)
             };
 
             balances.real += &base_qty;

@@ -35,6 +35,11 @@
       "package": "trading_invites",
       "type": "rust"
     },
+    "swap_mining": {
+      "candid": "backend/src/can_swap_mining/can.did",
+      "package": "swap_mining",
+      "type": "rust"
+    },
     "frontend": {
       "build": [
         ""

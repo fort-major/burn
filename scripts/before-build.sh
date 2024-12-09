@@ -19,6 +19,7 @@ dfx canister --network=$network create furnace && \
 dfx canister --network=$network create burn_token && \
 dfx canister --network=$network create trading && \
 dfx canister --network=$network create trading_invites && \
+dfx canister --network=$network create swap_mining && \
 dfx canister --network=$network create internet_identity
 
 # put env vars into backend
@@ -32,6 +33,7 @@ echo "CAN_FURNACE_CANISTER_ID=\"$(dfx canister --network=$network id furnace)\""
 echo "CAN_BURN_TOKEN_CANISTER_ID=\"$(dfx canister --network=$network id burn_token)\"" >> $file_backend
 echo "CAN_TRADING_CANISTER_ID=\"$(dfx canister --network=$network id trading)\"" >> $file_backend
 echo "CAN_TRADING_INVITES_CANISTER_ID=\"$(dfx canister --network=$network id trading_invites)\"" >> $file_backend
+echo "CAN_SWAP_MINING_CANISTER_ID=\"$(dfx canister --network=$network id swap_mining)\"" >> $file_backend
 echo "CAN_II_CANISTER_ID=\"$(dfx canister --network=$network id internet_identity)\"" >> $file_backend
 echo "CAN_ROOT_KEY=\"$(dfx ping $network | grep -oP '(?<="root_key": )\[.*\]')\"" >> $file_backend
 echo "CAN_MODE=\"$mode\"" >> $file_backend
@@ -59,6 +61,7 @@ echo "VITE_FURNACE_CANISTER_ID=\"$(dfx canister --network=$network id furnace)\"
 echo "VITE_BURN_TOKEN_CANISTER_ID=\"$(dfx canister --network=$network id burn_token)\"" >> $file_frontend
 echo "VITE_TRADING_CANISTER_ID=\"$(dfx canister --network=$network id trading)\"" >> $file_frontend
 echo "VITE_TRADING_INVITES_CANISTER_ID=\"$(dfx canister --network=$network id trading_invites)\"" >> $file_frontend
+echo "VITE_SWAP_MINING_CANISTER_ID=\"$(dfx canister --network=$network id swap_mining)\"" >> $file_frontend
 echo "VITE_II_CANISTER_ID=\"$(dfx canister --network=$network id internet_identity)\"" >> $file_frontend
 echo "VITE_ROOT_KEY=\"$(dfx ping $network | grep -oP '(?<="root_key": )\[.*\]')\"" >> $file_frontend
 

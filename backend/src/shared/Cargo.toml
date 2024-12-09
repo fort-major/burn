@@ -26,6 +26,8 @@ url = { workspace = true }
 
 chrono = { workspace = true }
 
+serde_bytes.workspace = true
+
 [build-dependencies]
 dotenv = "0.15"
 

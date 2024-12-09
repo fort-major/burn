@@ -405,6 +405,8 @@ pub fn complete_raffle() {
 
         s.set_looking_for_winners(false);
     });
+
+    set_raffle_timer();
 }
 
 pub fn set_deploy_dispenser_timer(token_can_id: Principal) {

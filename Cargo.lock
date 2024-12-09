@@ -2264,6 +2264,7 @@ dependencies = [
  "plotlib",
  "rand 0.8.5",
  "serde",
+ "serde_bytes",
  "sha2 0.10.8",
  "url",
 ]
@@ -2398,6 +2399,23 @@ name = "svg"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3685c82a045a6af0c488f0550b0f52b4c77d2a52b0ca8aba719f9d268fa96965"
+
+[[package]]
+name = "swap_mining"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "futures",
+ "garde",
+ "ic-cdk 0.13.5",
+ "ic-cdk-timers",
+ "ic-e8s",
+ "ic-ledger-types",
+ "ic-stable-structures",
+ "icrc-ledger-types",
+ "serde",
+ "shared",
+]
 
 [[package]]
 name = "syn"

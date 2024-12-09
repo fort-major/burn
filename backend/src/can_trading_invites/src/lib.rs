@@ -102,7 +102,7 @@ async fn register_with_bribe() {
     let burn_token_can = ICRC1CanisterClient::new(ENV_VARS.burn_token_canister_id);
     let arg = TransferArg {
         from_subaccount: Some(user_subaccount.0),
-        amount: Nat::from(9999_0000u64),
+        amount: Nat::from(999_9999_0000u64),
         to: Account {
             owner: id(),
             subaccount: Some(dev_subaccount.0),
@@ -148,12 +148,12 @@ async fn withdraw_from_user_subaccount(token_can_id: Principal) {
 
     let arg = TransferArg {
         from_subaccount: Some(user_subaccount.0),
-        amount: balance,
+        amount: balance - Nat::from(1_0000u64),
         to: Account {
             owner: user_pid,
             subaccount: None,
         },
-        fee: Some(Nat::from(1_0000u64)),
+        fee: None,
         created_at_time: None,
         memo: None,
     };

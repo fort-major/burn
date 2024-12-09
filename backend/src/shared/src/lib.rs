@@ -2,8 +2,8 @@ use burner::types::TimestampNs;
 use candid::{CandidType, Principal};
 use env::{
     CAN_BURNER_CANISTER_ID, CAN_BURN_TOKEN_CANISTER_ID, CAN_FURNACE_CANISTER_ID, CAN_IC_HOST,
-    CAN_II_CANISTER_ID, CAN_MODE, CAN_ROOT_KEY, CAN_TRADING_CANISTER_ID,
-    CAN_TRADING_INVITES_CANISTER_ID,
+    CAN_II_CANISTER_ID, CAN_MODE, CAN_ROOT_KEY, CAN_SWAP_MINING_CANISTER_ID,
+    CAN_TRADING_CANISTER_ID, CAN_TRADING_INVITES_CANISTER_ID,
 };
 use lazy_static::lazy_static;
 use serde::Deserialize;
@@ -15,6 +15,8 @@ pub mod dispenser;
 mod env;
 pub mod furnace;
 pub mod icpswap;
+pub mod icpswap_base_index;
+pub mod icpswap_base_storage;
 pub mod icrc1;
 pub mod trading;
 pub mod trading_invites;
@@ -56,6 +58,7 @@ pub struct EnvVarsState {
     pub furnace_canister_id: Principal,
     pub trading_canister_id: Principal,
     pub trading_invites_canister_id: Principal,
+    pub swap_mining_canister_id: Principal,
     pub ii_canister_id: Principal,
     pub ii_origin: String,
     pub ic_root_key_der: Vec<u8>,
@@ -79,6 +82,7 @@ impl EnvVarsState {
             trading_canister_id: Principal::from_text(CAN_TRADING_CANISTER_ID).unwrap(),
             trading_invites_canister_id: Principal::from_text(CAN_TRADING_INVITES_CANISTER_ID)
                 .unwrap(),
+            swap_mining_canister_id: Principal::from_text(CAN_SWAP_MINING_CANISTER_ID).unwrap(),
             ii_canister_id: Principal::from_text(CAN_II_CANISTER_ID).unwrap(),
 
             ii_origin,

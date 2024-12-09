@@ -7,7 +7,7 @@ use serde::Deserialize;
 
 use crate::{burner::types::TimestampNs, ONE_DAY_NS, ONE_HOUR_NS, ONE_MINUTE_NS};
 
-pub const STEPS_PER_MINUTE: u64 = 1;
+pub const STEPS_PER_MINUTE: u64 = 4;
 pub const STEPS_PER_DAY: u64 = STEPS_PER_MINUTE * 60 * 24;
 pub const PRICE_UPDATE_DELAY_NS: u64 = ONE_MINUTE_NS / STEPS_PER_MINUTE;
 
@@ -395,7 +395,7 @@ impl PriceInfo {
         as_u64 as f64 / u64::MAX as f64
     }
 
-    fn create_random_nums(seed: [u8; 32]) -> (f64, f64, f64, f64) {
+    pub fn create_random_nums(seed: [u8; 32]) -> (f64, f64, f64, f64) {
         let r_1 = Self::bytes_to_f64(&seed[0..8]);
         let r_2 = Self::bytes_to_f64(&seed[8..16]);
         let r_3 = Self::bytes_to_f64(&seed[16..24]);

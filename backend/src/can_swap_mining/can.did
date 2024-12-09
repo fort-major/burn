@@ -1,0 +1,10 @@
+service : () -> {
+  emulate : () -> (
+      vec record { principal; float64 },
+      float64,
+      float64,
+      principal,
+    );
+  get_cycles_balance : () -> (nat) query;
+  receive_cycles : () -> ();
+}
