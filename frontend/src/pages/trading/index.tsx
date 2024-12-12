@@ -20,14 +20,17 @@ import { DEFAULT_TOKENS } from "@store/tokens";
 import { useTrading } from "@store/trading";
 import { useTradingInvites } from "@store/trading-invites";
 import { useWallet } from "@store/wallet";
+import { optUnwrap } from "@utils/backend";
 import { COLORS } from "@utils/colors";
 import { avatarSrcFromPrincipal, makeMyInviteLink } from "@utils/common";
-import { bytesToHex, hexToBytes } from "@utils/encoding";
+import { bytesToHex, hexToBytes, timestampToDMStr } from "@utils/encoding";
 import { logInfo } from "@utils/error";
 import { E8s, EDs } from "@utils/math";
 import { eventHandler } from "@utils/security";
+import { dateToDateTimeStr } from "@utils/time";
 import { Result } from "@utils/types";
 import {
+  Accessor,
   batch,
   createEffect,
   createMemo,
@@ -41,9 +44,16 @@ import {
   Switch,
 } from "solid-js";
 
+export interface ITraderStat {
+  pid: Principal;
+  totalInvestedE8s: E8s;
+  profitE8s: E8s;
+  profitPositive: boolean;
+  roi: E8s;
+}
+
 export function TradingPage() {
   const {
-    myBalances,
     fetchMyInfo,
     myTraderStats,
     priceInfo,
@@ -58,6 +68,7 @@ export function TradingPage() {
     traders,
     fetchTraders,
     isInvited,
+    myOrders,
   } = useTrading();
   const {
     myInvite,
@@ -68,7 +79,7 @@ export function TradingPage() {
     fetchInviteOwner,
     registerWithInvite,
   } = useTradingInvites();
-  const { pidBalance } = useWallet();
+  const { pidBalance, pid } = useWallet();
   const { isReadyToFetch, isAuthorized, identity, disabled } = useAuth();
   const navigate = useNavigate();
   const [{ invite }] = useSearchParams<{ invite: string }>();
@@ -147,6 +158,8 @@ export function TradingPage() {
     const info = priceInfo();
     if (!info) return;
 
+    real = real.mul(EDs.new(9970_0000n, 8));
+
     const longPriceE8s = E8s.fromFloat(info.cur_long_price).toDynamic();
     const long = real.div(longPriceE8s);
 
@@ -172,7 +185,7 @@ export function TradingPage() {
     if (!info) return;
 
     const longPriceE8s = E8s.fromFloat(info.cur_long_price).toDynamic();
-    const real = long.mul(longPriceE8s);
+    const real = long.mul(longPriceE8s).mul(EDs.new(9970_0000n, 8));
 
     setRealToGet(real);
   };
@@ -182,7 +195,7 @@ export function TradingPage() {
     if (!info) return;
 
     const shortPriceE8s = E8s.fromFloat(info.cur_short_price).toDynamic();
-    const real = short.mul(shortPriceE8s);
+    const real = short.mul(shortPriceE8s).mul(EDs.new(9970_0000n, 8));
 
     setRealToGet(real);
   };
@@ -307,11 +320,60 @@ export function TradingPage() {
     });
   };
 
-  const topTraders = createMemo(() => {
+  const myStats: Accessor<ITraderStat | undefined> = () => {
+    const s = myTraderStats();
+    if (!s) return undefined;
+
+    const p = priceInfo();
+    if (!p) return undefined;
+
+    const totalInvested = s.total_long_bought.inner().val + s.total_short_bought.inner().val;
+    let totalReturned = s.total_long_sold.inner().val + s.total_short_sold.inner().val;
+
+    if (!s.cur_long_balance.isZero()) {
+      const longPriceE8s = E8s.fromFloat(p.cur_long_price);
+      totalReturned += s.cur_long_balance.mul(longPriceE8s).mul(E8s.new(9970_0000n)).inner().val;
+    }
+
+    if (!s.cur_short_balance.isZero()) {
+      const shortPriceE8s = E8s.fromFloat(p.cur_short_price);
+      totalReturned += s.cur_short_balance.mul(shortPriceE8s).mul(E8s.new(9970_0000n)).inner().val;
+    }
+
+    const profit = totalReturned - totalInvested;
+
+    const totalInvestedE8s = E8s.new(totalInvested);
+    const profitPositive = profit > 0n;
+    const profitE8s = E8s.new(profitPositive ? profit : profit * -1n);
+    const roi = totalInvestedE8s.isZero() ? E8s.zero() : profitE8s.div(totalInvestedE8s);
+
+    return {
+      pid: pid()!,
+      totalInvestedE8s,
+      profitPositive,
+      profitE8s,
+      roi,
+    };
+  };
+
+  const topTraders: Accessor<ITraderStat[]> = createMemo(() => {
+    const p = priceInfo();
+    if (!p) return [];
+
     const allTraders = Object.entries(traders)
       .map(([pidStr, stats]) => {
         const totalInvested = stats.total_long_bought.inner().val + stats.total_short_bought.inner().val;
-        const totalReturned = stats.total_long_sold.inner().val + stats.total_short_sold.inner().val;
+        let totalReturned = stats.total_long_sold.inner().val + stats.total_short_sold.inner().val;
+
+        if (!stats.cur_long_balance.isZero()) {
+          const longPriceE8s = E8s.fromFloat(p.cur_long_price);
+          totalReturned += stats.cur_long_balance.mul(longPriceE8s).mul(E8s.new(9970_0000n)).inner().val;
+        }
+
+        if (!stats.cur_short_balance.isZero()) {
+          const shortPriceE8s = E8s.fromFloat(p.cur_short_price);
+          totalReturned += stats.cur_short_balance.mul(shortPriceE8s).mul(E8s.new(9970_0000n)).inner().val;
+        }
 
         const profit = totalReturned - totalInvested;
 
@@ -335,12 +397,12 @@ export function TradingPage() {
       if (!a.profitPositive && b.profitPositive) return 1;
       if (a.profitPositive && !b.profitPositive) return -1;
 
-      if (a.profitE8s.lt(b.profitE8s)) {
+      if (a.roi.lt(b.roi)) {
         if (a.profitPositive) return 1;
         else return -1;
       }
 
-      if (a.profitE8s.gt(b.profitE8s)) {
+      if (a.roi.gt(b.roi)) {
         if (a.profitPositive) return -1;
         else return 1;
       }
@@ -400,6 +462,27 @@ export function TradingPage() {
           logInfo("Registered!");
         });
     }
+  });
+
+  const totalLockedPercent = createMemo(() => {
+    const p = priceInfo();
+    if (!p) return undefined;
+
+    const totalShort = optUnwrap(p.total_short);
+    if (!totalShort) return undefined;
+
+    const totalLong = optUnwrap(p.total_long);
+    if (!totalLong) return undefined;
+
+    const totalShortE8s = E8s.new(totalShort).mul(E8s.fromFloat(p.cur_short_price));
+    const totalLongE8s = E8s.new(totalLong).mul(E8s.fromFloat(p.cur_long_price));
+
+    const total = totalShortE8s.add(totalLongE8s);
+
+    const s = totalShortE8s.div(total).toPercentNum();
+    const l = totalLongE8s.div(total).toPercentNum();
+
+    return { l, s };
   });
 
   const inviteModal = () => {
@@ -512,7 +595,7 @@ export function TradingPage() {
               <div class="flex justify-between items-center">
                 <p class="text-gray-140 text-sm">
                   <BalanceOf
-                    balance={myBalances()?.real.inner().val}
+                    balance={myTraderStats()?.cur_real_balance.inner().val}
                     tokenId={DEFAULT_TOKENS.burn}
                     onRefreshOverride={fetchMyInfo}
                   />
@@ -537,13 +620,21 @@ export function TradingPage() {
               <div class="flex items-center justify-between gap-4">
                 <p>
                   <span class="font-semibold text-xl">
-                    {myBalances()?.long.toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}
+                    {myTraderStats()?.cur_long_balance.toShortString({
+                      belowOne: 2,
+                      belowThousand: 1,
+                      afterThousand: 2,
+                    })}
                   </span>{" "}
                   <span class="text-sm text-gray-140">ASH (LONG)</span>
                 </p>
                 <p>
                   <span class="font-semibold text-xl">
-                    {myBalances()?.short.toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}
+                    {myTraderStats()?.cur_short_balance.toShortString({
+                      belowOne: 2,
+                      belowThousand: 1,
+                      afterThousand: 2,
+                    })}
                   </span>{" "}
                   <span class="text-sm text-gray-140">ASH (SHORT)</span>
                 </p>
@@ -600,13 +691,13 @@ export function TradingPage() {
                         fee={EDs.zero(8)}
                         decimals={8}
                         symbol="BURN"
-                        validations={[{ max: myBalances()?.real.toDynamic() ?? EDs.zero(8) }]}
+                        validations={[{ max: myTraderStats()?.cur_real_balance.toDynamic() ?? EDs.zero(8) }]}
                       />
                     </div>
 
                     <div class="flex flex-col gap-2">
                       <div class="flex items-center justify-between h-4">
-                        <p class="font-semibold text-xs">You get</p>
+                        <p class="font-semibold text-xs">You get (-0.3%)</p>
                         <BooleanInput
                           value={mode() === "long"}
                           labelOn="Long"
@@ -657,8 +748,8 @@ export function TradingPage() {
                           {
                             max:
                               mode() === "long"
-                                ? myBalances()?.long.toDynamic() ?? EDs.zero(8)
-                                : myBalances()?.short.toDynamic() ?? EDs.zero(8),
+                                ? myTraderStats()?.cur_long_balance.toDynamic() ?? EDs.zero(8)
+                                : myTraderStats()?.cur_short_balance.toDynamic() ?? EDs.zero(8),
                           },
                         ]}
                       />
@@ -666,7 +757,7 @@ export function TradingPage() {
 
                     <div class="flex flex-col gap-2">
                       <div class="flex items-center justify-between h-4">
-                        <p class="font-semibold text-xs">You get</p>
+                        <p class="font-semibold text-xs">You get (-0.3%)</p>
                       </div>
                       <div class="rounded-md bg-gray-110 p-2 flex justify-between">
                         <span>{realToGet().toString()}</span> <span class="text-gray-140">BURN</span>
@@ -688,7 +779,121 @@ export function TradingPage() {
         </div>
       </div>
 
-      <div class="flex flex-col gap-8 self-center w-full max-w-4xl">
+      <div class="flex flex-col gap-12 self-center w-full max-w-4xl">
+        <Show when={totalLockedPercent()}>
+          <div class="flex flex-col gap-6">
+            <p class="text-white font-semibold text-4xl flex gap-4 items-center">Total Funds Locked</p>
+            <div class="relative flex h-10 rounded-xl overflow-hidden">
+              <div
+                class="h-full absolute left-0 top-0 bottom-0 bg-green flex items-center justify-center min-w-1"
+                style={{ width: `${totalLockedPercent()!.l}%` }}
+              >
+                <p class="text-white font-semibold text-md">
+                  <Show when={totalLockedPercent()!.l > 10} fallback=" ">
+                    {E8s.new(optUnwrap(priceInfo()!.total_long)!).toShortString({
+                      belowOne: 2,
+                      belowThousand: 1,
+                      afterThousand: 2,
+                    })}{" "}
+                    BURN
+                  </Show>
+                </p>
+              </div>
+
+              <div
+                class="h-full absolute right-0 top-0 bottom-0 bg-errorRed flex items-center justify-center min-w-1"
+                style={{ width: `${totalLockedPercent()!.s}%` }}
+              >
+                <p class="text-white font-semibold text-md">
+                  <Show when={totalLockedPercent()!.s > 10} fallback=" ">
+                    {E8s.new(optUnwrap(priceInfo()!.total_short)!).toShortString({
+                      belowOne: 2,
+                      belowThousand: 1,
+                      afterThousand: 2,
+                    })}{" "}
+                    BURN
+                  </Show>
+                </p>
+              </div>
+            </div>
+          </div>
+        </Show>
+
+        <Show when={myStats()}>
+          <div class="flex flex-col gap-6">
+            <p class="text-white font-semibold text-4xl flex gap-4 items-center">Your Stats</p>
+
+            <div class="flex flex-row gap-8 sm:gap-12 flex-wrap">
+              <div class="flex gap-2 items-baseline">
+                <p class="font-semibold text-4xl">
+                  {myStats()!.totalInvestedE8s.toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}
+                </p>
+                <p>Total Invested</p>
+              </div>
+
+              <div class="flex gap-2 items-baseline">
+                <p
+                  class="col-span-1 font-semibold text-4xl"
+                  classList={{ "text-green": myStats()!.profitPositive, "text-errorRed": !myStats()!.profitPositive }}
+                >
+                  {myStats()!.profitE8s.toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}
+                </p>
+                <p>Total Profit</p>
+              </div>
+
+              <div class="flex gap-2 items-baseline">
+                <p
+                  class="col-span-1 font-semibold text-4xl"
+                  classList={{ "text-green": myStats()!.profitPositive, "text-errorRed": !myStats()!.profitPositive }}
+                >
+                  {myStats()!.roi.toPercent().toShortString({ belowOne: 3, belowThousand: 1, afterThousand: 1 })}%
+                </p>
+                <p>ROI</p>
+              </div>
+            </div>
+
+            <Show when={myOrders() && myOrders()!.length > 0}>
+              <div class="flex flex-col gap-4">
+                <div class="mb-2 grid grid-cols-5 sm:grid-cols-4 items-start md:items-center gap-3 text-xs font-semibold text-gray-140">
+                  <p class="col-span-2 sm:col-span-1">Time</p>
+                  <p class="col-span-1">Kind</p>
+                  <p class="col-span-1">Option</p>
+                  <p class="col-span-1">Amount BURN</p>
+                </div>
+
+                <div class="flex flex-col gap-2">
+                  <For
+                    each={myOrders()?.slice(0, 100)}
+                    fallback={<p class="text-sm text-gray-140">Nothing here yet :(</p>}
+                  >
+                    {(order) => {
+                      return (
+                        <div class="grid p-2 grid-cols-5 sm:grid-cols-4 items-center gap-3 odd:bg-gray-105 even:bg-black relative">
+                          <p class="col-span-2 sm:col-span-1 font-semibold text-xs sm:text-md text-gray-140">
+                            {dateToDateTimeStr(new Date(Number(order.timestmap / 1000_000n)))}
+                          </p>
+                          <p
+                            class="col-span-1 font-semibold text-md"
+                            classList={{ "text-green": !order.sell, "text-errorRed": order.sell }}
+                          >
+                            {order.sell ? "Sell" : "Buy"}
+                          </p>
+                          <p class="col-span-1 font-semibold text-xs sm:text-md text-gray-140">
+                            {order.short ? "ASH (SHORT)" : "ASH (LONG)"}
+                          </p>
+                          <p class="col-span-1 font-semibold text-md text-white">
+                            {E8s.new(order.base_qty).toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}
+                          </p>
+                        </div>
+                      );
+                    }}
+                  </For>
+                </div>
+              </div>
+            </Show>
+          </div>
+        </Show>
+
         <Show when={topTraders().length > 0}>
           <div class="flex flex-col gap-6">
             <p class="text-white font-semibold text-4xl flex gap-4 items-center">Best Traders</p>
@@ -764,18 +969,6 @@ export function TradingPage() {
                   pidBalance(DEFAULT_TOKENS.burn) ? [{ max: EDs.new(pidBalance(DEFAULT_TOKENS.burn)!, 8) }] : undefined
                 }
               />
-            </div>
-
-            <div class="flex flex-col gap-2">
-              <p class="font-semibold text-xs text-gray-140">To Be Deposited (0.3% fee)</p>
-              <p>
-                <span class="font-semibold text-lg">
-                  {depositQty().isOk()
-                    ? depositQty().unwrapOk().sub(EDs.new(10_000n, 8)).mul(EDs.new(9970_0000n, 8)).toString()
-                    : "0.00"}
-                </span>{" "}
-                BURN
-              </p>
             </div>
 
             <Btn text="Deposit" disabled={!canConfirmDeposit()} onClick={handleDeposit} bgColor={COLORS.orange} />

@@ -34,11 +34,14 @@ type OrderRequest = record {
   expected_price : float64;
 };
 type PriceInfo = record {
+  total_short : opt nat;
   cur_4h_short_candle : Candle;
   target_price : float64;
   cur_trend : float64;
   cur_1d_short_candle : Candle;
   cur_1d_long_candle : Candle;
+  total_long : opt nat;
+  total_real : opt nat;
   cur_short_price : float64;
   cur_step : nat64;
   cur_trend_sign : bool;
@@ -60,14 +63,14 @@ type TraderStats = record {
 service : () -> {
   deposit : (nat) -> ();
   get_all_trader_stats : (nat64, nat64) -> (
-      vec record { principal; TraderStats },
+      vec record { principal; TraderStats; BalancesInfo },
     ) query;
   get_cycles_balance : () -> (nat) query;
   get_info : () -> (PriceInfo) query;
   get_order_history : () -> (vec Order) query;
   get_price_history : (GetPriceHistoryRequest) -> (vec Candle) query;
   get_user_balances : () -> (opt record { BalancesInfo; TraderStats }) query;
-  order : (OrderRequest) -> ();
+  order : (OrderRequest) -> (Order);
   receive_cycles : () -> ();
   register : (principal, opt principal) -> ();
   subaccount_of : (principal) -> (blob) query;

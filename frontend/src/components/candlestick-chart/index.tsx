@@ -197,6 +197,8 @@ export function CandlestickChart(props: ICandlestickChart) {
     const apyBonus = 0.1;
     const t = 10_000_000_0000_0000n;
 
+    console.log(info.total_supply, t);
+
     if (info.total_supply < t) {
       const bonusFactor = Number((t - info.total_supply) / t) / 1_0000_0000.0;
       apy += apyBonus * bonusFactor;

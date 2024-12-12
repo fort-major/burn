@@ -25,7 +25,7 @@ use utils::{set_fetch_total_supply_timer, set_produce_new_price_timer, STATE};
 mod utils;
 
 #[update]
-fn order(req: OrderRequest) {
+fn order(req: OrderRequest) -> Order {
     let user_pid = caller();
     let now = time();
 
@@ -36,6 +36,7 @@ fn order(req: OrderRequest) {
             req.short,
             req.qty,
             req.expected_price,
+            DEV.with_borrow(|s| *s),
             now,
         )
     })
@@ -65,11 +66,7 @@ async fn deposit(qty: E8s) {
         .0
         .expect("Unable to burn tokens");
 
-    let (user_qty, lp_qty, inviter_pack) =
-        STATE.with_borrow(|s| s.calc_deposit_layout(user_pid, &qty));
-    let dev_pid = DEV.with_borrow(|d| *d);
-
-    STATE.with_borrow_mut(|s| s.deposit(user_pid, user_qty, lp_qty, dev_pid, inviter_pack));
+    STATE.with_borrow_mut(|s| s.deposit(user_pid, qty));
 }
 
 #[update]
@@ -145,7 +142,7 @@ fn get_info() -> PriceInfo {
 }
 
 #[query]
-fn get_all_trader_stats(skip: u64, take: u64) -> Vec<(Principal, TraderStats)> {
+fn get_all_trader_stats(skip: u64, take: u64) -> Vec<(Principal, TraderStats, BalancesInfo)> {
     STATE.with_borrow(|s| s.get_all_stats(skip, take))
 }
 

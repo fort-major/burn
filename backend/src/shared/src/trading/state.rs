@@ -24,6 +24,8 @@ pub struct TradingState {
     pub short_price_history_1d: StableVec<Candle, Memory>,
 
     pub order_history: Cell<OrderHistory, Memory>,
+
+    pub fees_received: StableBTreeMap<Principal, u64, Memory>,
 }
 
 impl TradingState {
@@ -81,11 +83,16 @@ impl TradingState {
         self.stats.get(pid).map(|it| it.clone()).unwrap_or_default()
     }
 
-    pub fn get_all_stats(&self, skip: u64, take: u64) -> Vec<(Principal, TraderStats)> {
+    pub fn get_all_stats(
+        &self,
+        skip: u64,
+        take: u64,
+    ) -> Vec<(Principal, TraderStats, BalancesInfo)> {
         self.stats
             .iter()
             .skip(skip as usize)
             .take(take as usize)
+            .map(|(pid, stats)| (pid, stats, self.balances.get(&pid).unwrap_or_default()))
             .collect()
     }
 
@@ -96,8 +103,9 @@ impl TradingState {
         short: bool,
         qty: E8s,
         expected_price: f64,
+        dev_pid: Principal,
         now: TimestampNs,
-    ) {
+    ) -> Order {
         let (buy, long) = (!sell, !short);
         let mut balances = self.balances.get(&pid).expect("The user is not registered");
         let mut info = self.get_price_info();
@@ -106,19 +114,29 @@ impl TradingState {
             if balances.real < qty {
                 panic!("Unable to buy, insufficient balance");
             }
+
             balances.real -= &qty;
+            let actual_qty = self.pay_fees(&balances, &qty, dev_pid);
+
+            info.total_real = Some(info.total_real.expect("Total real not enough") - &actual_qty);
 
             if long {
                 assert_slippage_fit(expected_price, info.cur_long_price);
 
-                balances.long += &qty / f64_to_e8s(info.cur_long_price);
+                let long_qty = &actual_qty / f64_to_e8s(info.cur_long_price);
+
+                balances.long += &long_qty;
+                info.total_long = Some(info.total_long.unwrap_or_default() + long_qty);
             } else {
                 assert_slippage_fit(expected_price, info.cur_short_price);
 
-                balances.short += &qty / f64_to_e8s(info.cur_short_price);
+                let short_qty = &actual_qty / f64_to_e8s(info.cur_short_price);
+
+                balances.short += &short_qty;
+                info.total_short = Some(info.total_short.unwrap_or_default() + short_qty);
             }
 
-            qty
+            actual_qty
         } else {
             let base_qty = if long {
                 assert_slippage_fit(expected_price, info.cur_long_price);
@@ -127,6 +145,8 @@ impl TradingState {
                     panic!("Unable to sell long, insufficient funds");
                 }
                 balances.long -= &qty;
+                info.total_long = Some(info.total_long.expect("Total long not enough") - &qty);
+
                 qty * f64_to_e8s(info.cur_long_price)
             } else {
                 assert_slippage_fit(expected_price, info.cur_short_price);
@@ -135,10 +155,15 @@ impl TradingState {
                     panic!("Unable to sell short, insufficient funds");
                 }
                 balances.short -= &qty;
+                info.total_short = Some(info.total_short.expect("Total short not enough") - &qty);
+
                 qty * f64_to_e8s(info.cur_short_price)
             };
 
-            balances.real += &base_qty;
+            info.total_real = Some(info.total_real.unwrap_or_default() + &base_qty);
+
+            let actual_qty = self.pay_fees(&balances, &base_qty, dev_pid);
+            balances.real += &actual_qty;
 
             base_qty
         };
@@ -147,13 +172,41 @@ impl TradingState {
         self.set_price_info(info);
 
         self.balances.insert(pid, balances);
-        self.add_order(Order {
+
+        let o = Order {
             pid,
             short,
             sell,
-            base_qty,
+            base_qty: base_qty.clone(),
             timestmap: now,
-        });
+        };
+        self.add_order(o.clone());
+
+        o
+    }
+
+    fn pay_fees(&mut self, balances: &BalancesInfo, base_qty: &E8s, dev_pid: Principal) -> E8s {
+        if let Some(inviter) = balances.inviter {
+            let inviter_qty = base_qty * E8s::from(INVITERS_CUT_E8S);
+            let lp_qty = base_qty * E8s::from(LPS_CUT_E8S);
+
+            let result = base_qty - &inviter_qty - &lp_qty;
+            self.add_real_to_balance(dev_pid, lp_qty);
+            self.add_real_to_balance(inviter, inviter_qty.clone());
+
+            let new_fees: u64 = inviter_qty.val.try_into().unwrap();
+            let prev_fees = self.fees_received.get(&inviter).unwrap_or_default();
+            self.fees_received.insert(inviter, prev_fees + new_fees);
+
+            result
+        } else {
+            let lp_qty = base_qty * E8s::from(LPS_CUT_E8S + INVITERS_CUT_E8S);
+            let result = base_qty - &lp_qty;
+
+            self.add_real_to_balance(dev_pid, lp_qty);
+
+            result
+        }
     }
 
     pub fn register(&mut self, pid: Principal, inviter: Option<Principal>) {
@@ -172,51 +225,21 @@ impl TradingState {
         );
     }
 
-    pub fn calc_deposit_layout(
-        &self,
-        pid: Principal,
-        qty: &E8s,
-    ) -> (E8s, E8s, Option<(Principal, E8s)>) {
-        let user_balances = self.balances.get(&pid).expect("The user is not registered");
+    pub fn deposit(&mut self, user_pid: Principal, user_qty: E8s) {
+        let mut info = self.get_price_info();
+        info.total_real = Some(info.total_real.unwrap_or_default() + &user_qty);
+        self.set_price_info(info);
 
-        if let Some(inviter) = user_balances.inviter {
-            if !self.balances.contains_key(&inviter) {
-                panic!("The inviter is not registered");
-            }
-
-            let inviters_cut = qty * E8s::from(INVITERS_CUT_E8S);
-            let lps_cut = qty * E8s::from(LPS_CUT_E8S);
-            let user_cut = qty - (&inviters_cut + &lps_cut);
-
-            (user_cut, lps_cut, Some((inviter, inviters_cut)))
-        } else {
-            let lps_cut = qty * (E8s::from(LPS_CUT_E8S) + E8s::from(INVITERS_CUT_E8S));
-            let user_cut = qty - &lps_cut;
-
-            (user_cut, lps_cut, None)
-        }
-    }
-
-    // call calc_deposit_layout() first
-    pub fn deposit(
-        &mut self,
-        user_pid: Principal,
-        user_qty: E8s,
-        lp_qty: E8s,
-        dev_pid: Principal,
-        inviter: Option<(Principal, E8s)>,
-    ) {
         self.add_real_to_balance(user_pid, user_qty);
-        self.add_real_to_balance(dev_pid, lp_qty);
-
-        if let Some((inviter_pid, inviter_qty)) = inviter {
-            self.add_real_to_balance(inviter_pid, inviter_qty);
-        }
     }
 
     pub fn withdraw(&mut self, pid: Principal) -> E8s {
         let mut user_balances = self.balances.get(&pid).expect("The user is not registered");
         let real = user_balances.real.clone();
+
+        let mut info = self.get_price_info();
+        info.total_real = Some(info.total_real.expect("Total real not enough") - &real);
+        self.set_price_info(info);
 
         user_balances.real = E8s::zero();
         self.balances.insert(pid, user_balances);
@@ -225,7 +248,7 @@ impl TradingState {
     }
 
     pub fn revert_withdraw(&mut self, pid: Principal, qty: E8s) {
-        self.add_real_to_balance(pid, qty);
+        self.deposit(pid, qty);
     }
 
     fn add_real_to_balance(&mut self, pid: Principal, qty: E8s) {

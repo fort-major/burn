@@ -21,6 +21,7 @@ import { useWallet } from "./wallet";
 import { DEFAULT_TOKENS } from "./tokens";
 import { IcrcLedgerCanister } from "@dfinity/ledger-icrc";
 import { stat } from "fs";
+import { createLocalStorageSignal } from "@utils/common";
 
 export interface ITradingBalances {
   real: E8s;
@@ -33,6 +34,11 @@ export interface ITraderStats {
   total_long_bought: E8s;
   total_short_bought: E8s;
   total_short_sold: E8s;
+
+  cur_real_balance: E8s;
+  cur_long_balance: E8s;
+  cur_short_balance: E8s;
+
   buy_long_timestamps: bigint[];
   buy_short_timestamps: bigint[];
   sell_short_timestamps: bigint[];
@@ -41,7 +47,6 @@ export interface ITraderStats {
 
 export interface ITradingStoreContext {
   isInvited: Accessor<boolean | undefined>;
-  myBalances: Accessor<ITradingBalances | undefined>;
   myTraderStats: Accessor<ITraderStats | undefined>;
   fetchMyInfo: Fetcher;
 
@@ -70,6 +75,9 @@ export interface ITradingStoreContext {
 
   canOrder: (short: boolean, sell: boolean, qty: E8s) => boolean;
   order: (short: boolean, sell: boolean, qty: E8s) => Promise<void>;
+
+  myOrders: Accessor<Order[] | undefined>;
+  storeMyOrder: (order: Order) => void;
 }
 
 const TradingContext = createContext<ITradingStoreContext>();
@@ -87,10 +95,9 @@ export function useTrading(): ITradingStoreContext {
 export function TradingStore(props: IChildren) {
   const { isAuthorized, assertAuthorized, assertReadyToFetch, isReadyToFetch, agent, anonymousAgent, enable, disable } =
     useAuth();
-  const { pidBalance, subaccount, transferNoDisable, fetchPidBalance } = useWallet();
+  const { pid, pidBalance, subaccount, transferNoDisable, fetchPidBalance } = useWallet();
 
-  const [isRunning, setRunning] = createSignal(true);
-  const [myBalances, setMyBalances] = createSignal<ITradingBalances>();
+  const [int, setInt] = createSignal<NodeJS.Timeout>();
   const [myTraderStats, setMyTraderStats] = createSignal<ITraderStats>();
   const [isInvited, setInvited] = createSignal<boolean>();
   const [priceInfo, setPriceInfo] = createSignal<PriceInfo>();
@@ -103,22 +110,24 @@ export function TradingStore(props: IChildren) {
   const [orderHistory, setOrderHistory] = createStore<ITradingStoreContext["orderHistory"]>();
   const [traders, setTraders] = createStore<ITradingStoreContext["traders"]>();
 
+  const [myOrders, setMyOrders] = createLocalStorageSignal<Order[]>("msq-burn-ash-market-my-orders");
+
   onMount(() => {
     if (isAuthorized()) {
       fetchMyInfo();
-      fetchPriceInfo();
     }
   });
 
   onCleanup(() => {
-    setRunning(false);
+    if (int()) {
+      clearInterval(int());
+    }
   });
 
   createEffect(
     on(isAuthorized, (ready) => {
       if (ready) {
         fetchMyInfo();
-        fetchPriceInfo();
       }
     })
   );
@@ -127,6 +136,12 @@ export function TradingStore(props: IChildren) {
     if (isReadyToFetch()) {
       fetchPriceInfo();
     }
+
+    setInt(
+      setInterval(() => {
+        if (isReadyToFetch()) fetchPriceInfo();
+      }, 10000)
+    );
   });
 
   createEffect(
@@ -136,6 +151,10 @@ export function TradingStore(props: IChildren) {
       }
     })
   );
+
+  const storeMyOrder: ITradingStoreContext["storeMyOrder"] = (order) => {
+    setMyOrders((orders) => (orders ? [order, ...orders] : [order]));
+  };
 
   const fetchTraders: ITradingStoreContext["fetchTraders"] = async () => {
     assertReadyToFetch();
@@ -148,12 +167,16 @@ export function TradingStore(props: IChildren) {
     while (true) {
       const res = await trading.get_all_trader_stats(skip, take);
 
-      for (let [pid, stats] of res) {
+      for (let [pid, stats, balance] of res) {
         const iStats: ITraderStats = {
           buy_long_timestamps: stats.buy_long_timestamps as bigint[],
           buy_short_timestamps: stats.buy_short_timestamps as bigint[],
           sell_long_timestamps: stats.sell_long_timestamps as bigint[],
           sell_short_timestamps: stats.sell_short_timestamps as bigint[],
+
+          cur_real_balance: E8s.new(balance.real),
+          cur_long_balance: E8s.new(balance.long),
+          cur_short_balance: E8s.new(balance.short),
 
           total_long_bought: E8s.new(stats.total_long_bought),
           total_long_sold: E8s.new(stats.total_long_sold),
@@ -215,8 +238,8 @@ export function TradingStore(props: IChildren) {
   const canWithdraw: ITradingStoreContext["canWithdraw"] = () => {
     if (!isAuthorized()) return false;
 
-    const b = myBalances();
-    if (!b || b.real.le(E8s.new(10_000n))) return false;
+    const b = myTraderStats();
+    if (!b || b.cur_real_balance.le(E8s.new(10_000n))) return false;
 
     return true;
   };
@@ -246,18 +269,18 @@ export function TradingStore(props: IChildren) {
 
     if (!priceInfo()) return false;
 
-    const b = myBalances();
+    const b = myTraderStats();
     if (!b) return false;
 
-    if (short && sell && b.short.lt(qty)) {
+    if (short && sell && b.cur_short_balance.lt(qty)) {
       return false;
     }
 
-    if (!short && sell && b.long.lt(qty)) {
+    if (!short && sell && b.cur_long_balance.lt(qty)) {
       return false;
     }
 
-    if (!sell && b.real.lt(qty)) {
+    if (!sell && b.cur_real_balance.lt(qty)) {
       return false;
     }
 
@@ -274,7 +297,9 @@ export function TradingStore(props: IChildren) {
 
     try {
       disable();
-      await trading.order({ short, sell, qty: qty.inner().val, expected_price: expectedPrice });
+
+      const o = await trading.order({ short, sell, qty: qty.inner().val, expected_price: expectedPrice });
+      storeMyOrder(o);
 
       fetchMyInfo();
     } finally {
@@ -335,10 +360,6 @@ export function TradingStore(props: IChildren) {
     }
 
     setPriceInfo(info);
-
-    if (isRunning()) {
-      setTimeout(fetchPriceInfo, 1000 * 10);
-    }
   };
 
   const fetchMyInfo = async () => {
@@ -354,16 +375,15 @@ export function TradingStore(props: IChildren) {
 
     const [[b, s]] = resp;
 
-    const balances: ITradingBalances = {
-      long: E8s.new(b.long),
-      short: E8s.new(b.short),
-      real: E8s.new(b.real),
-    };
     const stats: ITraderStats = {
       total_long_bought: E8s.new(s.total_long_bought),
       total_long_sold: E8s.new(s.total_long_sold),
       total_short_bought: E8s.new(s.total_short_bought),
       total_short_sold: E8s.new(s.total_short_sold),
+
+      cur_long_balance: E8s.new(b.long),
+      cur_short_balance: E8s.new(b.short),
+      cur_real_balance: E8s.new(b.real),
 
       buy_long_timestamps: s.buy_long_timestamps as bigint[],
       buy_short_timestamps: s.buy_short_timestamps as bigint[],
@@ -375,7 +395,6 @@ export function TradingStore(props: IChildren) {
 
     batch(() => {
       setInvited(true);
-      setMyBalances(balances);
       setMyTraderStats(stats);
     });
   };
@@ -392,7 +411,6 @@ export function TradingStore(props: IChildren) {
   return (
     <TradingContext.Provider
       value={{
-        myBalances,
         myTraderStats,
         isInvited: cachedIsInvited,
         fetchMyInfo,
@@ -422,6 +440,9 @@ export function TradingStore(props: IChildren) {
 
         canOrder,
         order,
+
+        myOrders,
+        storeMyOrder,
       }}
     >
       {props.children}

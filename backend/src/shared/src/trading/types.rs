@@ -28,9 +28,9 @@ pub const VOLATILITY_SPIKE_CHACE: f64 = 0.1;
 
 pub const DEFAULT_TOTAL_SUPPLY: u64 = 10_000_000_0000_0000u64;
 
-// %0.3 fee, %0.15 for the inviter, %0.15 for the LPs
-pub const INVITERS_CUT_E8S: u64 = 0_0015_0000;
-pub const LPS_CUT_E8S: u64 = 0_0015_0000;
+// %0.3 fee, %0.24 for the inviter, %0.06 for the LPs
+pub const INVITERS_CUT_E8S: u64 = 0_0024_0000;
+pub const LPS_CUT_E8S: u64 = 0_0006_0000;
 
 pub const MAX_SLIPPAGE: f64 = 0.001;
 
@@ -222,51 +222,31 @@ pub struct TraderStats {
     pub total_long_sold: E8s,
     pub total_short_sold: E8s,
 
+    // WARNING: UNUSED
     pub buy_long_timestamps: Vec<TimestampNs>,
+    // WARNING: UNUSED
     pub buy_short_timestamps: Vec<TimestampNs>,
+    // WARNING: UNUSED
     pub sell_long_timestamps: Vec<TimestampNs>,
+    // WARNING: UNUSED
     pub sell_short_timestamps: Vec<TimestampNs>,
 }
 
 impl TraderStats {
-    pub fn add_buy_long(&mut self, qty: &E8s, now: TimestampNs) {
+    pub fn add_buy_long(&mut self, qty: &E8s, _now: TimestampNs) {
         self.total_long_bought += qty;
-
-        if self.buy_long_timestamps.len() == 30 {
-            self.buy_long_timestamps.remove(0);
-        }
-
-        self.buy_long_timestamps.push(now);
     }
 
-    pub fn add_buy_short(&mut self, qty: &E8s, now: TimestampNs) {
+    pub fn add_buy_short(&mut self, qty: &E8s, _now: TimestampNs) {
         self.total_short_bought += qty;
-
-        if self.buy_short_timestamps.len() == 30 {
-            self.buy_short_timestamps.remove(0);
-        }
-
-        self.buy_short_timestamps.push(now);
     }
 
-    pub fn add_sell_long(&mut self, qty: &E8s, now: TimestampNs) {
+    pub fn add_sell_long(&mut self, qty: &E8s, _now: TimestampNs) {
         self.total_long_sold += qty;
-
-        if self.sell_long_timestamps.len() == 30 {
-            self.sell_long_timestamps.remove(0);
-        }
-
-        self.sell_long_timestamps.push(now);
     }
 
-    pub fn add_sell_short(&mut self, qty: &E8s, now: TimestampNs) {
+    pub fn add_sell_short(&mut self, qty: &E8s, _now: TimestampNs) {
         self.total_short_sold += qty;
-
-        if self.sell_short_timestamps.len() == 30 {
-            self.sell_short_timestamps.remove(0);
-        }
-
-        self.sell_short_timestamps.push(now);
     }
 }
 
@@ -294,6 +274,9 @@ pub struct PriceInfo {
     pub cur_step: u64,
 
     pub total_supply: E8s,
+    pub total_real: Option<E8s>,
+    pub total_long: Option<E8s>,
+    pub total_short: Option<E8s>,
 
     pub cur_4h_long_candle: Candle,
     pub cur_4h_short_candle: Candle,
@@ -312,6 +295,9 @@ impl PriceInfo {
             target_price: START_PRICE,
 
             cur_step: 0,
+            total_real: None,
+            total_long: None,
+            total_short: None,
 
             total_supply: E8s::from(DEFAULT_TOTAL_SUPPLY),
 
@@ -531,7 +517,7 @@ mod tests {
 
     use super::{PriceInfo, STEPS_PER_DAY};
 
-    const TOTAL_POINTS: u64 = STEPS_PER_DAY * 7;
+    const TOTAL_POINTS: u64 = STEPS_PER_DAY * 30;
 
     #[test]
     fn generate_example_price_chart() {

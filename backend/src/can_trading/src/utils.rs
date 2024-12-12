@@ -36,6 +36,7 @@ thread_local! {
             short_price_history_1d: StableVec::init(MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(6))),).expect("Unable to create price history vec 4"),
 
             order_history: Cell::init(MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(7))), OrderHistory::default()).expect("Unable to create order history cell"),
+            fees_received: StableBTreeMap::init(MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(8))),),
         }
     );
 }
