@@ -74,6 +74,7 @@ service : () -> {
   receive_cycles : () -> ();
   register : (principal, opt principal) -> ();
   subaccount_of : (principal) -> (blob) query;
+  user_referral_profit : () -> (nat) query;
   withdraw : () -> (Result);
   withdraw_from_user_subaccount : (principal, nat) -> ();
 }

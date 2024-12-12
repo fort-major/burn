@@ -69,6 +69,7 @@ export function TradingPage() {
     fetchTraders,
     isInvited,
     myOrders,
+    myFeesEarned,
   } = useTrading();
   const {
     myInvite,
@@ -390,7 +391,7 @@ export function TradingPage() {
           roi,
         };
       })
-      .filter((it) => it.profitPositive);
+      .filter((it) => it.profitPositive && it.totalInvestedE8s.ge(E8s.new(100_0000_0000n)));
 
     // sorting in reverse
     allTraders.sort((a, b) => {
@@ -645,8 +646,16 @@ export function TradingPage() {
               <p class="text-white font-semibold text-xl flex gap-4 items-center">Invite To Earn</p>
               <p class="text-md text-gray-140">
                 Ash Market is a closed community. Only awesome people like you are welcome here. You earn{" "}
-                <span class="font-semibold text-orange">0.15%</span> of all BURN deposits your invitees make.
+                <span class="font-semibold text-orange">0.24%</span> of all swaps your invitees make.
               </p>
+
+              <div class="flex flex-row gap-4 items-baseline justify-between">
+                <p class="text-4xl font-semibold flex items-baseline gap-2">
+                  {myFeesEarned().toShortString({ belowOne: 4, belowThousand: 2, afterThousand: 2 })}
+                  <span class="text-gray-140 text-md">BURN</span>
+                </p>
+                <p class="text-xs font-semibold">Total Earned</p>
+              </div>
 
               <div class="flex flex-col gap-4">
                 <p class="text-xs font-semibold">Copy your unique invite link and pass it to the invitee</p>
@@ -825,15 +834,15 @@ export function TradingPage() {
 
             <div class="flex flex-row gap-8 sm:gap-12 flex-wrap">
               <div class="flex gap-2 items-baseline">
-                <p class="font-semibold text-4xl">
+                <p class="font-semibold text-3xl">
                   {myStats()!.totalInvestedE8s.toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}
                 </p>
-                <p>Total Invested</p>
+                <p>Total Volume</p>
               </div>
 
               <div class="flex gap-2 items-baseline">
                 <p
-                  class="col-span-1 font-semibold text-4xl"
+                  class="col-span-1 font-semibold text-3xl"
                   classList={{ "text-green": myStats()!.profitPositive, "text-errorRed": !myStats()!.profitPositive }}
                 >
                   {myStats()!.profitE8s.toShortString({ belowOne: 2, belowThousand: 1, afterThousand: 2 })}
@@ -843,7 +852,7 @@ export function TradingPage() {
 
               <div class="flex gap-2 items-baseline">
                 <p
-                  class="col-span-1 font-semibold text-4xl"
+                  class="col-span-1 font-semibold text-3xl"
                   classList={{ "text-green": myStats()!.profitPositive, "text-errorRed": !myStats()!.profitPositive }}
                 >
                   {myStats()!.roi.toPercent().toShortString({ belowOne: 3, belowThousand: 1, afterThousand: 1 })}%

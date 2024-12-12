@@ -78,6 +78,8 @@ export interface ITradingStoreContext {
 
   myOrders: Accessor<Order[] | undefined>;
   storeMyOrder: (order: Order) => void;
+
+  myFeesEarned: Accessor<E8s>;
 }
 
 const TradingContext = createContext<ITradingStoreContext>();
@@ -112,9 +114,12 @@ export function TradingStore(props: IChildren) {
 
   const [myOrders, setMyOrders] = createLocalStorageSignal<Order[]>("msq-burn-ash-market-my-orders");
 
+  const [myFeesEarned, setMyFeesEarned] = createSignal<E8s>(E8s.zero());
+
   onMount(() => {
     if (isAuthorized()) {
       fetchMyInfo();
+      fetchMyFeesEarned();
     }
   });
 
@@ -128,6 +133,7 @@ export function TradingStore(props: IChildren) {
     on(isAuthorized, (ready) => {
       if (ready) {
         fetchMyInfo();
+        fetchMyFeesEarned();
       }
     })
   );
@@ -151,6 +157,16 @@ export function TradingStore(props: IChildren) {
       }
     })
   );
+
+  const fetchMyFeesEarned = async () => {
+    assertAuthorized();
+
+    const trading = newTradingActor(anonymousAgent()!);
+
+    const v = await trading.user_referral_profit();
+
+    setMyFeesEarned(E8s.new(v));
+  };
 
   const storeMyOrder: ITradingStoreContext["storeMyOrder"] = (order) => {
     setMyOrders((orders) => (orders ? [order, ...orders] : [order]));
@@ -443,6 +459,8 @@ export function TradingStore(props: IChildren) {
 
         myOrders,
         storeMyOrder,
+
+        myFeesEarned,
       }}
     >
       {props.children}

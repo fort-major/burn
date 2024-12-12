@@ -157,6 +157,11 @@ fn get_order_history() -> Vec<Order> {
 }
 
 #[query]
+fn user_referral_profit() -> E8s {
+    STATE.with_borrow(|s| E8s::from(s.fees_received.get(&caller()).unwrap_or_default()))
+}
+
+#[query]
 fn subaccount_of(pid: Principal) -> Subaccount {
     Subaccount::from(pid)
 }
