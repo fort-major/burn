@@ -61,6 +61,7 @@ type TraderStats = record {
   sell_long_timestamps : vec nat64;
 };
 service : () -> {
+  all_users_referral_profits : () -> (vec record { principal; nat64 }) query;
   deposit : (nat) -> ();
   get_all_trader_stats : (nat64, nat64) -> (
       vec record { principal; TraderStats; BalancesInfo },

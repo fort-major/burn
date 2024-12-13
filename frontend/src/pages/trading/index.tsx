@@ -16,7 +16,7 @@ import { delay, Principal } from "@fort-major/msq-shared";
 import { areWeOnMobile } from "@pages/home";
 import { useLocation, useNavigate, useSearchParams } from "@solidjs/router";
 import { useAuth } from "@store/auth";
-import { DEFAULT_TOKENS } from "@store/tokens";
+import { DEFAULT_TOKENS, useTokens } from "@store/tokens";
 import { useTrading } from "@store/trading";
 import { useTradingInvites } from "@store/trading-invites";
 import { useWallet } from "@store/wallet";
@@ -70,6 +70,8 @@ export function TradingPage() {
     isInvited,
     myOrders,
     myFeesEarned,
+    referrers,
+    fetchReferrers,
   } = useTrading();
   const {
     myInvite,
@@ -82,6 +84,7 @@ export function TradingPage() {
   } = useTradingInvites();
   const { pidBalance, pid } = useWallet();
   const { isReadyToFetch, isAuthorized, identity, disabled } = useAuth();
+  const { icpSwapUsdExchangeRates } = useTokens();
   const navigate = useNavigate();
   const [{ invite }] = useSearchParams<{ invite: string }>();
 
@@ -133,12 +136,20 @@ export function TradingPage() {
     if (isReadyToFetch() && Object.keys(traders).length === 0) {
       fetchTraders();
     }
+
+    if (isReadyToFetch() && Object.keys(referrers).length === 0) {
+      fetchReferrers();
+    }
   });
 
   createEffect(
     on(isReadyToFetch, (ready) => {
       if (ready && Object.keys(traders).length === 0) {
         fetchTraders();
+      }
+
+      if (ready && Object.keys(referrers).length === 0) {
+        fetchReferrers();
       }
     })
   );
@@ -415,6 +426,27 @@ export function TradingPage() {
     });
 
     return allTraders.slice(0, 25);
+  });
+
+  const topReferrers = createMemo(() => {
+    const burnUsdExchangeRate = icpSwapUsdExchangeRates[DEFAULT_TOKENS.burn.toText()];
+    if (!burnUsdExchangeRate) return [];
+
+    return Object.entries(referrers)
+      .sort((a, b) => {
+        if (a[1].lt(b[1])) return 1;
+        if (a[1].gt(b[1])) return -1;
+
+        return 0;
+      })
+      .slice(0, 25)
+      .map(([pid, val]) => {
+        return {
+          pid: Principal.fromText(pid),
+          val,
+          valUsd: val.mul(burnUsdExchangeRate),
+        };
+      });
   });
 
   const curOrder = () => {
@@ -952,6 +984,67 @@ export function TradingPage() {
                           classList={{ "text-green": trader.profitPositive, "text-errorRed": !trader.profitPositive }}
                         >
                           {trader.roi.toPercent().toShortString({ belowOne: 3, belowThousand: 1, afterThousand: 1 })}%
+                        </p>
+                      </div>
+                    );
+                  }}
+                </For>
+              </div>
+            </div>
+          </div>
+        </Show>
+
+        <Show when={topReferrers().length > 0}>
+          <div class="flex flex-col gap-6">
+            <div class="flex flex-col gap-2">
+              <p class="text-white font-semibold text-4xl flex gap-4 items-center">Best Referrers</p>
+              <p class="text-gray-140 text-xs">
+                These guys shared their invite link with other people and earn fees doing nothing
+              </p>
+            </div>
+            <div class="flex flex-col gap-4">
+              <div class="mb-2 grid grid-cols-3 md:grid-cols-4 items-start md:items-center gap-3 text-xs font-semibold text-gray-140">
+                <p class="col-span-1 text-right"></p>
+                <p class="col-span-1 text-right hidden md:block">PID</p>
+                <p class="col-span-1 text-right">Total Profit (BURN)</p>
+                <p class="col-span-1 text-right">Total Profit (USD)</p>
+              </div>
+
+              <div class="flex flex-col gap-2">
+                <For each={topReferrers()} fallback={<p class="text-sm text-gray-140">Nothing here yet :(</p>}>
+                  {(referrer, idx) => {
+                    return (
+                      <div class="grid p-2 grid-cols-3 md:grid-cols-4 items-center gap-3 odd:bg-gray-105 even:bg-black relative">
+                        <div class="flex items-center gap-1 col-span-1">
+                          <p
+                            class="text-xs text-gray-140 font-semibold min-w-7"
+                            classList={{
+                              ["text-white"]: identity()?.getPrincipal().compareTo(referrer.pid) === "eq",
+                            }}
+                          >
+                            {idx() + 1}
+                          </p>
+                          <Avatar
+                            url={avatarSrcFromPrincipal(referrer.pid)}
+                            size="sm"
+                            borderColor={
+                              identity()?.getPrincipal().compareTo(referrer.pid) === "eq"
+                                ? COLORS.chartreuse
+                                : COLORS.gray[140]
+                            }
+                          />
+                        </div>
+                        <Copyable
+                          class="col-span-1 hidden md:flex"
+                          text={referrer.pid.toText()}
+                          ellipsis
+                          ellipsisSymbols={15}
+                        />
+                        <p class="col-span-1 font-semibold text-md text-right text-gray-140">
+                          {referrer.val.toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })}
+                        </p>
+                        <p class="col-span-1 font-semibold text-md text-right text-gray-140">
+                          ${referrer.valUsd.toShortString({ belowOne: 4, belowThousand: 1, afterThousand: 2 })}
                         </p>
                       </div>
                     );

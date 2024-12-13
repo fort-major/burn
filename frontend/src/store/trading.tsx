@@ -80,6 +80,8 @@ export interface ITradingStoreContext {
   storeMyOrder: (order: Order) => void;
 
   myFeesEarned: Accessor<E8s>;
+  referrers: Store<Record<string, E8s>>;
+  fetchReferrers: () => Promise<void>;
 }
 
 const TradingContext = createContext<ITradingStoreContext>();
@@ -115,6 +117,7 @@ export function TradingStore(props: IChildren) {
   const [myOrders, setMyOrders] = createLocalStorageSignal<Order[]>("msq-burn-ash-market-my-orders");
 
   const [myFeesEarned, setMyFeesEarned] = createSignal<E8s>(E8s.zero());
+  const [referrers, setReferrers] = createStore<ITradingStoreContext["referrers"]>();
 
   onMount(() => {
     if (isAuthorized()) {
@@ -170,6 +173,17 @@ export function TradingStore(props: IChildren) {
 
   const storeMyOrder: ITradingStoreContext["storeMyOrder"] = (order) => {
     setMyOrders((orders) => (orders ? [order, ...orders] : [order]));
+  };
+
+  const fetchReferrers: ITradingStoreContext["fetchReferrers"] = async () => {
+    assertReadyToFetch();
+
+    const trading = newTradingActor(anonymousAgent()!);
+
+    const resp = await trading.all_users_referral_profits();
+    for (let [pid, profit] of resp) {
+      setReferrers(pid.toText(), E8s.new(profit));
+    }
   };
 
   const fetchTraders: ITradingStoreContext["fetchTraders"] = async () => {
@@ -461,6 +475,8 @@ export function TradingStore(props: IChildren) {
         storeMyOrder,
 
         myFeesEarned,
+        referrers,
+        fetchReferrers,
       }}
     >
       {props.children}

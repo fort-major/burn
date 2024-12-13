@@ -162,6 +162,11 @@ fn user_referral_profit() -> E8s {
 }
 
 #[query]
+fn all_users_referral_profits() -> Vec<(Principal, u64)> {
+    STATE.with_borrow(|s| s.fees_received.iter().collect())
+}
+
+#[query]
 fn subaccount_of(pid: Principal) -> Subaccount {
     Subaccount::from(pid)
 }

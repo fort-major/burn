@@ -71,5 +71,6 @@ async fn fetch_burn_total_supply() {
     STATE.with_borrow_mut(|s| {
         let mut info = s.get_price_info();
         info.total_supply = E8s::new(total_supply.0);
+        s.set_price_info(info);
     });
 }
