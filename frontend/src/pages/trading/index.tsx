@@ -831,7 +831,7 @@ export function TradingPage() {
               >
                 <p class="text-white font-semibold text-md">
                   <Show when={totalLockedPercent()!.l > 10} fallback=" ">
-                    {E8s.new(optUnwrap(priceInfo()!.total_long)!).toShortString({
+                    {E8s.new(optUnwrap(priceInfo()!.total_long)!).mul(E8s.fromFloat(priceInfo()!.cur_long_price)).toShortString({
                       belowOne: 2,
                       belowThousand: 1,
                       afterThousand: 2,
@@ -847,7 +847,7 @@ export function TradingPage() {
               >
                 <p class="text-white font-semibold text-md">
                   <Show when={totalLockedPercent()!.s > 10} fallback=" ">
-                    {E8s.new(optUnwrap(priceInfo()!.total_short)!).toShortString({
+                    {E8s.new(optUnwrap(priceInfo()!.total_short)!).mul(E8s.fromFloat(priceInfo()!.cur_short_price)).toShortString({
                       belowOne: 2,
                       belowThousand: 1,
                       afterThousand: 2,
