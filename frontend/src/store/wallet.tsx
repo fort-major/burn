@@ -313,6 +313,7 @@ export function WalletStore(props: IChildren) {
   };
 
   const moveIcpToPoolAccount: IWalletStoreContext["moveIcpToPoolAccount"] = async (qty) => {
+    err(ErrorCode.UNKNOWN, "Temporarily unavailable");
     assertAuthorized();
 
     try {
@@ -348,6 +349,7 @@ export function WalletStore(props: IChildren) {
   };
 
   const moveToBonfireAccount: IWalletStoreContext["moveToBonfireAccount"] = async (tokenCanId, qty) => {
+    err(ErrorCode.UNKNOWN, "Temporarily unavailable");
     assertAuthorized();
 
     try {

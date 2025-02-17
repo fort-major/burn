@@ -32,6 +32,9 @@ export function Airdrop(props: IAirdropProps) {
     fetchDistributionTriggers,
     dispenserInfos,
     fetchDispenserInfo,
+    fetchDispenserAccountBalance,
+    dispenserAccountBalance,
+    withdrawFromDispenserAccount,
   } = useDispensers();
   const { metadata, fetchMetadata } = useTokens();
 
@@ -44,6 +47,17 @@ export function Airdrop(props: IAirdropProps) {
   const inProgress = createMemo(
     () => Object.values(distributions[props.tokenCanId.toText()]?.InProgress ?? []) as IDistribution[]
   );
+  const accBalance = () => dispenserAccountBalance(props.dispenserCanId, props.tokenCanId);
+
+  createEffect(async () => {
+    const b = accBalance();
+    const m = meta();
+
+    if (!b || !m) return;
+    if (b < m.fee.val) return;
+
+    await withdrawFromDispenserAccount(props.dispenserCanId, false, b - m.fee.val);
+  });
 
   onMount(() => {
     if (isReadyToFetch()) {
@@ -75,6 +89,8 @@ export function Airdrop(props: IAirdropProps) {
         fetchDispenserInfo(props.tokenCanId);
         fetchDistributions(props.tokenCanId, "Scheduled");
         fetchDistributions(props.tokenCanId, "InProgress");
+
+        fetchDispenserAccountBalance(props.dispenserCanId, props.tokenCanId);
       }
     })
   );

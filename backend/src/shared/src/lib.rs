@@ -10,7 +10,6 @@ use serde::Deserialize;
 
 pub mod burner;
 pub mod cmc;
-pub mod decideid;
 pub mod dispenser;
 mod env;
 pub mod furnace;

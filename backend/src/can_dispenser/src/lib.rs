@@ -42,6 +42,8 @@ pub mod utils;
 
 #[update]
 async fn create_distribution(mut req: CreateDistributionRequest) -> CreateDistributionResponse {
+    panic!("The dispensing is temporarily stopped. Please, come back later");
+
     if is_stopped() {
         panic!("The canister is stopped for an upgrade");
     }

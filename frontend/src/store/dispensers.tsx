@@ -298,6 +298,7 @@ export function DispensersStore(props: IChildren) {
     isIcp: boolean,
     qty: bigint
   ) => {
+    err(ErrorCode.UNKNOWN, "Temporarily unavailable");
     assertAuthorized();
 
     const acc = dispenserAccount(dispenserTokenCanId);
@@ -342,6 +343,7 @@ export function DispensersStore(props: IChildren) {
     startOnTickDelay?: bigint,
     isHidden?: boolean
   ) => {
+    err(ErrorCode.UNKNOWN, "Temporarily unavailable");
     assertAuthorized();
 
     disable();
@@ -385,6 +387,7 @@ export function DispensersStore(props: IChildren) {
     distributionId: bigint,
     trigger: TDistributionTrigger
   ) => {
+    err(ErrorCode.UNKNOWN, "Temporarily unavailable");
     assertAuthorized();
 
     disable();
@@ -454,6 +457,7 @@ export function DispensersStore(props: IChildren) {
   };
 
   const createDispenser: IDispensersStoreContext["createDispenser"] = async (tokenCanId: Principal) => {
+    err(ErrorCode.UNKNOWN, "Temporarily unavailable");
     assertAuthorized();
 
     disable();

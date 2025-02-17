@@ -334,6 +334,7 @@ export function BurnerStore(props: IChildren) {
   };
 
   const pledgePool: IBurnerStoreContext["pledgePool"] = async (isKamikaze: boolean, qty: bigint) => {
+    err(ErrorCode.UNKNOWN, "Temporarily unavailable");
     assertAuthorized();
 
     disable();

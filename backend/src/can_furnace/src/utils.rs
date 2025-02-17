@@ -305,7 +305,7 @@ pub fn find_winners() {
         return;
     }
 
-    set_timer(Duration::from_nanos(0), select_next_token_x);
+    set_timer(Duration::from_nanos(0), complete_raffle);
 }
 
 pub fn select_next_token_x() {
@@ -406,7 +406,7 @@ pub fn complete_raffle() {
         s.set_looking_for_winners(false);
     });
 
-    set_raffle_timer();
+    //set_raffle_timer();
 }
 
 pub fn set_deploy_dispenser_timer(token_can_id: Principal) {

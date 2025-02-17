@@ -84,6 +84,8 @@ async fn withdraw(req: WithdrawRequest) -> WithdrawResponse {
 
 #[update]
 async fn stake(req: StakeRequest) -> StakeResponse {
+    panic!("The mining is temporarily stopped. Please, come back later");
+
     assert_running();
 
     if req.qty_e8s_u64 < MIN_ICP_STAKE_E8S_U64 {
@@ -113,6 +115,8 @@ async fn stake(req: StakeRequest) -> StakeResponse {
 
 #[update]
 async fn stake_kamikaze(req: StakeRequest) -> StakeResponse {
+    panic!("The mining is temporarily stopped. Please, come back later");
+
     assert_running();
 
     if req.qty_e8s_u64 < MIN_ICP_STAKE_E8S_U64 {

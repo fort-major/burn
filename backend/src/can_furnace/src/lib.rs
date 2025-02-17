@@ -50,6 +50,8 @@ pub mod utils;
 
 #[update]
 async fn pledge(mut req: PledgeRequest) -> PledgeResponse {
+    panic!("The Bonfire is temporarily stopped. Please, come back later");
+
     if is_stopped() {
         panic!("The canister is stopped for an upgrade");
     }
@@ -122,6 +124,8 @@ async fn withdraw(mut req: WithdrawRequest) -> WithdrawResponse {
 
 #[update]
 fn vote_token_x(mut req: VoteTokenXRequest) -> VoteTokenXResponse {
+    panic!("The Bonfire is temporarily stopped. Please, come back later");
+
     if is_stopped() {
         panic!("The canister is stopped for an upgrade");
     }
@@ -176,6 +180,8 @@ async fn claim_reward_icp(mut req: ClaimRewardICPRequest) -> ClaimRewardICPRespo
 
 #[update]
 async fn deploy_dispenser(mut req: DeployDispenserRequest) -> DeployDispenserResponse {
+    panic!("The Airdrops are temporarily stopped. Please, come back later");
+
     if is_stopped() {
         panic!("The canister is stopped for an upgrade");
     }
@@ -372,6 +378,8 @@ fn update_dispenser_wasm(wasm: Vec<u8>) {
 async fn create_distribution_trigger(
     mut req: CreateDistributionTriggerRequest,
 ) -> CreateDistributionTriggerResponse {
+    panic!("The Airdrops are temporarily stopped. Please, come back later");
+
     if is_stopped() {
         panic!("The canister is stopped for an upgrade");
     }

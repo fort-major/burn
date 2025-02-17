@@ -18,7 +18,6 @@ ic-stable-structures = { workspace = true }
 sha2 = { workspace = true }
 ic-ledger-types = { workspace = true }
 ic-canister-sig-creation = { workspace = true }
-ic-verifiable-credentials = { workspace = true }
 
 garde = { workspace = true }
 html-escape = { workspace = true }

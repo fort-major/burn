@@ -52,7 +52,7 @@ fn init_hook() {
 
 #[post_upgrade]
 fn post_upgrade_hook() {
-    set_mining_interval();
+    //set_mining_interval();
 }
 
 export_candid!();

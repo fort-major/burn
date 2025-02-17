@@ -372,6 +372,7 @@ export function FurnaceStore(props: IChildren) {
   };
 
   const pledge: IFurnaceStoreContext["pledge"] = async (req: IPledgeRequest) => {
+    err(ErrorCode.UNKNOWN, "Temporarily unavailable");
     assertAuthorized();
 
     const meta = metadata[req.tokenCanId.toText()];
@@ -406,6 +407,7 @@ export function FurnaceStore(props: IChildren) {
   };
 
   const voteTokenX: IFurnaceStoreContext["voteTokenX"] = async (req: TTokenXVote) => {
+    err(ErrorCode.UNKNOWN, "Temporarily unavailable");
     assertAuthorized();
 
     disable();
