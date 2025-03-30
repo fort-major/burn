@@ -68,14 +68,17 @@ service : () -> {
     ) query;
   get_cycles_balance : () -> (nat) query;
   get_info : () -> (PriceInfo) query;
+  get_my_subaccount : () -> (blob) query;
   get_order_history : () -> (vec Order) query;
   get_price_history : (GetPriceHistoryRequest) -> (vec Candle) query;
   get_user_balances : () -> (opt record { BalancesInfo; TraderStats }) query;
+  list_balances : () -> (vec record { principal; BalancesInfo }) query;
   order : (OrderRequest) -> (Order);
   receive_cycles : () -> ();
   register : (principal, opt principal) -> ();
   subaccount_of : (principal) -> (blob) query;
   user_referral_profit : () -> (nat) query;
   withdraw : () -> (Result);
+  withdraw_all : () -> ();
   withdraw_from_user_subaccount : (principal, nat) -> ();
 }

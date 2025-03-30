@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use candid::{Nat, Principal};
+use candid::{de, Nat, Principal};
 use ic_cdk::{
     api::{
         call::{msg_cycles_accept128, msg_cycles_available128},
@@ -352,9 +352,9 @@ fn init_hook(args: InitArgs) {
 
 #[post_upgrade]
 fn post_upgrade_hook() {
-    set_transform_icp_fee_to_cycles_timer();
-    set_tick_timer(true);
     set_transfer_dev_fee_to_furnace_timer();
+
+    set_init_canister_one_timer();
 }
 
 export_candid!();

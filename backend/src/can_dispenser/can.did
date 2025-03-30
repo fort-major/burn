@@ -72,12 +72,15 @@ type WithdrawUserTokensRequest = record { to : Account; icp : bool; qty : nat };
 type WithdrawUserTokensResponse = record { block_idx : nat };
 service : (InitArgs) -> {
   cancel_distribution : (CancelDistributionRequest) -> (record {});
+  claim_all_tokens : () -> ();
   claim_tokens : (ClaimTokensRequest) -> (ClaimTokensResponse);
   create_distribution : (CreateDistributionRequest) -> (
       CancelDistributionRequest,
     );
   furnace_trigger_distribution : (CancelDistributionRequest) -> (record {});
   get_account_ids : () -> (vec record { text; record { blob; Account } }) query;
+  get_all_unclaimed_tokens : () -> (vec record { principal; nat }) query;
+  get_all_unclaimed_tokens_sum : () -> (EDs) query;
   get_current_distribution_info : () -> (CurrentDistributionInfo) query;
   get_cycles_balance : () -> (nat) query;
   get_distribution : (nat64) -> (opt Distribution) query;

@@ -5,12 +5,12 @@ import { Logo } from "@components/logo";
 import { Modal } from "@components/modal";
 import { ProfileMicro, ProfileMini } from "@components/profile/profile";
 import { areWeOnMobile } from "@pages/home";
-import { A, useNavigate } from "@solidjs/router";
+import { A, useLocation, useNavigate } from "@solidjs/router";
 import { TAuthProvider, useAuth } from "@store/auth";
 import { COLORS } from "@utils/colors";
 import { ErrorCode, logErr } from "@utils/error";
 import { eventHandler } from "@utils/security";
-import { createSignal, Match, Show, Switch } from "solid-js";
+import { createSignal, Match, onMount, Show, Switch } from "solid-js";
 
 export interface IHeaderProps {
   class?: string;
@@ -18,9 +18,14 @@ export interface IHeaderProps {
 
 export function Header(props: IHeaderProps) {
   const navigate = useNavigate();
+  const {pathname} = useLocation();
   const { isAuthorized, authorize, deauthorize } = useAuth();
   const [expanded, setExpanded] = createSignal(false);
   const [authModalVisible, setAuthModalVisible] = createSignal(false);
+
+  onMount(() => {
+    if (pathname != "/") navigate("/");
+  });
 
   const handleAuth = async (provider: TAuthProvider) => {
     if (areWeOnMobile() && provider === "MSQ") {
@@ -30,8 +35,6 @@ export function Header(props: IHeaderProps) {
 
     await authorize(provider, false);
     setAuthModalVisible(false);
-
-    navigate(ROOT.$.pool.path);
   };
 
   const handleSignInClick = () => {
@@ -93,60 +96,6 @@ export function Header(props: IHeaderProps) {
           }}
         >
           <nav class="flex flex-col md:flex-row items-center gap-10 font-semibold text-white">
-            <A
-              activeClass="underline"
-              class="hover:underline"
-              onClick={eventHandler(() => {
-                setExpanded(false);
-              })}
-              href={ROOT.$.market.path}
-            >
-              Ash Market
-            </A>
-
-            <A
-              activeClass="underline"
-              class="hover:underline"
-              onClick={eventHandler(() => {
-                setExpanded(false);
-              })}
-              href={ROOT.$.pool.path}
-            >
-              Pool
-            </A>
-
-            <A
-              activeClass="underline"
-              class="hover:underline"
-              onClick={eventHandler(() => {
-                setExpanded(false);
-              })}
-              href={ROOT.$.bonfire.path}
-            >
-              Bonfire
-            </A>
-
-            <A
-              activeClass="underline"
-              class="hover:underline"
-              onClick={eventHandler(() => {
-                setExpanded(false);
-              })}
-              href={ROOT.$.airdrops.$["/"].path}
-            >
-              Airdrops
-            </A>
-
-            <A
-              activeClass="underline"
-              class="hover:underline"
-              onClick={eventHandler(() => {
-                setExpanded(false);
-              })}
-              href={ROOT.$.info.path}
-            >
-              Info
-            </A>
           </nav>
 
           <Switch>

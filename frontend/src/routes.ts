@@ -27,28 +27,6 @@ export const ROOT = route({
     "/": route({
       component: HomePage,
     }),
-    market: route({
-      component: TradingPage,
-    }),
-    pool: route({
-      component: PoolPage,
-    }),
-    bonfire: route({
-      component: BonfirePage,
-    }),
-    airdrops: route({
-      $: {
-        "/": route({
-          component: AirdropsPage,
-        }),
-        create: route({
-          component: CreateAirdropPage,
-        }),
-      },
-    }),
-    info: route({
-      component: InfoPage,
-    }),
   },
 });
 

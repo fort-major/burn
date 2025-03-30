@@ -1,12 +1,65 @@
 import { Copyable } from "@components/copyable";
 import { EIconKind, Icon } from "@components/icon";
-import { useAuth } from "@store/auth";
-import { useBurner } from "@store/burner";
+import { Modal } from "@components/modal";
 import { COLORS } from "@utils/colors";
 import { E8s } from "@utils/math";
 import { eventHandler } from "@utils/security";
 import { IClass, ONE_MIN_NS, ONE_SEC_NS } from "@utils/types";
 import { createEffect, createSignal, For, JSX, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
+
+const modal = (onClose: () => void) => {
+  return <Modal onClose={onClose}>
+    <div class="flex flex-col gap-4 max-w-4xl">
+      
+    <p>Dear $BURN Community,</p>  
+
+<p>
+What an incredible 6-month journey it’s been! Together, we’ve explored innovative ideas and mechanics, and we are so grateful for the passion and engagement you’ve shown throughout this experience. Over this time, we introduced:  
+</p>
+
+<ul>
+  <li>
+1. $BURN Mining, where you burned your $ICP to receive $BURN, even contributing to making $ICP deflationary.  
+  </li>
+  <li>
+2. Bonfire Lottery, giving everyone the chance to win a Prize Fund sourced from a portion of the $ICP pledged for mining.  
+  </li>
+  <li>
+3. Airdrop Machine, a tool designed to create fair and transparent airdrops for our community of Bonfire participants and $BURN miners.  
+  </li>
+  <li>
+4. Ash Market, a unique, experimental prediction game with randomly moving imaginary price trends.  
+  </li>
+</ul>
+
+<p>
+While we’ve worked hard to bring these mechanics to life, it’s clear that these ideas haven’t resonated with the broader $ICP community as much as we had hoped. And that’s okay—we see this as a learning experience and an opportunity to grow. Unlike others who might give up, we’re committed to finding the ideal formula. We’re not saying goodbye—we’re just revising and evolving.  
+</p>
+
+<p>
+$BURN isn’t closing—it’s transforming. For those who wish to step away, we’ve added exit liquidity via ICPSwap. For those who continue to believe in us and our vision: thank you. Your trust and support mean the world to us, and we can’t wait to reward your faith in what’s to come.  
+</p>
+
+<p>
+$BURN will return stronger, with new utilities that will redefine its purpose.  
+</p>
+
+<p>
+P.S. MSQ.Wallet is still live and available for use as both a wallet and a login method. Anywhere you see a MetaMask login option, you can click it and log in with MSQ, thanks to its MetaMask Snap integration.  
+</p>
+
+<p>
+Thank you for being a part of this journey. Here’s to the future!  
+</p>
+
+<p>
+With gratitude,  
+The $BURN Team
+</p>
+
+</div>
+  </Modal>
+}
 
 const Btn = (props: {
   color: string;
@@ -122,6 +175,8 @@ const AboutCols = (props: { children: JSX.Element[] }) => {
 export const areWeOnMobile = () => window.innerWidth <= 640;
 
 export function HomePage() {
+  const [modalVisible, setModalVisible] = createSignal(true);
+
   return (
     <div class="bg-black text-white relative flex flex-col gap-20 pb-32 sm:pb-10">
       <div class="fixed bottom-20 right-5 z-10 flex sm:hidden gap-2">
@@ -259,6 +314,10 @@ export function HomePage() {
       <div class="flex mt-10 w-full h-auto items-center justify-center relative">
         <PoweredByIc />
       </div>
+
+      <Show when={modalVisible()}>
+        {modal(() => setModalVisible(false))}
+      </Show>
     </div>
   );
 }

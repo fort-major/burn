@@ -6,10 +6,6 @@ import { eventHandler } from "@utils/security";
 import { useAuth } from "@store/auth";
 import { createEffect, createResource, createSignal, Show } from "solid-js";
 import { Copyable } from "@components/copyable";
-import { BalanceOf } from "@components/balance-of";
-import { useBurner } from "@store/burner";
-import { Principal } from "@dfinity/principal";
-import { DEFAULT_TOKENS } from "@store/tokens";
 import { Identity } from "@fort-major/agent-js-fork";
 import { makeAvatarSvg } from "@fort-major/msq-shared";
 import { MsqIdentity } from "@fort-major/msq-client";
@@ -25,19 +21,11 @@ export interface IProfileProps extends IClass {
 
 export function ProfileFull(props: IProfileProps) {
   const { identity, isAuthorized, authProvider } = useAuth();
-  const { totals, canMigrateMsqAccount, migrateMsqAccount, canVerifyDecideId, verifyDecideId } = useBurner();
 
   const [migratePopupVisible, setMigratePopupVisible] = createSignal(false);
 
   const [pseudonym] = createResource(identity, getPseudonym);
   const [avatarSrc] = createResource(identity, getAvatarSrc);
-
-  const isDecideAIVerified = () => {
-    const t = totals.data;
-    if (!t) return false;
-
-    return t.yourDecideIdVerificationStatus;
-  };
 
   return (
     <>
@@ -77,7 +65,7 @@ export function ProfileFull(props: IProfileProps) {
               text="Continue with"
               icon={EIconKind.InternetComputer}
               bgColor={COLORS.black}
-              onClick={migrateMsqAccount}
+              onClick={() => {}}
             />
           </div>
         </Modal>
@@ -88,24 +76,16 @@ export function ProfileFull(props: IProfileProps) {
 
 export function ProfileMini(props: IProfileProps) {
   const { identity } = useAuth();
-  const { totals, fetchTotals } = useBurner();
 
   const [pseudonym] = createResource(identity, getPseudonym);
   const [avatarSrc] = createResource(identity, getAvatarSrc);
-
-  const isDecideAIVerified = () => {
-    const t = totals.data;
-    if (!t) return false;
-
-    return t.yourDecideIdVerificationStatus;
-  };
 
   return (
     <div class="flex flex-row items-center gap-2">
       <Avatar
         class={props.onClick ? "cursor-pointer" : undefined}
         onClick={props.onClick}
-        borderColor={isDecideAIVerified() ? COLORS.orange : COLORS.gray[140]}
+        borderColor={COLORS.gray[140]}
         url={avatarSrc()}
         size={props.avatarSize ?? "md"}
       />

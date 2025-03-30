@@ -19,7 +19,7 @@ use shared::burner::types::{
 use shared::icrc1::ICRC1CanisterClient;
 use shared::{ENV_VARS, ICP_FEE, MIN_ICP_STAKE_E8S_U64};
 use utils::{
-    assert_caller_is_dev, assert_running, kamikaze_and_pos, set_cycles_icp_exchange_rate_timer,
+    assert_caller_is_dev, assert_running, set_cycles_icp_exchange_rate_timer,
     set_icp_redistribution_timer, set_init_seed_one_timer, set_spike_timer,
     stake_callers_icp_for_redistribution, STATE, STOPPED_FOR_UPDATE,
 };
@@ -328,8 +328,6 @@ fn init_hook() {
     set_cycles_icp_exchange_rate_timer();
     set_icp_redistribution_timer();
     set_spike_timer();
-
-    kamikaze_and_pos();
 }
 
 #[post_upgrade]
@@ -339,8 +337,6 @@ fn post_upgrade_hook() {
     set_cycles_icp_exchange_rate_timer();
     set_icp_redistribution_timer();
     set_spike_timer();
-
-    kamikaze_and_pos();
 }
 
 #[update]

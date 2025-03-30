@@ -7,13 +7,8 @@ import { ErrorBoundary } from "solid-js";
 import { ErrorCode } from "./utils/error";
 import { Header } from "@components/header";
 import { TokensStore } from "@store/tokens";
-import { BurnerStore } from "@store/burner";
 import { WalletStore } from "@store/wallet";
-import { FurnaceStore } from "@store/furnace";
-import { DispensersStore } from "@store/dispensers";
 import { Wallet } from "@components/wallet";
-import { TradingInvitesStore } from "@store/trading-invites";
-import { TradingStore } from "@store/trading";
 
 const AppRoot = (props: IChildren) => (
   <>
@@ -27,19 +22,9 @@ const AppRoot = (props: IChildren) => (
       <AuthStore>
         <TokensStore>
           <WalletStore>
-            <BurnerStore>
-              <FurnaceStore>
-                <DispensersStore>
-                  <TradingInvitesStore>
-                    <TradingStore>
-                      <Header />
-                      <main class="flex flex-col flex-grow self-stretch pt-12 lg:pt-[80px]">{props.children}</main>
-                      <Wallet />
-                    </TradingStore>
-                  </TradingInvitesStore>
-                </DispensersStore>
-              </FurnaceStore>
-            </BurnerStore>
+              <Header />
+                <main class="flex flex-col flex-grow self-stretch pt-12 lg:pt-[80px]">{props.children}</main>
+              <Wallet />
           </WalletStore>
         </TokensStore>
       </AuthStore>

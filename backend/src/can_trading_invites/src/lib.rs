@@ -35,6 +35,8 @@ fn get_invite_owner(invite: Invite) -> Option<Principal> {
 
 #[update]
 async fn update_my_invite() -> Invite {
+    panic!("Temporarily unavailable");
+
     let pid = caller();
     let is_member = STATE.with_borrow(|s| s.members.get(&pid)).is_some();
     let is_dev = pid == DEV.with_borrow(|s| *s);
@@ -64,6 +66,8 @@ async fn update_my_invite() -> Invite {
 
 #[update]
 async fn register_with_invite(invite: Invite) {
+    panic!("Temporarily unavailable");
+
     let pid = caller();
     let is_member = STATE.with_borrow(|s| s.members.get(&pid)).is_some();
 
@@ -89,6 +93,8 @@ async fn register_with_invite(invite: Invite) {
 
 #[update]
 async fn register_with_bribe() {
+    panic!("Temporarily unavailable");
+
     let user_pid = caller();
     let user_subaccount = subaccount_of(user_pid);
 
@@ -133,6 +139,8 @@ async fn register_with_bribe() {
 
 #[update]
 async fn withdraw_from_user_subaccount(token_can_id: Principal) {
+    panic!("Temporarily unavailable");
+
     let user_pid = caller();
     let user_subaccount = subaccount_of(user_pid);
     let token_can = ICRC1CanisterClient::new(token_can_id);

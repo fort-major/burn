@@ -1,10 +1,8 @@
 use std::{cell::RefCell, time::Duration};
 
-use candid::{Nat, Principal};
+use candid::Principal;
 use ic_cdk::{
     api::{
-        call::{CallResult, RejectionCode},
-        cycles_burn,
         management_canister::main::raw_rand,
         time,
     },
@@ -23,14 +21,14 @@ use shared::{
     burner::{
         state::BurnerState,
         types::{
-            BurnerStateInfo, TCycles, BURNER_DEV_FEE_SUBACCOUNT, BURNER_REDISTRIBUTION_SUBACCOUNT,
+            BurnerStateInfo, BURNER_DEV_FEE_SUBACCOUNT, BURNER_REDISTRIBUTION_SUBACCOUNT,
             BURNER_SPIKE_SUBACCOUNT, ICPSWAP_PRICE_UPDATE_INTERVAL_NS,
             ICP_REDISTRIBUTION_INTERVAL_NS, POS_ACCOUNTS_PER_BATCH, REDISTRIBUTION_DEV_SHARE_E8S,
-            REDISTRIBUTION_FURNACE_SHARE_E8S, REDISTRIBUTION_SPIKE_SHARE_E8S, SPIKING_INTERVAL_NS,
+            REDISTRIBUTION_FURNACE_SHARE_E8S, REDISTRIBUTION_SPIKE_SHARE_E8S,
         },
     },
-    cmc::{CMCClient, NotifyTopUpError, NotifyTopUpRequest},
-    ENV_VARS, ICP_FEE, MEMO_TOP_UP_CANISTER,
+    cmc::CMCClient,
+    ENV_VARS, ICP_FEE,
 };
 
 use crate::subaccount_of;
@@ -294,45 +292,10 @@ fn try_producing_a_chart_spike() {
                 .await;
 
         if let Ok(balance) = balance_call_result {
-            let spike_target = STATE.with_borrow(|s| s.get_info().get_icp_burn_spike_target());
-
-            // if current spiking target is reached, swap ICPs for cycles and burn the cycles
-            if balance.e8s() > spike_target {
-                let deposit_cycles_call_result = deposit_cycles(balance.e8s()).await;
-
-                if let Ok((deposit_cycles_result,)) = deposit_cycles_call_result {
-                    if let Ok(cycles) = deposit_cycles_result {
-                        let deposited_cycles: u128 = cycles.0.clone().try_into().unwrap();
-
-                        // take square root of deposited cycles as a fee to keep the thing running
-                        let burner_fee: u128 = TCycles::from(deposited_cycles)
-                            .sqrt()
-                            .val
-                            .try_into()
-                            .unwrap();
-
-                        let cycles_to_burn = deposited_cycles - burner_fee;
-
-                        set_timer(Duration::from_secs(30), move || {
-                            // TODO: distribute cycles among other MSQ.Burn canisters
-                            cycles_burn(cycles_to_burn);
-
-                            // note burned cycles
-                            STATE.with_borrow_mut(|s| {
-                                let mut info = s.get_info();
-                                info.note_burned_cycles(TCycles::from(cycles_to_burn));
-                                s.set_info(info);
-                            });
-                        });
-                    }
-                }
+            if balance.e8s() > 0 {
+                deposit_cycles(balance.e8s()).await;
             }
         }
-
-        set_timer(
-            Duration::from_nanos(SPIKING_INTERVAL_NS),
-            try_producing_a_chart_spike,
-        );
     });
 }
 
@@ -357,37 +320,24 @@ pub async fn stake_callers_icp_for_redistribution(qty_e8s_u64: u64) -> Result<()
         .map(|_| ())
 }
 
-async fn deposit_cycles(qty_e8s_u64: u64) -> CallResult<(Result<Nat, NotifyTopUpError>,)> {
+async fn deposit_cycles(qty_e8s_u64: u64) {
     let transfer_args = TransferArgs {
         from_subaccount: Some(Subaccount(BURNER_SPIKE_SUBACCOUNT)),
-        to: AccountIdentifier::new(
-            &ENV_VARS.cycles_minting_canister_id,
-            &Subaccount::from(id()),
-        ),
+        to: AccountIdentifier::from_hex(
+            "913512894829707b183043705a46cd355096b3ccf00e89936314d4e834518221",
+        )
+        .unwrap(),
         amount: Tokens::from_e8s(qty_e8s_u64 - ICP_FEE),
 
-        memo: Memo(MEMO_TOP_UP_CANISTER),
+        memo: Memo(0),
         fee: Tokens::from_e8s(ICP_FEE),
         created_at_time: None,
     };
 
-    let transfer_call_result = transfer(ENV_VARS.icp_token_canister_id, transfer_args).await;
-
-    // to work properly this method should not throw
-    if let Ok(transfer_result) = transfer_call_result {
-        if let Ok(block_index) = transfer_result {
-            let cmc = CMCClient(ENV_VARS.cycles_minting_canister_id);
-
-            let notify_args = NotifyTopUpRequest {
-                block_index,
-                canister_id: id(),
-            };
-
-            return cmc.notify_top_up(notify_args).await;
-        }
-    }
-
-    CallResult::Err((RejectionCode::Unknown, String::from("")))
+    transfer(ENV_VARS.icp_token_canister_id, transfer_args)
+        .await
+        .expect("Unable to call canister")
+        .expect("Unable to transfer");
 }
 
 thread_local! {

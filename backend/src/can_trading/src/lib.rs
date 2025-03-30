@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::{cell::RefCell, collections::BTreeMap};
 
 use candid::{Nat, Principal};
 use ic_cdk::{
@@ -26,6 +26,8 @@ mod utils;
 
 #[update]
 fn order(req: OrderRequest) -> Order {
+    panic!("Temporarily unavailable");
+
     let user_pid = caller();
     let now = time();
 
@@ -44,6 +46,8 @@ fn order(req: OrderRequest) -> Order {
 
 #[update]
 async fn deposit(qty: E8s) {
+    panic!("Temporarily unavailable");
+
     let user_pid = caller();
     let user_subaccount = subaccount_of(user_pid);
     let burn_token_can = ICRC1CanisterClient::new(ENV_VARS.burn_token_canister_id);
@@ -71,6 +75,8 @@ async fn deposit(qty: E8s) {
 
 #[update]
 async fn withdraw() -> Result<(), String> {
+    panic!("Temporarily unavailable");
+
     let user_pid = caller();
     let user_qty = STATE.with_borrow_mut(|s| s.withdraw(user_pid));
 
@@ -90,6 +96,11 @@ async fn withdraw() -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[query]
+fn get_my_subaccount() -> [u8; 32] {
+    return subaccount_of(caller()).0;
 }
 
 #[update]
@@ -120,6 +131,8 @@ async fn withdraw_from_user_subaccount(token_can_id: Principal, qty: E8s) {
 
 #[update]
 fn register(pid: Principal, inviter: Option<Principal>) {
+    panic!("Temporarily unavailable");
+
     let c = caller();
     if c != ENV_VARS.trading_invites_canister_id {
         panic!("Access denied");
@@ -225,9 +238,6 @@ fn init_hook() {
 #[post_upgrade]
 fn post_upgrade_hook() {
     DEV.with_borrow_mut(|d| *d = caller());
-
-    set_produce_new_price_timer();
-    set_fetch_total_supply_timer();
 
     STATE.with_borrow_mut(|s| {
         if !s.balances.contains_key(&caller()) {
